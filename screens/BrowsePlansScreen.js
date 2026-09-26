@@ -168,7 +168,7 @@ export default function BrowsePlansScreen({ navigation }) {
         >
           <AnimatedButton
             label={`Continue with ${selectedPlan.title}`}
-            onPress={() => navigation.navigate("SubmitRequest", { plan: selectedPlan })}
+            onPress={() => navigation.navigate("SelectTerm", { plan: selectedPlan })}
           />
         </View>
       ) : null}

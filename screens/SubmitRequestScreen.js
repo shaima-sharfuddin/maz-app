@@ -9,18 +9,11 @@ import ScreenTitle from "../components/ScreenTitle";
 import RequestSummaryCard from "../components/RequestSummaryCard";
 import { submitRequest } from "../api/mockApi";
 import { ACTIVITIES } from "../data/formOptions";
+import { buildRequestSummary, DEFAULT_TERM_MONTHS } from "../data/pricing";
 import { useTheme } from "../theme/ThemeContext";
 
-// ⚠️ PLACEHOLDER DATA — the term/location/price selection step isn't confirmed by the recruiter yet
-// (see CLAUDE.md → Open questions). These hardcoded values stand in until that step exists; the plan
-// comes from the BrowsePlans selection, falling back to the placeholder if none was passed.
-// `isPlaceholder` makes RequestSummaryCard label the values as samples on screen.
-const PLACEHOLDER_REQUEST_DETAILS = {
-  location: "Seef District",
-  term: "3 months",
-  estimatedPrice: "BHD 100/month",
-  isPlaceholder: true,
-};
+// Plan comes from BrowsePlans and the term from SelectTerm. Location and the monthly rate are still
+// PLACEHOLDERS (see data/pricing.js); the fallbacks only apply if this screen is opened directly.
 const FALLBACK_PLAN_TITLE = "Office Suite";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,10 +26,10 @@ export default function SubmitRequestScreen({ navigation, route }) {
 
   const update = (field) => (value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const summary = {
-    plan: route.params?.plan?.title ?? FALLBACK_PLAN_TITLE,
-    ...PLACEHOLDER_REQUEST_DETAILS,
-  };
+  const summary = buildRequestSummary(
+    route.params?.plan?.title ?? FALLBACK_PLAN_TITLE,
+    route.params?.termMonths ?? DEFAULT_TERM_MONTHS
+  );
 
   const handleSubmit = async () => {
     if (submitting) return;

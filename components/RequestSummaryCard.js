@@ -1,8 +1,9 @@
 import { View, Text } from "react-native";
 import { useTheme } from "../theme/ThemeContext";
 
-// Recap of an office request. summary: { plan, location, term, estimatedPrice, isPlaceholder? }
-// isPlaceholder shows an on-screen note so sample values aren't mistaken for a real quote.
+// Recap of an office request. summary: { plan, location, term, monthlyRate?, estimatedPrice, isPlaceholder? }
+// (build it with buildRequestSummary in data/pricing.js). isPlaceholder shows an on-screen note so
+// sample values aren't mistaken for a real quote.
 export default function RequestSummaryCard({ summary, title = "Request summary" }) {
   const { colors } = useTheme();
 
@@ -10,8 +11,9 @@ export default function RequestSummaryCard({ summary, title = "Request summary" 
     { label: "Plan", value: summary.plan },
     { label: "Location", value: summary.location },
     { label: "Term", value: summary.term },
-    { label: "Estimated price", value: summary.estimatedPrice, emphasize: true },
-  ];
+    summary.monthlyRate ? { label: "Monthly rate", value: summary.monthlyRate } : null,
+    { label: "Estimated total", value: summary.estimatedPrice, emphasize: true },
+  ].filter(Boolean);
 
   return (
     <View
@@ -63,7 +65,7 @@ export default function RequestSummaryCard({ summary, title = "Request summary" 
             borderTopColor: colors.surfaceBorder,
           }}
         >
-          Sample location, term and price — final details are confirmed by MAZ after your request.
+          Sample location and rate — final details are confirmed by MAZ after your request.
         </Text>
       ) : null}
     </View>
