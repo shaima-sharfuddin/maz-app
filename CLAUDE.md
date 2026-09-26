@@ -4,11 +4,10 @@
 A mobile app (iOS + Android) for MAZ Business Center, a business-setup and office-leasing
 company in Bahrain. Built with Expo (React Native) + JavaScript + NativeWind (Tailwind).
 
-## IMPORTANT: Language is JavaScript, not TypeScript
-The recruiter has requested plain JavaScript for this project. All files should use
-.js / .jsx extensions, not .ts / .tsx. Do not add TypeScript type annotations,
-interfaces, or generics anywhere. If any .ts/.tsx files still exist in this project,
-they need to be converted to .js/.jsx as part of this change.
+## Language: JavaScript only
+This project uses plain JavaScript (.js / .jsx files). Do not use TypeScript syntax,
+type annotations, interfaces, or generics anywhere. This was already converted from
+an earlier TypeScript version — the conversion is complete and current files are correct.
 
 ## Brand colors (exact, pulled from their real logo — do not change these)
 - Navy: #1a3966
@@ -34,18 +33,30 @@ they need to be converted to .js/.jsx as part of this change.
    renew/extend contract, notifications, support enquiries
 8. Log out
 
-## Screens built so far (currently .tsx, need conversion to .jsx)
-- WelcomeScreen.tsx ✅
-- SignUpScreen.tsx ✅
-- LoginScreen.tsx ✅
+## Screens built so far (working, in JavaScript)
+- screens/WelcomeScreen.js ✅
+- screens/SignUpScreen.js ✅
+- screens/LoginScreen.js ✅
 
-## Screens not built yet
-- CompleteProfileScreen,Home Dashboard, Browse Plans, Booking form, Document Upload, Contract review,
-  Payment, Meeting Room booking, Violations list, Notifications, Support/Enquiries
+## Components built so far (working, in JavaScript)
+- components/AnimatedButton.js ✅ — press-scale animation + haptic feedback on tap
+- components/StyledInput.js ✅ — text input with crimson border on focus
+
+## Components NOT built yet (do not assume these exist — create them when needed)
+- SectionCard — a collapsible card wrapper, planned for CompleteProfileScreen
+- DateField — a tappable field that opens the native date picker, planned for CompleteProfileScreen
+
+## Screens NOT built yet
+- CompleteProfileScreen (next screen to build — needs SectionCard and DateField components first)
+- HomeDashboard, BrowsePlans, BookingForm, DocumentUpload, ContractReview,
+  Payment, MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
 
 ## Design conventions to follow for every new screen
 - Dark navy background (#101828), white text, crimson (#a31c37) for primary buttons
-- Buttons use the shared AnimatedButton component (press-scale + haptic feedback)
-- Text inputs use the shared StyledInput component (crimson border on focus)
-- Long forms use the shared SectionCard component (collapsible sections)
+- Buttons use the existing AnimatedButton component — don't rebuild button logic from scratch
+- Text inputs use the existing StyledInput component — don't rebuild input logic from scratch
+- Long forms should use a SectionCard component (collapsible sections) — build this component
+  if it doesn't exist yet when a screen needs it
 - Keep it minimal and fast-feeling — no bouncy animations, no unnecessary motion
+- Match the navigation pattern already used in App.js (React Navigation native-stack,
+  headerShown: false, screens registered in RootStackParamList-style object)
