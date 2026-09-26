@@ -2,13 +2,7 @@ import { useRef } from "react";
 import { Animated, Pressable, Text } from "react-native";
 import * as Haptics from "expo-haptics";
 
-type Props = {
-  label: string;
-  onPress?: () => void;
-  variant?: "primary" | "ghost";
-};
-
-export default function AnimatedButton({ label, onPress, variant = "primary" }: Props) {
+export default function AnimatedButton({ label, onPress, variant = "primary" }) {
   const scale = useRef(new Animated.Value(1)).current;
   const isPrimary = variant === "primary";
 

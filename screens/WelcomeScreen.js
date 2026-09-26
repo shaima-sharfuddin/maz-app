@@ -1,13 +1,9 @@
 import { View, Text, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "../App";
 import AnimatedButton from "../components/AnimatedButton";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Welcome">;
-
-export default function WelcomeScreen({ navigation }: Props) {
+export default function WelcomeScreen({ navigation }) {
   return (
     <SafeAreaView className="flex-1 bg-navyDark">
       <StatusBar style="light" />

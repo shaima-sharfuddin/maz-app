@@ -1,11 +1,7 @@
 import { useState } from "react";
-import { View, Text, TextInput, TextInputProps } from "react-native";
+import { View, Text, TextInput } from "react-native";
 
-type Props = TextInputProps & {
-  label: string;
-};
-
-export default function StyledInput({ label, ...inputProps }: Props) {
+export default function StyledInput({ label, ...inputProps }) {
   const [focused, setFocused] = useState(false);
 
   return (

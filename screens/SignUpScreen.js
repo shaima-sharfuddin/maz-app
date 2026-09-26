@@ -2,14 +2,10 @@ import { useState } from "react";
 import { View, Text, Pressable, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "../App";
 import AnimatedButton from "../components/AnimatedButton";
 import StyledInput from "../components/StyledInput";
 
-type Props = NativeStackScreenProps<RootStackParamList, "SignUp">;
-
-export default function SignUpScreen({ navigation }: Props) {
+export default function SignUpScreen({ navigation }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
