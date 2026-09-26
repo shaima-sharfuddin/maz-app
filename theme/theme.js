@@ -34,6 +34,9 @@ const dark = {
   successSoft: "rgba(52,211,153,0.12)", // badge backgrounds
   danger: "#f87171",
   dangerSoft: "rgba(248,113,113,0.12)",
+
+  disabledBackground: "rgba(255,255,255,0.08)", // disabled buttons
+  disabledText: "#64748b",
 };
 
 // Light mode is a counterpart, not an inversion: off-white page, white cards, the dark navy
@@ -65,6 +68,9 @@ const light = {
   successSoft: "#ecfdf3",
   danger: "#b42318",
   dangerSoft: "#fef3f2",
+
+  disabledBackground: "#e4e7ec",
+  disabledText: "#98a2b3",
 };
 
 export const PALETTES = { light, dark };

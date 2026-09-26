@@ -1,8 +1,10 @@
 import { View, Text } from "react-native";
 import PressableScale from "./PressableScale";
+import FieldError from "./FieldError";
 import { useTheme } from "../theme/ThemeContext";
 
-export default function SegmentedControl({ label, value, onChange, options }) {
+// `error` shows an inline message + danger border (e.g. a required choice not made yet).
+export default function SegmentedControl({ label, value, onChange, onBlur, error, options }) {
   const { colors } = useTheme();
 
   return (
@@ -15,7 +17,7 @@ export default function SegmentedControl({ label, value, onChange, options }) {
           backgroundColor: colors.inputBackground,
           borderRadius: 12,
           borderWidth: 1.5,
-          borderColor: colors.inputBorder,
+          borderColor: error ? colors.danger : colors.inputBorder,
           padding: 4,
         }}
       >
@@ -27,7 +29,10 @@ export default function SegmentedControl({ label, value, onChange, options }) {
           return (
             <PressableScale
               key={optionValue}
-              onPress={() => onChange(optionValue)}
+              onPress={() => {
+                onChange(optionValue);
+                onBlur?.();
+              }}
               containerStyle={{ flex: 1 }}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
@@ -52,6 +57,7 @@ export default function SegmentedControl({ label, value, onChange, options }) {
           );
         })}
       </View>
+      <FieldError message={error} />
     </View>
   );
 }

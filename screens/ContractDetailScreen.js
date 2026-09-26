@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
@@ -8,7 +8,7 @@ import StatusBadge from "../components/StatusBadge";
 import EmptyState from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchContract } from "../api/mockApi";
+import { fetchContract } from "../services/api";
 import { formatBHD } from "../data/pricing";
 import { formatDate, formatMonth } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
@@ -36,7 +36,6 @@ export default function ContractDetailScreen({ navigation, route }) {
   const contractId = route.params?.contractId;
   const loadContract = useCallback(() => fetchContract(contractId), [contractId]);
   const { loading, data: contract, error, reload } = useAsync(loadContract);
-  const [payNoteVisible, setPayNoteVisible] = useState(false);
 
   const card = (title, rows, extra) => (
     <View
@@ -174,13 +173,10 @@ export default function ContractDetailScreen({ navigation, route }) {
             ))}
 
             <View style={{ marginTop: 22 }}>
-              <AnimatedButton label="Pay outstanding balance" onPress={() => setPayNoteVisible(true)} />
-              {payNoteVisible ? (
-                // Payment screen isn't built yet (see CLAUDE.md → Open questions).
-                <Text className="text-sm leading-5 text-center mt-3" style={{ color: colors.textMuted }}>
-                  Online payment is coming soon — contact MAZ to settle your balance.
-                </Text>
-              ) : null}
+              <AnimatedButton
+                label="Pay outstanding balance"
+                onPress={() => navigation.navigate("Payment", { contractId: contract.id })}
+              />
             </View>
           </>
         ) : (

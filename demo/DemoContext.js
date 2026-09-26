@@ -1,34 +1,54 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { setMockFailuresEnabled } from "../services/mockApi";
 
-// DEMO ONLY — chooses which mock data the app shows while there's no backend
-// ("tenant" = contracts dashboard, "newUser" = no lease yet). Toggled in Settings.
+// DEMO ONLY — controls the mock backend while there's no real one (toggled in Settings → Demo data):
+// - userState: which mock account data to show ("tenant" = contracts dashboard, "newUser" = no lease)
+// - simulateErrors: whether mock API calls randomly fail (~15%) so error states get exercised.
+//   Turn it off before a recruiter demo.
 // Remove this provider (and the Settings section) once real account data exists.
-const STORAGE_KEY = "maz.demoUserState";
+const USER_STATE_KEY = "maz.demoUserState";
+const SIMULATE_ERRORS_KEY = "maz.demoSimulateErrors";
 export const DEMO_USER_STATES = ["tenant", "newUser"];
-const DEFAULT_USER_STATE = "tenant";
 
 const DemoContext = createContext(null);
 
 export function DemoProvider({ children }) {
-  const [userState, setUserStateValue] = useState(DEFAULT_USER_STATE);
+  const [userState, setUserStateValue] = useState("tenant");
+  const [simulateErrors, setSimulateErrorsValue] = useState(true);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((saved) => {
-        if (DEMO_USER_STATES.includes(saved)) setUserStateValue(saved);
+    AsyncStorage.multiGet([USER_STATE_KEY, SIMULATE_ERRORS_KEY])
+      .then(([[, savedUserState], [, savedSimulateErrors]]) => {
+        if (DEMO_USER_STATES.includes(savedUserState)) setUserStateValue(savedUserState);
+        if (savedSimulateErrors === "true" || savedSimulateErrors === "false") {
+          setSimulateErrorsValue(savedSimulateErrors === "true");
+        }
       })
       .catch(() => {})
       .finally(() => setReady(true));
   }, []);
 
+  // Keep the mock API's failure switch in sync with the setting.
+  useEffect(() => {
+    setMockFailuresEnabled(simulateErrors);
+  }, [simulateErrors]);
+
   const setUserState = useCallback((next) => {
     setUserStateValue(next);
-    AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
+    AsyncStorage.setItem(USER_STATE_KEY, next).catch(() => {});
   }, []);
 
-  const value = useMemo(() => ({ userState, setUserState, ready }), [userState, setUserState, ready]);
+  const setSimulateErrors = useCallback((next) => {
+    setSimulateErrorsValue(next);
+    AsyncStorage.setItem(SIMULATE_ERRORS_KEY, String(next)).catch(() => {});
+  }, []);
+
+  const value = useMemo(
+    () => ({ userState, setUserState, simulateErrors, setSimulateErrors, ready }),
+    [userState, setUserState, simulateErrors, setSimulateErrors, ready]
+  );
 
   return <DemoContext.Provider value={value}>{children}</DemoContext.Provider>;
 }

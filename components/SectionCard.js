@@ -3,9 +3,14 @@ import { View, Text } from "react-native";
 import PressableScale from "./PressableScale";
 import { useTheme } from "../theme/ThemeContext";
 
-export default function SectionCard({ title, subtitle, defaultExpanded = true, children }) {
+// Uncontrolled by default (defaultExpanded). Pass `expanded` + `onToggle` to control it from the parent,
+// e.g. to open a collapsed section that contains a validation error.
+export default function SectionCard({ title, subtitle, defaultExpanded = true, expanded: expandedProp, onToggle, children }) {
   const { colors } = useTheme();
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expandedState, setExpandedState] = useState(defaultExpanded);
+  const controlled = expandedProp !== undefined;
+  const expanded = controlled ? expandedProp : expandedState;
+  const toggle = () => (controlled ? onToggle?.(!expanded) : setExpandedState((prev) => !prev));
 
   return (
     <View
@@ -19,7 +24,7 @@ export default function SectionCard({ title, subtitle, defaultExpanded = true, c
       }}
     >
       <PressableScale
-        onPress={() => setExpanded((prev) => !prev)}
+        onPress={toggle}
         scaleTo={0.98}
         accessibilityRole="button"
         accessibilityState={{ expanded }}

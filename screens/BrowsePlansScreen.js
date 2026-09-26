@@ -9,7 +9,7 @@ import PressableScale from "../components/PressableScale";
 import EmptyState from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchPlans } from "../api/mockApi";
+import { fetchPlans } from "../services/api";
 import { TRUST_STATS } from "../data/brand";
 import { useTheme } from "../theme/ThemeContext";
 

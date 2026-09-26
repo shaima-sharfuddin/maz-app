@@ -2,13 +2,18 @@ import { useState } from "react";
 import { View, Text, Pressable, Platform } from "react-native";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import PressableScale from "./PressableScale";
+import FieldError from "./FieldError";
 import { useTheme } from "../theme/ThemeContext";
 import { formatDate } from "../utils/formatDate";
 
+// `onBlur` fires when the picker closes (the field's equivalent of losing focus), so form
+// validation treats the field as touched. `error` shows an inline message + danger border.
 export default function DateField({
   label,
   value,
   onChange,
+  onBlur,
+  error,
   placeholder = "Select a date",
   minimumDate,
   maximumDate,
@@ -17,6 +22,11 @@ export default function DateField({
   // iOS only: the picker renders inline below the field while open.
   const [open, setOpen] = useState(false);
 
+  const closeIOS = () => {
+    setOpen(false);
+    onBlur?.();
+  };
+
   const handlePress = () => {
     if (Platform.OS === "android") {
       DateTimePickerAndroid.open({
@@ -24,12 +34,20 @@ export default function DateField({
         mode: "date",
         minimumDate,
         maximumDate,
-        onValueChange: (_event, date) => onChange(date),
+        onValueChange: (_event, date) => {
+          onChange(date);
+          onBlur?.();
+        },
+        onDismiss: () => onBlur?.(),
       });
+    } else if (open) {
+      closeIOS();
     } else {
-      setOpen((prev) => !prev);
+      setOpen(true);
     }
   };
+
+  const borderColor = error ? colors.danger : open ? colors.primary : colors.inputBorder;
 
   return (
     <View style={{ marginBottom: 20 }}>
@@ -37,6 +55,8 @@ export default function DateField({
       <Pressable
         onPress={handlePress}
         accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value ? formatDate(value) : "not set"}`}
+        accessibilityHint={error || undefined}
         style={{
           backgroundColor: colors.inputBackground,
           borderRadius: 12,
@@ -45,13 +65,14 @@ export default function DateField({
           minHeight: 48,
           justifyContent: "center",
           borderWidth: 1.5,
-          borderColor: open ? colors.primary : colors.inputBorder,
+          borderColor,
         }}
       >
         <Text style={{ color: value ? colors.text : colors.textSubtle, fontSize: 14 }}>
           {value ? formatDate(value) : placeholder}
         </Text>
       </Pressable>
+      <FieldError message={error} />
 
       {open && Platform.OS === "ios" ? (
         <View style={{ marginTop: 8 }}>
@@ -66,7 +87,7 @@ export default function DateField({
             onValueChange={(_event, date) => onChange(date)}
           />
           <PressableScale
-            onPress={() => setOpen(false)}
+            onPress={closeIOS}
             accessibilityRole="button"
             containerStyle={{ alignSelf: "flex-end" }}
             style={{ minHeight: 44, minWidth: 44, justifyContent: "center", paddingHorizontal: 8 }}

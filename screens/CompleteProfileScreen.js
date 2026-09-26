@@ -7,15 +7,20 @@ import SectionCard from "../components/SectionCard";
 import DateField from "../components/DateField";
 import SelectField from "../components/SelectField";
 import SegmentedControl from "../components/SegmentedControl";
+import FormField from "../components/FormField";
+import ErrorBanner from "../components/ErrorBanner";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
+import TextLink from "../components/TextLink";
+import useZodForm from "../hooks/useZodForm";
+import useSubmit from "../hooks/useSubmit";
+import { completeProfileSchema } from "../validation/schemas";
+import { saveProfile } from "../services/api";
 import { COMPANIES, GENDERS, NATIONALITIES } from "../data/formOptions";
 import { useTheme } from "../theme/ThemeContext";
 
-// Field set mirrors MAZ's admin "Create Customer" form.
-export default function CompleteProfileScreen({ navigation }) {
-  const { colors } = useTheme();
-  const [customer, setCustomer] = useState({
+const DEFAULT_VALUES = {
+  customer: {
     company: "",
     customerName: "",
     vatNumber: "",
@@ -23,8 +28,8 @@ export default function CompleteProfileScreen({ navigation }) {
     crNumber: "",
     crRegistrationDate: null,
     address: "",
-  });
-  const [owner, setOwner] = useState({
+  },
+  owner: {
     ownerName: "",
     ownerMobile: "",
     email: "",
@@ -34,32 +39,48 @@ export default function CompleteProfileScreen({ navigation }) {
     passportExpiryDate: null,
     nationality: "",
     gender: "",
-  });
-  const [error, setError] = useState("");
+  },
+};
 
-  const updateCustomer = (field) => (value) => setCustomer((prev) => ({ ...prev, [field]: value }));
-  const updateOwner = (field) => (value) => setOwner((prev) => ({ ...prev, [field]: value }));
+const tomorrow = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d;
+};
+
+// Field set mirrors MAZ's admin "Create Customer" form (rules in validation/schemas.js).
+export default function CompleteProfileScreen({ navigation }) {
+  const { colors } = useTheme();
+  const {
+    control,
+    handleSubmit,
+    watch,
+    formState: { isValid },
+  } = useZodForm(completeProfileSchema, DEFAULT_VALUES);
+  const { submit, loading, error } = useSubmit(saveProfile);
+  const [ownerOpen, setOwnerOpen] = useState(false);
+
+  // Explains a disabled Save button — required fields may be hidden in the collapsed section.
+  const [customerName, ownerName, gender] = watch(["customer.customerName", "owner.ownerName", "owner.gender"]);
+  const missing = [
+    !customerName?.trim() && "Customer Name",
+    !ownerName?.trim() && "Owner Name",
+    !gender && "Gender",
+  ].filter(Boolean);
+  const ownerFieldsMissing = !ownerName?.trim() || !gender;
+
+  const onSubmit = handleSubmit(async (values) => {
+    const result = await submit(values);
+    if (result) {
+      // reset() makes the dashboard the only route, so back can't return to this form.
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "HomeDashboard", params: { ownerName: values.owner.ownerName.trim(), profileSaved: true } }],
+      });
+    }
+  });
 
   const today = new Date();
-
-  const handleSave = () => {
-    const missing = [];
-    if (!customer.customerName.trim()) missing.push("Customer Name");
-    if (!owner.ownerName.trim()) missing.push("Owner Name");
-    if (!owner.gender) missing.push("Gender");
-
-    if (missing.length > 0) {
-      setError(`Please fill in: ${missing.join(", ")}`);
-      return;
-    }
-    // DEMO ONLY — nothing is persisted. Replace with the Create Customer API call
-    // (submitting { customer, owner }) once the backend is available.
-    // reset() makes the dashboard the only route, so back can't return to this form.
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "HomeDashboard", params: { ownerName: owner.ownerName.trim(), profileSaved: true } }],
-    });
-  };
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -74,50 +95,58 @@ export default function CompleteProfileScreen({ navigation }) {
             />
 
             <SectionCard title="Company Details" defaultExpanded>
-              <SelectField
+              <FormField
+                control={control}
+                name="customer.company"
+                component={SelectField}
                 label="Company"
-                value={customer.company}
-                onChange={updateCustomer("company")}
                 options={COMPANIES}
                 placeholder="Select company"
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="customer.customerName"
+                component={StyledInput}
                 label="Customer Name *"
-                value={customer.customerName}
-                onChangeText={updateCustomer("customerName")}
                 placeholder="Enter customer name"
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="customer.vatNumber"
+                component={StyledInput}
                 label="VAT Number"
-                value={customer.vatNumber}
-                onChangeText={updateCustomer("vatNumber")}
-                placeholder="Enter VAT number"
-                autoCapitalize="characters"
+                placeholder="15-digit VAT number"
+                keyboardType="number-pad"
+                maxLength={15}
               />
-              <DateField
+              <FormField
+                control={control}
+                name="customer.vatRegistrationDate"
+                component={DateField}
                 label="VAT Registration Date"
-                value={customer.vatRegistrationDate}
-                onChange={updateCustomer("vatRegistrationDate")}
                 maximumDate={today}
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="customer.crNumber"
+                component={StyledInput}
                 label="CR Number"
-                value={customer.crNumber}
-                onChangeText={updateCustomer("crNumber")}
                 placeholder="e.g. 123456-1"
                 keyboardType="numbers-and-punctuation"
                 autoCapitalize="none"
               />
-              <DateField
+              <FormField
+                control={control}
+                name="customer.crRegistrationDate"
+                component={DateField}
                 label="CR Registration Date"
-                value={customer.crRegistrationDate}
-                onChange={updateCustomer("crRegistrationDate")}
                 maximumDate={today}
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="customer.address"
+                component={StyledInput}
                 label="Address"
-                value={customer.address}
-                onChangeText={updateCustomer("address")}
                 placeholder="Flat, building, road, block, area"
                 multiline
                 numberOfLines={3}
@@ -126,75 +155,95 @@ export default function CompleteProfileScreen({ navigation }) {
               />
             </SectionCard>
 
-            <SectionCard title="Owner Details" defaultExpanded={false}>
-              <StyledInput
+            <SectionCard title="Owner Details" expanded={ownerOpen} onToggle={setOwnerOpen}>
+              <FormField
+                control={control}
+                name="owner.ownerName"
+                component={StyledInput}
                 label="Owner Name *"
-                value={owner.ownerName}
-                onChangeText={updateOwner("ownerName")}
                 placeholder="Enter owner name"
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="owner.ownerMobile"
+                component={StyledInput}
                 label="Owner Mobile"
-                value={owner.ownerMobile}
-                onChangeText={updateOwner("ownerMobile")}
                 placeholder="+973 3xxx xxxx"
                 keyboardType="phone-pad"
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="owner.email"
+                component={StyledInput}
                 label="Email Address"
-                value={owner.email}
-                onChangeText={updateOwner("email")}
                 placeholder="you@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="owner.cprNumber"
+                component={StyledInput}
                 label="CPR Number"
-                value={owner.cprNumber}
-                onChangeText={updateOwner("cprNumber")}
                 placeholder="9-digit CPR number"
                 keyboardType="number-pad"
                 maxLength={9}
               />
-              <DateField
+              <FormField
+                control={control}
+                name="owner.cprExpiryDate"
+                component={DateField}
                 label="CPR Expiry Date"
-                value={owner.cprExpiryDate}
-                onChange={updateOwner("cprExpiryDate")}
+                minimumDate={tomorrow()}
               />
-              <StyledInput
+              <FormField
+                control={control}
+                name="owner.passportNumber"
+                component={StyledInput}
                 label="Passport Number"
-                value={owner.passportNumber}
-                onChangeText={updateOwner("passportNumber")}
                 placeholder="Enter passport number"
                 autoCapitalize="characters"
               />
-              <DateField
+              <FormField
+                control={control}
+                name="owner.passportExpiryDate"
+                component={DateField}
                 label="Passport Expiry Date"
-                value={owner.passportExpiryDate}
-                onChange={updateOwner("passportExpiryDate")}
+                minimumDate={tomorrow()}
               />
-              <SelectField
+              <FormField
+                control={control}
+                name="owner.nationality"
+                component={SelectField}
                 label="Nationality"
-                value={owner.nationality}
-                onChange={updateOwner("nationality")}
                 options={NATIONALITIES}
                 placeholder="Select nationality"
               />
-              <SegmentedControl
-                label="Gender *"
-                value={owner.gender}
-                onChange={updateOwner("gender")}
-                options={GENDERS}
-              />
+              <FormField control={control} name="owner.gender" component={SegmentedControl} label="Gender *" options={GENDERS} />
             </SectionCard>
 
             <View className="mt-4">
-              <AnimatedButton label="Save profile" onPress={handleSave} />
-              {error ? (
-                <Text className="text-sm text-center mt-3" style={{ color: colors.danger }}>
-                  {error}
-                </Text>
+              <AnimatedButton
+                label={loading ? "Saving…" : "Save profile"}
+                onPress={onSubmit}
+                disabled={!isValid}
+                loading={loading}
+              />
+              {!isValid && !loading ? (
+                <View style={{ alignItems: "center", marginTop: 10 }}>
+                  <Text className="text-sm text-center" style={{ color: colors.textMuted }}>
+                    {missing.length > 0 ? `To save, fill in: ${missing.join(", ")}` : "Fix the highlighted fields to save."}
+                  </Text>
+                  {ownerFieldsMissing && !ownerOpen ? (
+                    <TextLink onPress={() => setOwnerOpen(true)}>
+                      <Text className="text-sm font-medium" style={{ color: colors.text }}>
+                        Open Owner Details
+                      </Text>
+                    </TextLink>
+                  ) : null}
+                </View>
               ) : null}
+              <ErrorBanner message={error} onRetry={onSubmit} />
             </View>
           </View>
         </ScrollView>

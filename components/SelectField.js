@@ -2,12 +2,16 @@ import { useMemo, useState } from "react";
 import { View, Text, Pressable, Modal, FlatList, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PressableScale from "./PressableScale";
+import FieldError from "./FieldError";
 import { useTheme } from "../theme/ThemeContext";
+
+// `onBlur` fires when the sheet closes (so form validation treats the field as touched);
+// `error` shows an inline message + danger border.
 
 // Lists longer than this get a search box.
 const SEARCH_THRESHOLD = 10;
 
-export default function SelectField({ label, value, onChange, options, placeholder = "Select an option" }) {
+export default function SelectField({ label, value, onChange, onBlur, error, options, placeholder = "Select an option" }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -22,6 +26,7 @@ export default function SelectField({ label, value, onChange, options, placehold
   const close = () => {
     setOpen(false);
     setQuery("");
+    onBlur?.();
   };
 
   const select = (option) => {
@@ -35,6 +40,8 @@ export default function SelectField({ label, value, onChange, options, placehold
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value || "not selected"}`}
+        accessibilityHint={error || undefined}
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -44,7 +51,7 @@ export default function SelectField({ label, value, onChange, options, placehold
           paddingVertical: 12,
           minHeight: 48,
           borderWidth: 1.5,
-          borderColor: open ? colors.primary : colors.inputBorder,
+          borderColor: error ? colors.danger : open ? colors.primary : colors.inputBorder,
         }}
       >
         <Text style={{ flex: 1, color: value ? colors.text : colors.textSubtle, fontSize: 14 }}>
@@ -52,6 +59,7 @@ export default function SelectField({ label, value, onChange, options, placehold
         </Text>
         <Text style={{ color: colors.textMuted, fontSize: 12 }}>{"▼"}</Text>
       </Pressable>
+      <FieldError message={error} />
 
       {/* Translucent bars (Android): the backdrop covers the full screen; the sheet pads by insets.bottom. */}
       <Modal

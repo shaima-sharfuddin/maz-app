@@ -17,9 +17,14 @@ const DEMO_OPTIONS = [
   { value: "newUser", label: "New user" },
 ];
 
+const ERROR_SIM_OPTIONS = [
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
+
 export default function SettingsScreen({ navigation }) {
   const { colors, preference, setPreference, scheme } = useTheme();
-  const { userState, setUserState } = useDemo();
+  const { userState, setUserState, simulateErrors, setSimulateErrors } = useDemo();
 
   const sectionHeading = (label) => (
     <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
@@ -70,6 +75,16 @@ export default function SettingsScreen({ navigation }) {
             />
             <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
               Demo only — switches the mock data used while there&apos;s no backend.
+            </Text>
+            <SegmentedControl
+              label="Simulate network errors (15%)"
+              value={simulateErrors ? "on" : "off"}
+              onChange={(next) => setSimulateErrors(next === "on")}
+              options={ERROR_SIM_OPTIONS}
+            />
+            <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
+              When on, about 1 in 7 requests fails at random so error states can be tested. Turn off before
+              demos.
             </Text>
           </View>
         </View>

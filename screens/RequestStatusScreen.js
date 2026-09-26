@@ -9,7 +9,7 @@ import RequestSummaryCard from "../components/RequestSummaryCard";
 import EmptyState from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchRequestStatus } from "../api/mockApi";
+import { fetchRequestStatus } from "../services/api";
 import { REQUEST_STEPS } from "../data/requestSteps";
 import { useTheme } from "../theme/ThemeContext";
 

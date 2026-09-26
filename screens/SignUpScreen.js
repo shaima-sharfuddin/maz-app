@@ -1,18 +1,32 @@
-import { useState } from "react";
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
 import StyledInput from "../components/StyledInput";
+import FormField from "../components/FormField";
+import ErrorBanner from "../components/ErrorBanner";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import TextLink from "../components/TextLink";
+import useZodForm from "../hooks/useZodForm";
+import useSubmit from "../hooks/useSubmit";
+import { signUpSchema } from "../validation/schemas";
+import { signUp } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 
 export default function SignUpScreen({ navigation }) {
   const { colors } = useTheme();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const {
+    control,
+    handleSubmit,
+    formState: { isValid },
+  } = useZodForm(signUpSchema, { fullName: "", email: "", phone: "" });
+  const { submit, loading, error } = useSubmit(signUp);
+
+  // Verify-account (OTP) isn't built yet, so a new account goes straight to Log in.
+  const onSubmit = handleSubmit(async (values) => {
+    const result = await submit(values);
+    if (result) navigation.navigate("Login", { email: result.email, justSignedUp: true });
+  });
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -23,32 +37,42 @@ export default function SignUpScreen({ navigation }) {
 
             <ScreenTitle title="Create your account" subtitle="Just a few details to get started." />
 
-            <StyledInput
+            <FormField
+              control={control}
+              name="fullName"
+              component={StyledInput}
               label="Full name"
-              value={name}
-              onChangeText={setName}
               placeholder="Enter your full name"
+              autoComplete="name"
             />
-
-            <StyledInput
+            <FormField
+              control={control}
+              name="email"
+              component={StyledInput}
               label="Email address"
-              value={email}
-              onChangeText={setEmail}
               placeholder="you@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="email"
             />
-
-            <StyledInput
+            <FormField
+              control={control}
+              name="phone"
+              component={StyledInput}
               label="Phone number"
-              value={phone}
-              onChangeText={setPhone}
               placeholder="+973 3xxx xxxx"
               keyboardType="phone-pad"
+              autoComplete="tel"
             />
 
             <View className="mt-4">
-              <AnimatedButton label="Continue" />
+              <AnimatedButton
+                label={loading ? "Creating account…" : "Continue"}
+                onPress={onSubmit}
+                disabled={!isValid}
+                loading={loading}
+              />
+              <ErrorBanner message={error} onRetry={onSubmit} />
             </View>
 
             <TextLink onPress={() => navigation.navigate("Login")} style={{ marginTop: 12 }}>

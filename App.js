@@ -19,6 +19,8 @@ import SelectTermScreen from "./screens/SelectTermScreen";
 import SubmitRequestScreen from "./screens/SubmitRequestScreen";
 import RequestStatusScreen from "./screens/RequestStatusScreen";
 import ContractDetailScreen from "./screens/ContractDetailScreen";
+import PaymentScreen from "./screens/PaymentScreen";
+import PaymentReceiptScreen from "./screens/PaymentReceiptScreen";
 
 // Keep the splash up until saved preferences (theme + demo data) have loaded, so the first frame
 // never shows the wrong theme or the wrong dashboard state.
@@ -70,6 +72,8 @@ function AppNavigator() {
         <Stack.Screen name="SubmitRequest" component={SubmitRequestScreen} />
         <Stack.Screen name="RequestStatus" component={RequestStatusScreen} />
         <Stack.Screen name="ContractDetail" component={ContractDetailScreen} />
+        <Stack.Screen name="Payment" component={PaymentScreen} />
+        <Stack.Screen name="PaymentReceipt" component={PaymentReceiptScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>

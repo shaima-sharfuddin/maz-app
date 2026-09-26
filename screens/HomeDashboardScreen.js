@@ -11,7 +11,7 @@ import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchDashboard } from "../api/mockApi";
+import { fetchDashboard } from "../services/api";
 import { TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES } from "../data/brand";
 import { formatBHD } from "../data/pricing";
 import { formatDate, formatMonth } from "../utils/formatDate";

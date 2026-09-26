@@ -29,6 +29,7 @@ an earlier TypeScript version — the conversion is complete and current files a
 - expo-haptics for button feedback, @react-native-community/datetimepicker for dates
 - Screens live in /screens, reusable UI in /components
 - No backend/API yet — using placeholder/mock data until the recruiter provides it
+- Forms: react-hook-form + zod (+ @hookform/resolvers). See "Forms & API calls" below
 
 ## User flow (full sequence, in order)
 1. Sign up (name, email, phone)
@@ -70,12 +71,19 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/RequestStatusScreen.js ✅ — StatusStepper + confirmation + summary; loads fetchRequestStatus
   (mock always returns step 1 — swap for the real API to show the true stage)
 - screens/ContractDetailScreen.js ✅ — per the recruiter wireframe: contract no. + unit + StatusBadge, Bill details,
-  Payment details, Payment due + bills list, "Pay outstanding balance" (shows a "coming soon" note — no
-  Payment screen yet). Expired / fully paid contracts show "No outstanding balance" instead of the dues section
+  Payment details, Payment due + bills list, "Pay outstanding balance" → Payment. Expired / fully paid
+  contracts show "No outstanding balance" instead of the dues section
+- screens/PaymentScreen.js ✅ — MOCK payment: amount due + due bills, payment method (BenefitPay / card —
+  PLACEHOLDER options), "Pay BHD …" → payOutstandingBalance → resets stack to
+  [HomeDashboard, ContractDetail, PaymentReceipt] so both re-load with the settled balance
+- screens/PaymentReceiptScreen.js ✅ — success state + receipt details; "Back to contract" / "Go to dashboard".
+  Labelled "Demo receipt — no money was charged"
 
 ## Components built so far (working, in JavaScript)
-- components/AnimatedButton.js ✅ — press-scale animation + haptic feedback on tap
-- components/StyledInput.js ✅ — text input with crimson border on focus
+- components/AnimatedButton.js ✅ — press-scale animation + haptic; `disabled` (greyed, inert) and `loading`
+  (spinner, taps ignored) props
+- components/StyledInput.js ✅ — text input with crimson border on focus; `error` prop → danger border + FieldError.
+  DateField, SelectField and SegmentedControl take the same `error` (+ `onBlur`) props
 - components/SectionCard.js ✅ — collapsible card wrapper (title, subtitle, defaultExpanded)
 - components/DateField.js ✅ — tappable field; native dialog on Android, inline spinner on iOS
 - components/SelectField.js ✅ — dropdown field opening a bottom-sheet list (search box when > 10 options)
@@ -96,17 +104,26 @@ an earlier TypeScript version — the conversion is complete and current files a
 - components/StatCard.js ✅ — label + big value + caption card (dashboard stats)
 - utils/formatDate.js — formatDate ("05 Mar 2027") and formatMonth ("Oct 2026"); shared with DateField
 - data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026)
-- demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { userState: "tenant" | "newUser" }, persisted in
-  AsyncStorage (maz.demoUserState), toggled in Settings → "Demo data". Remove once real account data exists
-- api/mockApi.js — mock API (fetchPlans, fetchDashboard, submitRequest, fetchRequestStatus) with
-  MOCK_LATENCY_MS; swap for real calls later
-- hooks/useAsync.js — { loading, data, error, reload } for any loader
+- data/paymentMethods.js — PLACEHOLDER payment options (BenefitPay, card) until the gateway is confirmed
+- demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { userState: "tenant" | "newUser", simulateErrors },
+  persisted in AsyncStorage (maz.demoUserState, maz.demoSimulateErrors), toggled in Settings → "Demo data".
+  simulateErrors drives setMockFailuresEnabled. Remove once real account data exists
+- services/api.js — the ONLY module screens import API functions from (re-exports ./mockApi today)
+- services/mockApi.js — every mock endpoint (signUp, logIn, requestPasswordReset, saveProfile, fetchPlans,
+  submitRequest, fetchRequestStatus, fetchDashboard, fetchContract, payOutstandingBalance), all via simulate()
+- services/apiError.js — ApiError { code, message } that every API function rejects with
+- validation/schemas.js — reusable Zod field + form schemas (see "Forms & API calls")
+- hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls")
+- hooks/useAsync.js — { loading, data, error, reload } for any loader; results go stale when the loader changes
+- components/FormField.js — react-hook-form Controller wrapper for any field component
+- components/FieldError.js — inline field error (icon + danger text); used by all field components
+- components/ErrorBanner.js — submit-failure banner with "Try again"
 - data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel;
   ACTIVITIES is a PLACEHOLDER until the real Activity list comes from the API
 - data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
 
 ## Screens NOT built yet
-- Payment, BillViewer ("View bill" in the wireframe),
+- BillViewer ("View bill" in the wireframe),
   MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
 - Unconfirmed (see Open questions): DocumentUpload, ContractReview
 
@@ -126,10 +143,45 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Every tappable element uses PressableScale (cards/rows: scaleTo 0.98); all tap targets ≥ 44x44pt.
   Exception: form field triggers (DateField/SelectField) match StyledInput's crimson focus border instead
 - Anything loaded from the API: Skeleton while loading, EmptyState when empty, EmptyState + "Try again" on error
+- Forms and submit buttons follow "Forms & API calls" below (react-hook-form + zod, useSubmit, ErrorBanner)
 - Icons: Ionicons from @expo/vector-icons
 - Status/alert text uses colors.success / colors.danger (+ successSoft / dangerSoft), not brand crimson —
   crimson text is hard to read on the dark background
 - Mock data that differs per account type should read useDemo().userState (demo toggle), never a hardcoded flag
+
+## Forms & API calls — the standard for EVERY screen (existing and future)
+Every screen follows this pattern; don't hand-roll validation, loading flags or try/catch in screens.
+
+**Validation (react-hook-form + zod)**
+- Field rules live in validation/schemas.js (email, phone [Bahrain], fullName, password, loginPassword,
+  crNumber, cprNumber, vatNumber, futureDate, pastOrTodayDate, requiredText, requiredSelect, optional()).
+  Add new reusable rules there; build each form's schema there too (signUpSchema, loginSchema, …).
+- Optional-but-validated fields use optional(schema) — never z.union, which loses the specific message.
+- Screens create the form with `useZodForm(schema, defaultValues)` (mode "onTouched": errors show after a
+  field is left, then update live) and render every field through
+  `<FormField control={control} name="…" component={StyledInput | DateField | SelectField | SegmentedControl} … />`.
+- Each field shows its inline error (danger border + FieldError). New field components must accept
+  `value`, `onChange` (or be marked `isTextField` for onChangeText), `onBlur` and `error`.
+- Submit buttons: `disabled={!isValid}` — greyed out until the form is valid. If required fields can be
+  hidden (collapsed SectionCard), explain what's missing under the button and offer a way to reveal them.
+
+**API calls (services/)**
+- Screens import ONLY from services/api.js. Never import services/mockApi.js from a screen.
+- Every mock function goes through simulate() in services/mockApi.js: random 800–1200 ms latency and a
+  random failure MOCK_FAILURE_RATE (15%) of the time, rejecting with ApiError { code, message }.
+  Rule-based errors throw ApiError inside produce(). The random failure happens before produce(), so failed
+  calls never mutate mock data.
+- Going live: add services/httpApi.js with the same function names/shapes using fetch(), throwing ApiError on
+  failure, then change the export in services/api.js (all at once, or per function). Screens don't change.
+- Submit buttons: `const { submit, loading, error } = useSubmit(apiFn)` →
+  `<AnimatedButton disabled={!isValid} loading={loading} … />` + `<ErrorBanner message={error} onRetry={onSubmit} />`.
+  Navigate forward only when `await submit(...)` returns a result.
+- Data screens: `useAsync(loader)` → Skeleton while loading, EmptyState when empty, EmptyState + "Try again" on error.
+- Error simulation is ON by default (Settings → Demo data → "Simulate network errors"). Turn it OFF before a
+  recruiter demo. In dev, log in with the password "wrong" to force an INVALID_CREDENTIALS error.
+
+**No dead buttons:** every button/link/tappable card must be disabled (invalid form), loading, navigating,
+or showing an error/result. Nothing may do nothing when tapped.
 
 ## Brand positioning & tone (from MAZ's marketing site)
 - MAZ is a premium/luxury serviced-office brand, not a generic compliance app
@@ -153,7 +205,8 @@ an earlier TypeScript version — the conversion is complete and current files a
   placeholder "Seef District" (MAZ assigns the unit). Both live in data/pricing.js and are labelled
   as samples on screen via RequestSummaryCard's isPlaceholder note.
 - SubmitRequest's Activity dropdown uses placeholder options; should come from the real API.
-- Payment: which gateway (the wireframe shows BenefitPay) and what the pay flow looks like. "Pay outstanding
-  balance" on ContractDetail currently only shows a "coming soon" note.
+- Payment: which gateway (the wireframe shows BenefitPay) and what the real pay flow looks like (redirect to
+  BenefitPay app? card form?). PaymentScreen is a MOCK — method options and the success result are
+  placeholders; nothing is charged. Also confirm whether receipts are emailed.
 - Bills: is there a bill/invoice viewer ("View bill" in the wireframe) — PDF, in-app, or email only?
 - Contracts/bills/payments API shape — all tenant data is mock (data/mockTenant.js) until then.
