@@ -1,26 +1,26 @@
 import { useState } from "react";
-import { View, Text, Pressable, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
 import AnimatedButton from "../components/AnimatedButton";
 import StyledInput from "../components/StyledInput";
+import BackButton from "../components/BackButton";
+import ScreenTitle from "../components/ScreenTitle";
+import TextLink from "../components/TextLink";
+import { useTheme } from "../theme/ThemeContext";
 
 export default function LoginScreen({ navigation }) {
+  const { colors } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   return (
-    <SafeAreaView className="flex-1 bg-navyDark">
-      <StatusBar style="light" />
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 px-6 pt-8">
-            <Pressable onPress={() => navigation.goBack()} className="mb-6">
-              <Text className="text-slate-300 text-base">{"\u2190"} Back</Text>
-            </Pressable>
+          <View className="flex-1 px-6 pt-8 pb-10">
+            <BackButton onPress={() => navigation.goBack()} />
 
-            <Text className="text-white text-2xl font-bold mb-1">Welcome back</Text>
-            <Text className="text-slate-400 text-base mb-8">Log in to your MAZ account.</Text>
+            <ScreenTitle title="Welcome back" subtitle="Log in to your MAZ account." />
 
             <StyledInput
               label="Email address"
@@ -39,17 +39,25 @@ export default function LoginScreen({ navigation }) {
               secureTextEntry
             />
 
-            <Pressable className="items-end mb-6">
-              <Text className="text-slate-400 text-sm">Forgot password?</Text>
-            </Pressable>
-
-            <AnimatedButton label="Log in" onPress={() => navigation.navigate("CompleteProfile")} />
-
-            <Pressable className="mt-5 items-center" onPress={() => navigation.navigate("SignUp")}>
-              <Text className="text-slate-400 text-sm">
-                Don't have an account? <Text className="text-white font-medium">Sign up</Text>
+            {/* StyledInput already adds 20pt below; pull the 44pt-tall link up so spacing stays tight. */}
+            <TextLink align="right" style={{ marginTop: -12 }}>
+              <Text className="text-sm" style={{ color: colors.textMuted }}>
+                Forgot password?
               </Text>
-            </Pressable>
+            </TextLink>
+
+            <View className="mt-4">
+              <AnimatedButton label="Log in" onPress={() => navigation.navigate("CompleteProfile")} />
+            </View>
+
+            <TextLink onPress={() => navigation.navigate("SignUp")} style={{ marginTop: 12 }}>
+              <Text className="text-sm" style={{ color: colors.textMuted }}>
+                {"Don't have an account? "}
+                <Text className="font-medium" style={{ color: colors.text }}>
+                  Sign up
+                </Text>
+              </Text>
+            </TextLink>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

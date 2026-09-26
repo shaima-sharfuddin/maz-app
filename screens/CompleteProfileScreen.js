@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { View, Text, Pressable, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
 import AnimatedButton from "../components/AnimatedButton";
 import StyledInput from "../components/StyledInput";
 import SectionCard from "../components/SectionCard";
 import DateField from "../components/DateField";
 import SelectField from "../components/SelectField";
 import SegmentedControl from "../components/SegmentedControl";
+import BackButton from "../components/BackButton";
+import ScreenTitle from "../components/ScreenTitle";
 import { COMPANIES, GENDERS, NATIONALITIES } from "../data/formOptions";
+import { useTheme } from "../theme/ThemeContext";
 
 // Field set mirrors MAZ's admin "Create Customer" form.
 export default function CompleteProfileScreen({ navigation }) {
+  const { colors } = useTheme();
   const [customer, setCustomer] = useState({
     company: "",
     customerName: "",
@@ -59,19 +62,16 @@ export default function CompleteProfileScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-navyDark">
-      <StatusBar style="light" />
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 pt-8 pb-10">
-            <Pressable onPress={() => navigation.goBack()} className="mb-6">
-              <Text className="text-slate-300 text-base">{"←"} Back</Text>
-            </Pressable>
+            <BackButton onPress={() => navigation.goBack()} />
 
-            <Text className="text-white text-2xl font-bold mb-1">Complete your profile</Text>
-            <Text className="text-slate-400 text-base mb-8">
-              Tell us about your company and its owner. Fields marked * are required.
-            </Text>
+            <ScreenTitle
+              title="Complete your profile"
+              subtitle="Tell us about your company and its owner. Fields marked * are required."
+            />
 
             <SectionCard title="Company Details" defaultExpanded>
               <SelectField
@@ -190,7 +190,11 @@ export default function CompleteProfileScreen({ navigation }) {
 
             <View className="mt-4">
               <AnimatedButton label="Save profile" onPress={handleSave} />
-              {error ? <Text className="text-red-400 text-sm text-center mt-3">{error}</Text> : null}
+              {error ? (
+                <Text className="text-sm text-center mt-3" style={{ color: colors.danger }}>
+                  {error}
+                </Text>
+              ) : null}
             </View>
           </View>
         </ScrollView>

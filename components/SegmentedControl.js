@@ -1,40 +1,54 @@
-import { View, Text, Pressable } from "react-native";
+import { View, Text } from "react-native";
+import PressableScale from "./PressableScale";
+import { useTheme } from "../theme/ThemeContext";
 
 export default function SegmentedControl({ label, value, onChange, options }) {
+  const { colors } = useTheme();
+
   return (
     <View style={{ marginBottom: 20 }}>
-      <Text style={{ color: "#cbd5e1", fontSize: 13, marginBottom: 8 }}>{label}</Text>
+      {label ? <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{label}</Text> : null}
       <View
         accessibilityRole="radiogroup"
         style={{
           flexDirection: "row",
-          backgroundColor: "rgba(255,255,255,0.08)",
+          backgroundColor: colors.inputBackground,
           borderRadius: 12,
           borderWidth: 1.5,
-          borderColor: "rgba(255,255,255,0.1)",
+          borderColor: colors.inputBorder,
           padding: 4,
         }}
       >
         {options.map((option) => {
-          const selected = option === value;
+          // Options may be plain strings or { value, label } objects.
+          const optionValue = typeof option === "string" ? option : option.value;
+          const optionLabel = typeof option === "string" ? option : option.label;
+          const selected = optionValue === value;
           return (
-            <Pressable
-              key={option}
-              onPress={() => onChange(option)}
+            <PressableScale
+              key={optionValue}
+              onPress={() => onChange(optionValue)}
+              containerStyle={{ flex: 1 }}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
               style={{
-                flex: 1,
                 alignItems: "center",
-                paddingVertical: 10,
+                justifyContent: "center",
+                minHeight: 44,
                 borderRadius: 9,
-                backgroundColor: selected ? "#a31c37" : "transparent",
+                backgroundColor: selected ? colors.primary : "transparent",
               }}
             >
-              <Text style={{ color: selected ? "#ffffff" : "#94a3b8", fontSize: 14, fontWeight: selected ? "600" : "400" }}>
-                {option}
+              <Text
+                style={{
+                  color: selected ? colors.onPrimary : colors.textMuted,
+                  fontSize: 14,
+                  fontWeight: selected ? "600" : "400",
+                }}
+              >
+                {optionLabel}
               </Text>
-            </Pressable>
+            </PressableScale>
           );
         })}
       </View>

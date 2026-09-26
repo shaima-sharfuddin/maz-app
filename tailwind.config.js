@@ -6,14 +6,10 @@ module.exports = {
     "./components/**/*.{js,jsx}",
   ],
   presets: [require("nativewind/preset")],
+  // Colors are NOT defined here — they live in theme/theme.js and are applied via useTheme(),
+  // so light/dark switching works everywhere. Use Tailwind only for layout, spacing and type.
   theme: {
-    extend: {
-      colors: {
-        navy: "#1a3966",
-        navyDark: "#101828",
-        crimson: "#a31c37",
-      },
-    },
+    extend: {},
   },
   plugins: [],
 };

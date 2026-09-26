@@ -1,29 +1,27 @@
 import { useState } from "react";
-import { View, Text, Pressable, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
 import AnimatedButton from "../components/AnimatedButton";
 import StyledInput from "../components/StyledInput";
+import BackButton from "../components/BackButton";
+import ScreenTitle from "../components/ScreenTitle";
+import TextLink from "../components/TextLink";
+import { useTheme } from "../theme/ThemeContext";
 
 export default function SignUpScreen({ navigation }) {
+  const { colors } = useTheme();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
   return (
-    <SafeAreaView className="flex-1 bg-navyDark">
-      <StatusBar style="light" />
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 px-6 pt-8">
-            <Pressable onPress={() => navigation.goBack()} className="mb-6">
-              <Text className="text-slate-300 text-base">{"\u2190"} Back</Text>
-            </Pressable>
+          <View className="flex-1 px-6 pt-8 pb-10">
+            <BackButton onPress={() => navigation.goBack()} />
 
-            <Text className="text-white text-2xl font-bold mb-1">Create your account</Text>
-            <Text className="text-slate-400 text-base mb-8">
-              Just a few details to get started.
-            </Text>
+            <ScreenTitle title="Create your account" subtitle="Just a few details to get started." />
 
             <StyledInput
               label="Full name"
@@ -53,11 +51,14 @@ export default function SignUpScreen({ navigation }) {
               <AnimatedButton label="Continue" />
             </View>
 
-            <Pressable className="mt-5 items-center" onPress={() => navigation.navigate("Login")}>
-              <Text className="text-slate-400 text-sm">
-                Already have an account? <Text className="text-white font-medium">Log in</Text>
+            <TextLink onPress={() => navigation.navigate("Login")} style={{ marginTop: 12 }}>
+              <Text className="text-sm" style={{ color: colors.textMuted }}>
+                Already have an account?{" "}
+                <Text className="font-medium" style={{ color: colors.text }}>
+                  Log in
+                </Text>
               </Text>
-            </Pressable>
+            </TextLink>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

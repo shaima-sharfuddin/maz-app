@@ -14,6 +14,16 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Deep navy background: #101828
 - Crimson: #a31c37
 
+## Theme system (light + dark) — never hardcode colors
+- theme/theme.js defines BRAND plus PALETTES.light / PALETTES.dark (same token names in both)
+- theme/ThemeContext.js: ThemeProvider + useTheme() → { colors, scheme, isDark, preference, setPreference, ready }
+- Preference is "system" | "light" | "dark", persisted in AsyncStorage (key maz.themePreference), default "system"
+- Every component/screen reads colors via `const { colors } = useTheme()` and applies them with `style`.
+  NativeWind className is for layout, spacing and type only — no color classes (tailwind.config has no colors)
+- Status bar is set once in App.js from the theme; screens must not render their own <StatusBar>
+- App.js holds the splash screen until the saved preference loads, so the first frame is never the wrong theme
+- User toggles the theme in screens/SettingsScreen.js (gear icon on HomeDashboard)
+
 ## Tech stack decisions already made
 - Expo (managed workflow), NativeWind v4 for styling, React Navigation (native-stack)
 - expo-haptics for button feedback, @react-native-community/datetimepicker for dates
@@ -41,7 +51,10 @@ an earlier TypeScript version — the conversion is complete and current files a
   open, Owner Details collapsed); required: Customer Name, Owner Name, Gender. Save validates, then resets
   the stack to HomeDashboard (nothing persisted — no backend)
 - screens/HomeDashboardScreen.js ✅ — new-user state only: welcome, "no office leased" card with Browse Plans
-  button (not wired — BrowsePlans doesn't exist), trust stats, services, testimonials placeholder
+  button (→ BrowsePlans), trust stats, services, testimonials placeholder
+- screens/SettingsScreen.js ✅ — Appearance: System / Light / Dark theme toggle (persisted)
+- screens/BrowsePlansScreen.js ✅ — trust stats + a card per service with Select; single selection is
+  highlighted and logged only (no booking screen yet)
 
 ## Components built so far (working, in JavaScript)
 - components/AnimatedButton.js ✅ — press-scale animation + haptic feedback on tap
@@ -51,15 +64,23 @@ an earlier TypeScript version — the conversion is complete and current files a
 - components/SelectField.js ✅ — dropdown field opening a bottom-sheet list (search box when > 10 options)
 - components/SegmentedControl.js ✅ — inline toggle between options (used for Gender)
 - components/TrustStats.js ✅ — row of stat tiles (reuse on BrowsePlans)
+- components/PressableScale.js ✅ — shared press feedback (scale + light haptic); AnimatedButton is built on it
+- components/ScreenTitle.js ✅ — standard heading block (optional eyebrow, 2xl title, subtitle, mb-8)
+- components/BackButton.js ✅ / components/TextLink.js ✅ — 44pt back button and secondary text links
+- components/EmptyState.js ✅ — icon + title + message (+ optional action); `dashed` for "coming soon"
+- components/Skeleton.js ✅ — Skeleton block + SkeletonCard for loading placeholders
+- api/mockApi.js — mock API (fetchPlans, fetchDashboard) with MOCK_LATENCY_MS; swap for real calls later
+- hooks/useAsync.js — { loading, data, error, reload } for any loader
 - data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel
 - data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
 
 ## Screens NOT built yet
-- BrowsePlans, BookingForm, DocumentUpload, ContractReview,
+- BookingForm, DocumentUpload, ContractReview,
   Payment, MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
 
 ## Design conventions to follow for every new screen
-- Dark navy background (#101828), white text, crimson (#a31c37) for primary buttons
+- Colors come from the theme (colors.background, colors.text, colors.primary for primary buttons, …);
+  every new screen must look right in both light and dark
 - Buttons use the existing AnimatedButton component — don't rebuild button logic from scratch
 - Text inputs use the existing StyledInput component — don't rebuild input logic from scratch
 - Long forms should use a SectionCard component (collapsible sections) — build this component
@@ -67,6 +88,13 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Keep it minimal and fast-feeling — no bouncy animations, no unnecessary motion
 - Match the navigation pattern already used in App.js (React Navigation native-stack,
   headerShown: false, screens registered in RootStackParamList-style object)
+- Screen shell: SafeAreaView (style backgroundColor: colors.background) → (KeyboardAvoidingView for forms) → ScrollView →
+  View "flex-1 px-6 pt-8 pb-10"; BackButton + ScreenTitle at the top; sections spaced mb-8
+- Cards: radius 16, colors.surface + colors.surfaceBorder. Fields/buttons: radius 12, fields minHeight 48
+- Every tappable element uses PressableScale (cards/rows: scaleTo 0.98); all tap targets ≥ 44x44pt.
+  Exception: form field triggers (DateField/SelectField) match StyledInput's crimson focus border instead
+- Anything loaded from the API: Skeleton while loading, EmptyState when empty, EmptyState + "Try again" on error
+- Icons: Ionicons from @expo/vector-icons
 
 ## Brand positioning & tone (from MAZ's marketing site)
 - MAZ is a premium/luxury serviced-office brand, not a generic compliance app

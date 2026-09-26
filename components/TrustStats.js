@@ -1,6 +1,9 @@
 import { View, Text } from "react-native";
+import { useTheme } from "../theme/ThemeContext";
 
 export default function TrustStats({ stats }) {
+  const { colors } = useTheme();
+
   return (
     <View style={{ flexDirection: "row", gap: 10 }}>
       {stats.map((stat) => (
@@ -8,17 +11,17 @@ export default function TrustStats({ stats }) {
           key={stat.label}
           style={{
             flex: 1,
-            backgroundColor: "rgba(255,255,255,0.04)",
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.08)",
+            borderColor: colors.surfaceBorder,
             borderRadius: 16,
             paddingVertical: 16,
             paddingHorizontal: 8,
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "#ffffff", fontSize: 22, fontWeight: "700" }}>{stat.value}</Text>
-          <Text style={{ color: "#94a3b8", fontSize: 12, marginTop: 4, textAlign: "center" }}>{stat.label}</Text>
+          <Text style={{ color: colors.text, fontSize: 22, fontWeight: "700" }}>{stat.value}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4, textAlign: "center" }}>{stat.label}</Text>
         </View>
       ))}
     </View>

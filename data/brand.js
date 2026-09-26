@@ -12,9 +12,26 @@ export const BAHRAIN_ADVANTAGES = [
   { value: "100%", label: "Foreign ownership" },
 ];
 
+// Descriptions are MAZ's own wording from their site.
 export const SERVICES = [
-  { title: "Office Suites", description: "Fully serviced, move-in ready workspaces." },
-  { title: "CR Registration", description: "Seamless company setup, handled for you." },
-  { title: "Startup Incubator", description: "Guidance and space for founders to scale." },
-  { title: "Meeting Rooms", description: "Prestigious rooms for every occasion." },
+  {
+    id: "office-suites",
+    title: "Office Suites",
+    description: "Private, fully serviced executive rooms with sea views",
+  },
+  {
+    id: "cr-registration",
+    title: "CR Registration",
+    description: "Commercial Registration and address services for entrepreneurs",
+  },
+  {
+    id: "startup-incubator",
+    title: "Startup Incubator",
+    description: "Mentorship and shared resources for growing businesses",
+  },
+  {
+    id: "meeting-rooms",
+    title: "Meeting Rooms",
+    description: "Marble boardrooms and intimate conference suites",
+  },
 ];

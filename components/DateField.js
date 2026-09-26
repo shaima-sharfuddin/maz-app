@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { View, Text, Pressable, Platform } from "react-native";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
+import PressableScale from "./PressableScale";
+import { useTheme } from "../theme/ThemeContext";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -17,6 +19,7 @@ export default function DateField({
   minimumDate,
   maximumDate,
 }) {
+  const { colors, scheme } = useTheme();
   // iOS only: the picker renders inline below the field while open.
   const [open, setOpen] = useState(false);
 
@@ -36,20 +39,22 @@ export default function DateField({
 
   return (
     <View style={{ marginBottom: 20 }}>
-      <Text style={{ color: "#cbd5e1", fontSize: 13, marginBottom: 8 }}>{label}</Text>
+      <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{label}</Text>
       <Pressable
         onPress={handlePress}
         accessibilityRole="button"
         style={{
-          backgroundColor: "rgba(255,255,255,0.08)",
+          backgroundColor: colors.inputBackground,
           borderRadius: 12,
           paddingHorizontal: 16,
           paddingVertical: 12,
+          minHeight: 48,
+          justifyContent: "center",
           borderWidth: 1.5,
-          borderColor: open ? "#a31c37" : "rgba(255,255,255,0.1)",
+          borderColor: open ? colors.primary : colors.inputBorder,
         }}
       >
-        <Text style={{ color: value ? "#ffffff" : "#64748b", fontSize: 14 }}>
+        <Text style={{ color: value ? colors.text : colors.textSubtle, fontSize: 14 }}>
           {value ? formatDate(value) : placeholder}
         </Text>
       </Pressable>
@@ -60,15 +65,20 @@ export default function DateField({
             value={value ?? new Date()}
             mode="date"
             display="spinner"
-            themeVariant="dark"
-            textColor="#ffffff"
+            themeVariant={scheme}
+            textColor={colors.text}
             minimumDate={minimumDate}
             maximumDate={maximumDate}
             onValueChange={(_event, date) => onChange(date)}
           />
-          <Pressable onPress={() => setOpen(false)} style={{ alignItems: "flex-end", paddingVertical: 8 }}>
-            <Text style={{ color: "#ffffff", fontSize: 14, fontWeight: "600" }}>Done</Text>
-          </Pressable>
+          <PressableScale
+            onPress={() => setOpen(false)}
+            accessibilityRole="button"
+            containerStyle={{ alignSelf: "flex-end" }}
+            style={{ minHeight: 44, minWidth: 44, justifyContent: "center", paddingHorizontal: 8 }}
+          >
+            <Text style={{ color: colors.text, fontSize: 14, fontWeight: "600" }}>Done</Text>
+          </PressableScale>
         </View>
       ) : null}
     </View>
