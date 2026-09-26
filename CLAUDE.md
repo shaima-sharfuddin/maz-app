@@ -37,17 +37,19 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/WelcomeScreen.js ✅
 - screens/SignUpScreen.js ✅
 - screens/LoginScreen.js ✅
+- screens/CompleteProfileScreen.js ✅ — fields match MAZ's "Create Customer" form exactly (Company Details
+  open, Owner Details collapsed); required: Customer Name, Owner Name, Gender. Save validates only (no backend)
 
 ## Components built so far (working, in JavaScript)
 - components/AnimatedButton.js ✅ — press-scale animation + haptic feedback on tap
 - components/StyledInput.js ✅ — text input with crimson border on focus
-
-## Components NOT built yet (do not assume these exist — create them when needed)
-- SectionCard — a collapsible card wrapper, planned for CompleteProfileScreen
-- DateField — a tappable field that opens the native date picker, planned for CompleteProfileScreen
+- components/SectionCard.js ✅ — collapsible card wrapper (title, subtitle, defaultExpanded)
+- components/DateField.js ✅ — tappable field; native dialog on Android, inline spinner on iOS
+- components/SelectField.js ✅ — dropdown field opening a bottom-sheet list (search box when > 10 options)
+- components/SegmentedControl.js ✅ — inline toggle between options (used for Gender)
+- data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel
 
 ## Screens NOT built yet
-- CompleteProfileScreen (next screen to build — needs SectionCard and DateField components first)
 - HomeDashboard, BrowsePlans, BookingForm, DocumentUpload, ContractReview,
   Payment, MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
 
@@ -60,3 +62,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Keep it minimal and fast-feeling — no bouncy animations, no unnecessary motion
 - Match the navigation pattern already used in App.js (React Navigation native-stack,
   headerShown: false, screens registered in RootStackParamList-style object)
+
+  ## Open questions (waiting on recruiter)
+- Company dropdown in CompleteProfileScreen: currently hardcoded to MAZ's 4 known
+  entities (MAZ Company, MAZ Business Center Incubator, MAZ Business Center, MAZ BDB).
+  Waiting to confirm if this should later pull from a live API endpoint instead.
