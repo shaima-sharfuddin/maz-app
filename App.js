@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 
 import { ThemeProvider, useTheme } from "./theme/ThemeContext";
+import { DemoProvider, useDemo } from "./demo/DemoContext";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import SignUpScreen from "./screens/SignUpScreen";
 import LoginScreen from "./screens/LoginScreen";
@@ -17,14 +18,18 @@ import SettingsScreen from "./screens/SettingsScreen";
 import SelectTermScreen from "./screens/SelectTermScreen";
 import SubmitRequestScreen from "./screens/SubmitRequestScreen";
 import RequestStatusScreen from "./screens/RequestStatusScreen";
+import ContractDetailScreen from "./screens/ContractDetailScreen";
 
-// Keep the splash up until the saved theme preference has loaded (prevents a wrong-theme flash).
+// Keep the splash up until saved preferences (theme + demo data) have loaded, so the first frame
+// never shows the wrong theme or the wrong dashboard state.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Stack = createNativeStackNavigator();
 
 function AppNavigator() {
-  const { ready, isDark, colors } = useTheme();
+  const { ready: themeReady, isDark, colors } = useTheme();
+  const { ready: demoReady } = useDemo();
+  const ready = themeReady && demoReady;
 
   useEffect(() => {
     if (ready) SplashScreen.hide();
@@ -64,6 +69,7 @@ function AppNavigator() {
         <Stack.Screen name="SelectTerm" component={SelectTermScreen} />
         <Stack.Screen name="SubmitRequest" component={SubmitRequestScreen} />
         <Stack.Screen name="RequestStatus" component={RequestStatusScreen} />
+        <Stack.Screen name="ContractDetail" component={ContractDetailScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
@@ -74,7 +80,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AppNavigator />
+        <DemoProvider>
+          <AppNavigator />
+        </DemoProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

@@ -1,4 +1,5 @@
 import { SERVICES } from "../data/brand";
+import { MOCK_CONTRACTS, MOCK_TENANT_NAME } from "../data/mockTenant";
 
 // MOCK DATA LAYER — no backend yet. Each function mirrors a future API call so screens
 // already handle loading / empty / error states. Swap these bodies for real fetches later.
@@ -11,9 +12,36 @@ export function fetchPlans() {
   return delay(SERVICES);
 }
 
-// New-user state: no active lease yet.
-export function fetchDashboard() {
-  return delay({ lease: null });
+// userState comes from the Settings demo toggle (demo/DemoContext.js):
+// "newUser" → no lease yet; "tenant" → contracts overview. The real API will decide this itself.
+export function fetchDashboard(userState = "tenant") {
+  if (userState === "newUser") return delay({ lease: null });
+
+  const active = MOCK_CONTRACTS.filter((c) => c.status === "active");
+  const expired = MOCK_CONTRACTS.filter((c) => c.status === "expired");
+  const withDues = MOCK_CONTRACTS.filter((c) => c.outstanding > 0);
+  const countOf = (type) => active.filter((c) => c.type === type).length;
+
+  return delay({
+    tenantName: MOCK_TENANT_NAME,
+    summary: {
+      activeCount: active.length,
+      activeOffices: countOf("office"),
+      activeIncubators: countOf("incubator"),
+      expiredCount: expired.length,
+      latestExpiry: expired.map((c) => c.endDate).sort().slice(-1)[0] ?? null,
+      paymentDue: withDues.reduce((sum, c) => sum + c.outstanding, 0),
+      nextDueDate: withDues.map((c) => c.dueDate).sort()[0] ?? null,
+    },
+    contracts: MOCK_CONTRACTS,
+  });
+}
+
+export function fetchContract(contractId) {
+  const contract = MOCK_CONTRACTS.find((c) => c.id === contractId);
+  return contract
+    ? delay(contract)
+    : new Promise((_, reject) => setTimeout(() => reject(new Error("Contract not found")), MOCK_LATENCY_MS));
 }
 
 // In-memory stand-in for the backend's request store (cleared on app reload).

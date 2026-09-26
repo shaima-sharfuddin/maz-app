@@ -3,13 +3,7 @@ import { View, Text, Pressable, Platform } from "react-native";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import PressableScale from "./PressableScale";
 import { useTheme } from "../theme/ThemeContext";
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function formatDate(date) {
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${day} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
-}
+import { formatDate } from "../utils/formatDate";
 
 export default function DateField({
   label,
