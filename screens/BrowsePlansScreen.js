@@ -94,11 +94,10 @@ export default function BrowsePlansScreen({ navigation }) {
   const [selectedId, setSelectedId] = useState(null);
 
   const toggleSelect = (plan) => {
-    const next = selectedId === plan.id ? null : plan.id;
-    setSelectedId(next);
-    // TODO: carry the selection into the booking request screen once it exists.
-    console.log(next ? `Selected plan: ${plan.title}` : "Plan selection cleared");
+    setSelectedId((prev) => (prev === plan.id ? null : plan.id));
   };
+
+  const selectedPlan = plans?.find((plan) => plan.id === selectedId);
 
   const renderPlans = () => {
     if (loading) {
@@ -154,6 +153,25 @@ export default function BrowsePlansScreen({ navigation }) {
           {renderPlans()}
         </View>
       </ScrollView>
+
+      {/* Fixed footer once a plan is chosen, so Continue is always reachable without scrolling. */}
+      {selectedPlan ? (
+        <View
+          style={{
+            paddingHorizontal: 24,
+            paddingTop: 12,
+            paddingBottom: 8,
+            backgroundColor: colors.background,
+            borderTopWidth: 1,
+            borderTopColor: colors.surfaceBorder,
+          }}
+        >
+          <AnimatedButton
+            label={`Continue with ${selectedPlan.title}`}
+            onPress={() => navigation.navigate("SubmitRequest", { plan: selectedPlan })}
+          />
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

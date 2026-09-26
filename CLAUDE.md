@@ -36,9 +36,12 @@ an earlier TypeScript version — the conversion is complete and current files a
 3. Log in
 4. Complete profile (company + owner details — matches MAZ's real "Create Customer" form)
 5. Home dashboard (new user state: prompt to browse plans; active tenant state: contract status, quick actions)
-6. Core actions: Browse plans → Select plan & term → Submit enquiry/booking →
-   company approves/rejects → Upload documents → Contract drafted → Review & sign →
-   Payment → Download signed contract → (user uploads to Sijilat themselves)
+6. Core actions (from the recruiter's "Request an Office" wireframe):
+   Browse plans → Select plan → Submit request (SubmitRequestScreen: name, email, company, activity, remark) →
+   the request then moves through 5 stages, tracked on RequestStatusScreen via StatusStepper:
+     1. Request Submitted → 2. Email Confirmation Sent → 3. Admin Review → 4. Unit Assigned → 5. Invoice Generated
+   → Payment (e.g. BenefitPay) → active contract appears on the dashboard (contract detail, bills, payments).
+   The office admin assigns the actual unit — users request a plan, not a specific unit.
 7. Ongoing tenant features: Book meeting rooms, track violations/compliance,
    renew/extend contract, notifications, support enquiries
 8. Log out
@@ -53,8 +56,13 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/HomeDashboardScreen.js ✅ — new-user state only: welcome, "no office leased" card with Browse Plans
   button (→ BrowsePlans), trust stats, services, testimonials placeholder
 - screens/SettingsScreen.js ✅ — Appearance: System / Light / Dark theme toggle (persisted)
-- screens/BrowsePlansScreen.js ✅ — trust stats + a card per service with Select; single selection is
-  highlighted and logged only (no booking screen yet)
+- screens/BrowsePlansScreen.js ✅ — trust stats + a card per service with Select; selecting shows a fixed
+  "Continue with {plan}" footer → SubmitRequest (passes { plan })
+- screens/SubmitRequestScreen.js ✅ — (this is the screen previously listed as "BookingForm") Full Name, Email,
+  Company Name, Activity dropdown, optional Remark + RequestSummaryCard; location/term/price are PLACEHOLDERS.
+  Submit validates, calls mock submitRequest, then resets the stack to [HomeDashboard, RequestStatus]
+- screens/RequestStatusScreen.js ✅ — StatusStepper + confirmation + summary; loads fetchRequestStatus
+  (mock always returns step 1 — swap for the real API to show the true stage)
 
 ## Components built so far (working, in JavaScript)
 - components/AnimatedButton.js ✅ — press-scale animation + haptic feedback on tap
@@ -69,14 +77,21 @@ an earlier TypeScript version — the conversion is complete and current files a
 - components/BackButton.js ✅ / components/TextLink.js ✅ — 44pt back button and secondary text links
 - components/EmptyState.js ✅ — icon + title + message (+ optional action); `dashed` for "coming soon"
 - components/Skeleton.js ✅ — Skeleton block + SkeletonCard for loading placeholders
-- api/mockApi.js — mock API (fetchPlans, fetchDashboard) with MOCK_LATENCY_MS; swap for real calls later
+- components/StatusStepper.js ✅ — reusable horizontal step tracker; props currentStep (1-based) + optional
+  steps (defaults to REQUEST_STEPS). Completed = check, current = filled crimson, upcoming = muted
+- components/RequestSummaryCard.js ✅ — Plan / Location / Term / Estimated price recap
+- data/requestSteps.js — REQUEST_STEPS, the 5 request stages (single source for StatusStepper + API mapping)
+- api/mockApi.js — mock API (fetchPlans, fetchDashboard, submitRequest, fetchRequestStatus) with
+  MOCK_LATENCY_MS; swap for real calls later
 - hooks/useAsync.js — { loading, data, error, reload } for any loader
-- data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel
+- data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel;
+  ACTIVITIES is a PLACEHOLDER until the real Activity list comes from the API
 - data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
 
 ## Screens NOT built yet
-- BookingForm, DocumentUpload, ContractReview,
-  Payment, MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
+- Payment, ContractDetail (contract + bills + payments, per the recruiter wireframe),
+  MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
+- Unconfirmed (see Open questions): DocumentUpload, ContractReview
 
 ## Design conventions to follow for every new screen
 - Colors come from the theme (colors.background, colors.text, colors.primary for primary buttons, …);
@@ -110,3 +125,11 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Company dropdown in CompleteProfileScreen: currently hardcoded to MAZ's 4 known
   entities (MAZ Company, MAZ Business Center Incubator, MAZ Business Center, MAZ BDB).
   Waiting to confirm if this should later pull from a live API endpoint instead.
+- Document upload / contract review & signing: the earlier generic flow assumed these steps, but the
+  recruiter's 5-stage request flow ends at "Invoice Generated". Confirm whether they still exist.
+- Likely missing step: a term/location selection screen between BrowsePlans and SubmitRequestScreen
+  (the recruiter wireframe shows a 1/3/6/12-month duration picker with an estimated amount). Pending
+  recruiter confirmation. Until then SubmitRequestScreen uses hardcoded PLACEHOLDER values
+  (Seef District · 3 months · BHD 100/month; plan comes from the BrowsePlans selection), labelled
+  as samples on screen via RequestSummaryCard's isPlaceholder note.
+- SubmitRequest's Activity dropdown uses placeholder options; should come from the real API.

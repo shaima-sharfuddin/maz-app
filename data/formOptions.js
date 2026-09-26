@@ -3,6 +3,19 @@ export const COMPANIES = ["MAZ COMPANY", "MAZ BUSINESS CENTER INCUBATOR", "MAZ B
 
 export const GENDERS = ["Male", "Female"];
 
+// PLACEHOLDER — sample Bahrain business activities for the Submit Request form.
+// Replace with the real Activity list (MAZ's activity codes) from the API once available.
+export const ACTIVITIES = [
+  "Management Consultancy",
+  "Real Estate Activities",
+  "Construction of Buildings",
+  "Computer Programming & IT Consultancy",
+  "Accounting & Auditing",
+  "Advertising & Marketing",
+  "General Trading",
+  "Legal Activities",
+];
+
 export const NATIONALITIES = [
   "Afghan", "Albanian", "Algerian", "American", "Andorran", "Angolan", "Argentine", "Armenian",
   "Australian", "Austrian", "Azerbaijani", "Bahamian", "Bahraini", "Bangladeshi", "Barbadian",

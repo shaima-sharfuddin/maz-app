@@ -14,6 +14,8 @@ import CompleteProfileScreen from "./screens/CompleteProfileScreen";
 import HomeDashboardScreen from "./screens/HomeDashboardScreen";
 import BrowsePlansScreen from "./screens/BrowsePlansScreen";
 import SettingsScreen from "./screens/SettingsScreen";
+import SubmitRequestScreen from "./screens/SubmitRequestScreen";
+import RequestStatusScreen from "./screens/RequestStatusScreen";
 
 // Keep the splash up until the saved theme preference has loaded (prevents a wrong-theme flash).
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -58,6 +60,8 @@ function AppNavigator() {
         <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
         <Stack.Screen name="HomeDashboard" component={HomeDashboardScreen} />
         <Stack.Screen name="BrowsePlans" component={BrowsePlansScreen} />
+        <Stack.Screen name="SubmitRequest" component={SubmitRequestScreen} />
+        <Stack.Screen name="RequestStatus" component={RequestStatusScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
