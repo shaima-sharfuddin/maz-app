@@ -38,7 +38,10 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/SignUpScreen.js ✅
 - screens/LoginScreen.js ✅
 - screens/CompleteProfileScreen.js ✅ — fields match MAZ's "Create Customer" form exactly (Company Details
-  open, Owner Details collapsed); required: Customer Name, Owner Name, Gender. Save validates only (no backend)
+  open, Owner Details collapsed); required: Customer Name, Owner Name, Gender. Save validates, then resets
+  the stack to HomeDashboard (nothing persisted — no backend)
+- screens/HomeDashboardScreen.js ✅ — new-user state only: welcome, "no office leased" card with Browse Plans
+  button (not wired — BrowsePlans doesn't exist), trust stats, services, testimonials placeholder
 
 ## Components built so far (working, in JavaScript)
 - components/AnimatedButton.js ✅ — press-scale animation + haptic feedback on tap
@@ -47,10 +50,12 @@ an earlier TypeScript version — the conversion is complete and current files a
 - components/DateField.js ✅ — tappable field; native dialog on Android, inline spinner on iOS
 - components/SelectField.js ✅ — dropdown field opening a bottom-sheet list (search box when > 10 options)
 - components/SegmentedControl.js ✅ — inline toggle between options (used for Gender)
+- components/TrustStats.js ✅ — row of stat tiles (reuse on BrowsePlans)
 - data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel
+- data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
 
 ## Screens NOT built yet
-- HomeDashboard, BrowsePlans, BookingForm, DocumentUpload, ContractReview,
+- BrowsePlans, BookingForm, DocumentUpload, ContractReview,
   Payment, MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
 
 ## Design conventions to follow for every new screen
@@ -62,6 +67,16 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Keep it minimal and fast-feeling — no bouncy animations, no unnecessary motion
 - Match the navigation pattern already used in App.js (React Navigation native-stack,
   headerShown: false, screens registered in RootStackParamList-style object)
+
+## Brand positioning & tone (from MAZ's marketing site)
+- MAZ is a premium/luxury serviced-office brand, not a generic compliance app
+- Copy is premium, polished, confident — words like "prestigious", "seamless", "concierge";
+  never casual or playful, no emoji
+- Approved trust stats (keep in data/brand.js): 4.9 Google rating, 18+ years of excellence,
+  25+ companies supported, 0% corporate tax, 100% foreign ownership
+- Services: Office Suites, CR Registration, Startup Incubator, Meeting Rooms
+- Testimonials: do NOT add stock or copied client quotes — placeholder section only, until MAZ grants permission
+- BrowsePlans should reuse components/TrustStats.js and match HomeDashboard's card styling
 
   ## Open questions (waiting on recruiter)
 - Company dropdown in CompleteProfileScreen: currently hardcoded to MAZ's 4 known

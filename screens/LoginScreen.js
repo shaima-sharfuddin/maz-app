@@ -43,7 +43,7 @@ export default function LoginScreen({ navigation }) {
               <Text className="text-slate-400 text-sm">Forgot password?</Text>
             </Pressable>
 
-            <AnimatedButton label="Log in" />
+            <AnimatedButton label="Log in" onPress={() => navigation.navigate("CompleteProfile")} />
 
             <Pressable className="mt-5 items-center" onPress={() => navigation.navigate("SignUp")}>
               <Text className="text-slate-400 text-sm">

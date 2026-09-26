@@ -1,9 +1,10 @@
-import { useRef } from "react";
+import { useState } from "react";
 import { Animated, Pressable, Text } from "react-native";
 import * as Haptics from "expo-haptics";
 
 export default function AnimatedButton({ label, onPress, variant = "primary" }) {
-  const scale = useRef(new Animated.Value(1)).current;
+  // Lazy initializer: creates the Animated.Value once instead of on every render.
+  const [scale] = useState(() => new Animated.Value(1));
   const isPrimary = variant === "primary";
 
   const handlePressIn = () => {
