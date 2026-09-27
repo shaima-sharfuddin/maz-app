@@ -41,3 +41,13 @@ export const NATIONALITIES = [
   "Turkmen", "Ugandan", "Ukrainian", "Uruguayan", "Uzbek", "Venezuelan", "Vietnamese", "Yemeni",
   "Zambian", "Zimbabwean",
 ];
+
+// PLACEHOLDER — support enquiry categories until MAZ confirms how enquiries are routed.
+export const SUPPORT_CATEGORIES = [
+  "Billing & payments",
+  "Contract & renewal",
+  "Facilities & maintenance",
+  "Meeting rooms",
+  "Violation query",
+  "Other",
+];

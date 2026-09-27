@@ -129,3 +129,12 @@ export const submitRequestSchema = z.object({
   activity: requiredSelect("Activity"),
   remark: z.string().trim().max(500, "Keep remarks under 500 characters"),
 });
+
+export const supportEnquirySchema = z.object({
+  category: requiredSelect("Category"),
+  contract: optionalText,
+  subject: requiredText("Subject").max(120, "Keep the subject under 120 characters"),
+  message: requiredText("Message")
+    .min(10, "Add a little more detail (at least 10 characters)")
+    .max(1000, "Keep your message under 1000 characters"),
+});

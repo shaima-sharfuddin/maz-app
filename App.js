@@ -24,6 +24,9 @@ import ContractDetailScreen from "./screens/ContractDetailScreen";
 import PaymentScreen from "./screens/PaymentScreen";
 import PaymentReceiptScreen from "./screens/PaymentReceiptScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
+import SupportScreen from "./screens/SupportScreen";
+import NewEnquiryScreen from "./screens/NewEnquiryScreen";
+import EnquiryDetailScreen from "./screens/EnquiryDetailScreen";
 
 // Keep the splash up until saved state (theme, demo data, login session) has loaded, so the first
 // frame never shows the wrong theme, the wrong dashboard state, or the wrong (logged-out) screens.
@@ -95,6 +98,9 @@ function AppNavigator() {
             <Stack.Screen name="Payment" component={PaymentScreen} />
             <Stack.Screen name="PaymentReceipt" component={PaymentReceiptScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="Support" component={SupportScreen} />
+            <Stack.Screen name="NewEnquiry" component={NewEnquiryScreen} />
+            <Stack.Screen name="EnquiryDetail" component={EnquiryDetailScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
           </Stack.Group>
         )}

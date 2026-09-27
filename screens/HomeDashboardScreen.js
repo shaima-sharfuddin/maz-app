@@ -226,6 +226,12 @@ export default function HomeDashboardScreen({ navigation, route }) {
         <SectionHeading>Quick actions</SectionHeading>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 32 }}>
           <QuickAction
+            icon="chatbubbles-outline"
+            label="Support"
+            caption={summary.openEnquiries > 0 ? `${summary.openEnquiries} open` : "Get help"}
+            onPress={() => navigation.navigate("Support")}
+          />
+          <QuickAction
             icon="notifications-outline"
             label="Notifications"
             caption={unreadCount ? `${unreadCount} unread` : unreadCount === 0 ? "All caught up" : undefined}

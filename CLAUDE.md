@@ -99,6 +99,11 @@ an earlier TypeScript version — the conversion is complete and current files a
   Labelled "Demo receipt — no money was charged"
 - screens/NotificationsScreen.js ✅ — in-app notifications (fetchNotifications): unread rows tinted with a dot,
   tap marks read (best effort) and opens `target` { screen, params }; "Mark all as read". No push yet
+- screens/SupportScreen.js ✅ — "New enquiry" + the tenant's enquiries (StatusBadge open / answered) → EnquiryDetail
+- screens/NewEnquiryScreen.js ✅ — Category, optional Contract, Subject, Message (supportEnquirySchema) →
+  submitEnquiry → resets to [HomeDashboard, Support { submitted }]. `prefill` { category, contractId, subject }
+  param pre-fills it (used by violations)
+- screens/EnquiryDetailScreen.js ✅ — details (DetailCard), your message, MAZ's reply or "Awaiting reply"
 
 ## Components built so far (working, in JavaScript)
 - components/AnimatedButton.js ✅ — press-scale animation + haptic; `disabled` (greyed, inert) and `loading`
@@ -121,10 +126,14 @@ an earlier TypeScript version — the conversion is complete and current files a
 - data/requestSteps.js — REQUEST_STEPS, the 5 request stages (single source for StatusStepper + API mapping)
 - data/pricing.js — TERM_OPTIONS, formatTerm, formatBHD (3 decimals), estimateTotal, buildRequestSummary;
   PLACEHOLDER_MONTHLY_RATE_BHD and PLACEHOLDER_LOCATION until real pricing/location exist
-- components/StatusBadge.js ✅ — pill for active / expired / due / paid / upcoming (theme success/danger tints)
+- components/StatusBadge.js ✅ — pill for active / expired / due / paid / upcoming / open / resolved / answered /
+  confirmed / cancelled / requested (theme success/danger tints, muted otherwise)
+- components/DetailCard.js ✅ — titled card of label/value rows (value may be a node, e.g. StatusBadge); used by
+  ContractDetail, EnquiryDetail and other detail screens
 - components/StatCard.js ✅ — label + big value + caption card (dashboard stats)
 - utils/formatDate.js — formatDate ("05 Mar 2027"), formatMonth ("Oct 2026"), formatTime ("14:00" → "2:00 PM"),
   formatTimestamp ("Today, 2:05 PM" / "24 Sep 2026"); shared with DateField
+- data/mockEnquiries.js — MOCK support enquiries (one open, one answered)
 - data/mockNotifications.js — MOCK notifications per demo account type; mock actions (e.g. payment) push new ones
 - data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026)
 - data/paymentMethods.js — PLACEHOLDER payment options (BenefitPay, card) until the gateway is confirmed
@@ -135,7 +144,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - services/mockApi.js — every mock endpoint (signUp, verifyEmail, resendVerificationCode, logIn, logOut,
   requestPasswordReset, saveProfile, fetchPlans,
   submitRequest, fetchRequestStatus, fetchDashboard, fetchContract, payOutstandingBalance,
-  fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead), all via simulate()
+  fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
+  fetchEnquiries, fetchEnquiry, submitEnquiry), all via simulate()
 - services/apiError.js — ApiError { code, message } that every API function rejects with
 - validation/schemas.js — reusable Zod field + form schemas (see "Forms & API calls")
 - hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls");
@@ -147,12 +157,12 @@ an earlier TypeScript version — the conversion is complete and current files a
 - components/OtpInput.js — 6-box one-time-code field (single hidden TextInput: paste + OS code autofill), FormField-compatible
 - auth/AuthContext.js — session (see "Auth & sessions")
 - data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel;
-  ACTIVITIES is a PLACEHOLDER until the real Activity list comes from the API
+  ACTIVITIES is a PLACEHOLDER until the real Activity list comes from the API; SUPPORT_CATEGORIES is a PLACEHOLDER
 - data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
 
 ## Screens NOT built yet
 - BillViewer ("View bill" in the wireframe),
-  MeetingRoomBooking, ViolationsList, SupportEnquiries
+  MeetingRoomBooking, ViolationsList
 - Unconfirmed (see Open questions): DocumentUpload, ContractReview
 
 ## Design conventions to follow for every new screen
@@ -239,4 +249,6 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Bills: is there a bill/invoice viewer ("View bill" in the wireframe) — PDF, in-app, or email only?
 - Notifications: in-app only for now. Push notifications need expo-notifications + a backend that sends them —
   confirm which events MAZ wants pushed (bills, request stages, bookings, notices).
+- Support: real enquiry categories, where enquiries are routed (email / WhatsApp / ticketing), whether tenants
+  can reply in-app, and any response-time commitment to show.
 - Contracts/bills/payments API shape — all tenant data is mock (data/mockTenant.js) until then.

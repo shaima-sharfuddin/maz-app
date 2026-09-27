@@ -1,6 +1,7 @@
 import { SERVICES } from "../data/brand";
 import { MOCK_CONTRACTS, MOCK_TENANT_NAME } from "../data/mockTenant";
 import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
+import { MOCK_ENQUIRIES } from "../data/mockEnquiries";
 import { PAYMENT_METHODS } from "../data/paymentMethods";
 import { formatBHD } from "../data/pricing";
 import { ApiError } from "./apiError";
@@ -62,6 +63,8 @@ const contracts = clone(MOCK_CONTRACTS);
 const submittedRequests = new Map();
 // Notifications per demo account type; actions below push new ones (see pushNotification).
 const notifications = clone(MOCK_NOTIFICATIONS);
+// The tenant's support enquiries, newest first; submitEnquiry adds to it.
+const enquiries = clone(MOCK_ENQUIRIES);
 
 // Local date + time, e.g. "2026-09-27T14:05:00" (same format as the mock data).
 const toISODateTime = (date) =>
@@ -204,6 +207,7 @@ export function fetchDashboard(userState = "tenant") {
         latestExpiry: expired.map((c) => c.endDate).sort().slice(-1)[0] ?? null,
         paymentDue: withDues.reduce((sum, c) => sum + c.outstanding, 0),
         nextDueDate: withDues.map((c) => c.dueDate).sort()[0] ?? null,
+        openEnquiries: enquiries.filter((e) => e.status === "open").length,
       },
       contracts: clone(contracts),
     };
@@ -291,5 +295,44 @@ export function markAllNotificationsRead(userState = "tenant") {
       n.read = true;
     });
     return { read: true };
+  });
+}
+
+// ---- Support enquiries -----------------------------------------------------
+
+// Only the demo tenant has enquiries; a new user starts with none.
+export function fetchEnquiries(userState = "tenant") {
+  return simulate(() => (userState === "newUser" ? [] : clone(enquiries)));
+}
+
+export function fetchEnquiry(enquiryId) {
+  return simulate(() => {
+    const enquiry = enquiries.find((e) => e.id === enquiryId);
+    if (!enquiry) throw new ApiError("NOT_FOUND", "Enquiry not found.");
+    return clone(enquiry);
+  });
+}
+
+// payload: { category, contractId (or null), subject, message } → { enquiryId }
+export function submitEnquiry(payload) {
+  return simulate(() => {
+    const enquiryId = newId("ENQ");
+    enquiries.unshift({
+      id: enquiryId,
+      category: payload.category,
+      contractId: payload.contractId ?? null,
+      subject: payload.subject.trim(),
+      message: payload.message.trim(),
+      createdAt: toISODateTime(new Date()),
+      status: "open",
+      reply: null,
+    });
+    pushNotification({
+      type: "support",
+      title: "Enquiry received",
+      body: `We've received "${payload.subject.trim()}" and will reply by email and in the app.`,
+      target: { screen: "EnquiryDetail", params: { enquiryId } },
+    });
+    return { enquiryId };
   });
 }

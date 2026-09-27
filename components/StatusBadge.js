@@ -1,20 +1,39 @@
 import { View, Text } from "react-native";
 import { useTheme } from "../theme/ThemeContext";
 
-const LABELS = { active: "Active", expired: "Expired", due: "Due", paid: "Paid", upcoming: "Upcoming" };
+const LABELS = {
+  active: "Active",
+  expired: "Expired",
+  due: "Due",
+  paid: "Paid",
+  upcoming: "Upcoming",
+  open: "Open",
+  resolved: "Resolved",
+  answered: "Answered",
+  confirmed: "Confirmed",
+  cancelled: "Cancelled",
+  requested: "Requested",
+};
 
-// Small status pill for contracts and bills.
+// Small status pill for contracts, bills, enquiries, bookings and violations.
 export default function StatusBadge({ status }) {
   const { colors } = useTheme();
 
-  const styles = {
-    active: { color: colors.success, backgroundColor: colors.successSoft, borderColor: colors.successSoft },
-    paid: { color: colors.success, backgroundColor: colors.successSoft, borderColor: colors.successSoft },
-    // danger (not brand crimson) keeps "Due" legible on the dark background
-    due: { color: colors.danger, backgroundColor: colors.dangerSoft, borderColor: colors.dangerSoft },
-    expired: { color: colors.textMuted, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder },
-    upcoming: { color: colors.textMuted, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder },
-  }[status] ?? { color: colors.textMuted, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder };
+  const success = { color: colors.success, backgroundColor: colors.successSoft, borderColor: colors.successSoft };
+  // danger (not brand crimson) keeps "Due" / "Open" legible on the dark background
+  const danger = { color: colors.danger, backgroundColor: colors.dangerSoft, borderColor: colors.dangerSoft };
+  const muted = { color: colors.textMuted, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder };
+
+  const styles =
+    {
+      active: success,
+      paid: success,
+      resolved: success,
+      answered: success,
+      confirmed: success,
+      due: danger,
+      open: danger,
+    }[status] ?? muted; // expired, upcoming, cancelled, requested
 
   return (
     <View

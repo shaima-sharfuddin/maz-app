@@ -5,6 +5,7 @@ import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import StatusBadge from "../components/StatusBadge";
+import DetailCard from "../components/DetailCard";
 import EmptyState from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
@@ -37,49 +38,6 @@ export default function ContractDetailScreen({ navigation, route }) {
   const loadContract = useCallback(() => fetchContract(contractId), [contractId]);
   const { loading, data: contract, error, reload } = useAsync(loadContract);
 
-  const card = (title, rows, extra) => (
-    <View
-      style={{
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.surfaceBorder,
-        borderRadius: 16,
-        paddingHorizontal: 20,
-        paddingTop: 18,
-        paddingBottom: 6,
-        marginBottom: 16,
-      }}
-    >
-      <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 6 }}>{title}</Text>
-      {rows.map((row, index) => (
-        <View
-          key={row.label}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingVertical: 12,
-            borderTopWidth: index === 0 ? 0 : 1,
-            borderTopColor: colors.surfaceBorder,
-          }}
-        >
-          <Text style={{ color: colors.textMuted, fontSize: 14, marginRight: 12 }}>{row.label}</Text>
-          <Text
-            style={{
-              flex: 1,
-              textAlign: "right",
-              color: colors.text,
-              fontSize: 14,
-              fontWeight: row.emphasize ? "700" : "500",
-            }}
-          >
-            {row.value}
-          </Text>
-        </View>
-      ))}
-      {extra}
-    </View>
-  );
-
   const renderContent = () => {
     if (loading) return <DetailSkeleton />;
     if (error) {
@@ -111,34 +69,43 @@ export default function ContractDetailScreen({ navigation, route }) {
           </Text>
         </View>
 
-        {contract.bill
-          ? card("Bill details", [
+        {contract.bill ? (
+          <DetailCard
+            title="Bill details"
+            rows={[
               { label: "Bill no.", value: contract.bill.number },
               {
                 label: "Billing period",
                 value: `${formatDate(contract.bill.periodStart)} – ${formatDate(contract.bill.periodEnd)}`,
               },
-            ])
-          : null}
+            ]}
+          />
+        ) : null}
 
-        {contract.payment
-          ? card("Payment details", [
+        {contract.payment ? (
+          <DetailCard
+            title="Payment details"
+            rows={[
               { label: "Payment method", value: contract.payment.method },
               {
                 label: "Last payment",
                 value: `${formatBHD(contract.payment.lastAmount)} on ${formatDate(contract.payment.lastDate)}`,
               },
               { label: "Receipt", value: contract.payment.receipt },
-            ])
-          : null}
+            ]}
+          />
+        ) : null}
 
         {hasDues ? (
           <>
-            {card("Payment due", [
-              { label: "Outstanding balance", value: formatBHD(contract.outstanding), emphasize: true },
-              { label: "Due date", value: formatDate(contract.dueDate) },
-              { label: "Due bills", value: String(dueBills.length) },
-            ])}
+            <DetailCard
+              title="Payment due"
+              rows={[
+                { label: "Outstanding balance", value: formatBHD(contract.outstanding), emphasize: true },
+                { label: "Due date", value: formatDate(contract.dueDate) },
+                { label: "Due bills", value: String(dueBills.length) },
+              ]}
+            />
 
             <Text
               className="text-xs font-semibold uppercase tracking-widest mb-3 mt-4"

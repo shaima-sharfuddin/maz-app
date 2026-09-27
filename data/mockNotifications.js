@@ -23,6 +23,15 @@ export const MOCK_NOTIFICATIONS = {
       target: null,
     },
     {
+      id: "NTF-1003",
+      type: "support",
+      title: "MAZ replied to your enquiry",
+      body: "VAT details on invoices — your VAT account number has been added.",
+      createdAt: "2026-09-06T12:00:00",
+      read: true,
+      target: { screen: "EnquiryDetail", params: { enquiryId: "ENQ-3001" } },
+    },
+    {
       id: "NTF-1002",
       type: "payment",
       title: "Payment received",
