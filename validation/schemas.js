@@ -11,6 +11,12 @@ const CR_RE = /^\d{1,6}-\d{1,3}$/; // e.g. 123456-1
 const CPR_RE = /^\d{9}$/;
 const VAT_RE = /^\d{15}$/; // Bahrain VAT account number
 
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
 const endOfToday = () => {
   const d = new Date();
   d.setHours(23, 59, 59, 999);
@@ -62,6 +68,11 @@ export const futureDate = z
 export const pastOrTodayDate = z
   .date({ error: "Select a date" })
   .refine((d) => d <= endOfToday(), "Date can't be in the future");
+
+// Bookings: today or any later date.
+export const todayOrFutureDate = z
+  .date({ error: "Select a date" })
+  .refine((d) => d >= startOfToday(), "Choose today or a later date");
 
 export const otpCode = z.string().regex(/^\d{6}$/, "Enter the 6-digit code");
 
@@ -137,4 +148,11 @@ export const supportEnquirySchema = z.object({
   message: requiredText("Message")
     .min(10, "Add a little more detail (at least 10 characters)")
     .max(1000, "Keep your message under 1000 characters"),
+});
+
+export const bookingSchema = z.object({
+  date: todayOrFutureDate,
+  start: z.string().min(1, "Select a time slot"),
+  durationHours: z.number(),
+  notes: z.string().trim().max(300, "Keep notes under 300 characters"),
 });

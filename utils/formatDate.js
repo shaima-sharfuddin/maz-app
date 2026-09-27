@@ -31,3 +31,8 @@ export function formatTimestamp(value) {
   if (daysAgo === 1) return `Yesterday, ${formatTime(timePart.slice(0, 5))}`;
   return formatDate(datePart);
 }
+
+// Local calendar date as "YYYY-MM-DD" (not toISOString, which is UTC and can be a day off in Bahrain, UTC+3).
+export function toISODate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}

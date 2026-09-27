@@ -226,6 +226,12 @@ export default function HomeDashboardScreen({ navigation, route }) {
         <SectionHeading>Quick actions</SectionHeading>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 32 }}>
           <QuickAction
+            icon="calendar-outline"
+            label="Meeting rooms"
+            caption={summary.nextBooking ? `Next: ${formatDate(summary.nextBooking.date)}` : "Book a room"}
+            onPress={() => navigation.navigate("MeetingRooms")}
+          />
+          <QuickAction
             icon="chatbubbles-outline"
             label="Support"
             caption={summary.openEnquiries > 0 ? `${summary.openEnquiries} open` : "Get help"}

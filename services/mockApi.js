@@ -4,6 +4,8 @@ import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
 import { MOCK_ENQUIRIES } from "../data/mockEnquiries";
 import { PAYMENT_METHODS } from "../data/paymentMethods";
 import { formatBHD } from "../data/pricing";
+import { MEETING_ROOMS, OPENING_HOUR, CLOSING_HOUR, DURATION_OPTIONS } from "../data/meetingRooms";
+import { toISODate, formatDate, formatTime } from "../utils/formatDate";
 import { ApiError } from "./apiError";
 
 // MOCK API — no backend yet. Screens import these via services/api.js; each function has the
@@ -52,10 +54,6 @@ function simulate(produce, { canFail = true } = {}) {
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const newId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}`;
 
-// Local calendar date (not toISOString, which is UTC and can be a day off in Bahrain, UTC+3).
-const toISODate = (date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-
 // Working copy of the tenant's contracts so a mock payment can update balances for the rest of the
 // session (resets on app reload). Screens always receive copies, never the store itself.
 const contracts = clone(MOCK_CONTRACTS);
@@ -69,6 +67,38 @@ const enquiries = clone(MOCK_ENQUIRIES);
 // Local date + time, e.g. "2026-09-27T14:05:00" (same format as the mock data).
 const toISODateTime = (date) =>
   `${toISODate(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`;
+
+const hourLabel = (hour) => `${String(hour).padStart(2, "0")}:00`;
+const daysFromToday = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
+};
+
+// The tenant's meeting room bookings. One upcoming booking is seeded relative to today so the demo
+// always has something to show (and cancel); its confirmation notification is seeded alongside.
+const bookings = [
+  {
+    id: "BKG-4001",
+    roomId: "conference-suite",
+    roomName: "Conference Suite",
+    date: toISODate(daysFromToday(3)),
+    start: "10:00",
+    end: "12:00",
+    durationHours: 2,
+    notes: "Quarterly planning",
+    status: "confirmed",
+  },
+];
+notifications.tenant.push({
+  id: "NTF-1006",
+  type: "booking",
+  title: "Meeting room booked",
+  body: `Conference Suite · ${formatDate(bookings[0].date)}, 10:00 AM – 12:00 PM.`,
+  createdAt: toISODateTime(daysFromToday(-1)),
+  read: false,
+  target: { screen: "MeetingRooms", params: undefined },
+});
 
 // Adds a notification to the tenant's list, as the backend would after an action (payment, booking, …).
 function pushNotification({ type, title, body, target = null }) {
@@ -208,6 +238,7 @@ export function fetchDashboard(userState = "tenant") {
         paymentDue: withDues.reduce((sum, c) => sum + c.outstanding, 0),
         nextDueDate: withDues.map((c) => c.dueDate).sort()[0] ?? null,
         openEnquiries: enquiries.filter((e) => e.status === "open").length,
+        nextBooking: upcomingBookings()[0] ?? null,
       },
       contracts: clone(contracts),
     };
@@ -334,5 +365,121 @@ export function submitEnquiry(payload) {
       target: { screen: "EnquiryDetail", params: { enquiryId } },
     });
     return { enquiryId };
+  });
+}
+
+// ---- Meeting rooms ---------------------------------------------------------
+
+const bookingStart = (booking) => new Date(`${booking.date}T${booking.start}:00`);
+const bookingEnd = (booking) => new Date(`${booking.date}T${booking.end}:00`);
+
+// Confirmed bookings that haven't ended yet, soonest first.
+function upcomingBookings() {
+  const now = new Date();
+  return bookings
+    .filter((b) => b.status === "confirmed" && bookingEnd(b) > now)
+    .sort((a, b) => bookingStart(a) - bookingStart(b));
+}
+
+// Stable pseudo-random number 0–99 for a string, so other tenants' "bookings" don't change between loads.
+function stableRandom(text) {
+  let hash = 2166136261; // FNV-1a, then a final mix so neighbouring hours don't cluster
+  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  hash = Math.imul(hash ^ (hash >>> 16), 2246822507);
+  hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
+  return ((hash ^ (hash >>> 16)) >>> 0) % 100;
+}
+
+// Hour-by-hour availability for one room on one date. A slot is unavailable if it's in the past,
+// taken by another tenant (pseudo-random ~25%), or covered by one of this tenant's bookings.
+function roomSlots(roomId, isoDate) {
+  const now = new Date();
+  const ownHours = new Set();
+  bookings
+    .filter((b) => b.status === "confirmed" && b.roomId === roomId && b.date === isoDate)
+    .forEach((b) => {
+      const first = Number(b.start.slice(0, 2));
+      for (let h = first; h < first + b.durationHours; h += 1) ownHours.add(h);
+    });
+
+  const slots = [];
+  for (let hour = OPENING_HOUR; hour < CLOSING_HOUR; hour += 1) {
+    const isPast = new Date(`${isoDate}T${hourLabel(hour)}:00`) <= now;
+    const takenByOthers = stableRandom(`${roomId}|${isoDate}|${hour}`) < 25;
+    slots.push({ start: hourLabel(hour), available: !isPast && !takenByOthers && !ownHours.has(hour) });
+  }
+  return slots;
+}
+
+export function fetchMeetingRooms() {
+  return simulate(() => clone(MEETING_ROOMS));
+}
+
+// → { roomId, date, slots: [{ start: "09:00", available }] } — one slot per bookable hour.
+export function fetchRoomAvailability(roomId, isoDate) {
+  return simulate(() => {
+    if (!MEETING_ROOMS.some((r) => r.id === roomId)) throw new ApiError("NOT_FOUND", "Meeting room not found.");
+    return { roomId, date: isoDate, slots: roomSlots(roomId, isoDate) };
+  });
+}
+
+// payload: { roomId, date: "YYYY-MM-DD", start: "HH:00", durationHours, notes } → the booking
+export function bookMeetingRoom(payload) {
+  return simulate(() => {
+    const room = MEETING_ROOMS.find((r) => r.id === payload.roomId);
+    if (!room) throw new ApiError("NOT_FOUND", "Meeting room not found.");
+    if (!DURATION_OPTIONS.includes(payload.durationHours)) throw new ApiError("INVALID_DURATION", "Choose a valid duration.");
+
+    const firstHour = Number(payload.start.slice(0, 2));
+    const slots = roomSlots(room.id, payload.date);
+    const needed = slots.slice(firstHour - OPENING_HOUR, firstHour - OPENING_HOUR + payload.durationHours);
+    if (firstHour < OPENING_HOUR || needed.length < payload.durationHours || needed.some((s) => !s.available)) {
+      throw new ApiError("SLOT_TAKEN", "That time is no longer available. Please choose another slot.");
+    }
+
+    const end = hourLabel(firstHour + payload.durationHours);
+    const booking = {
+      id: newId("BKG"),
+      roomId: room.id,
+      roomName: room.name,
+      date: payload.date,
+      start: payload.start,
+      end,
+      durationHours: payload.durationHours,
+      notes: payload.notes?.trim() ?? "",
+      status: "confirmed",
+    };
+    bookings.push(booking);
+    pushNotification({
+      type: "booking",
+      title: "Meeting room booked",
+      body: `${room.name} · ${formatDate(booking.date)}, ${formatTime(booking.start)} – ${formatTime(end)}.`,
+      target: { screen: "MeetingRooms", params: undefined },
+    });
+    return clone(booking);
+  });
+}
+
+// The tenant's upcoming bookings; a new user has none.
+export function fetchBookings(userState = "tenant") {
+  return simulate(() => (userState === "newUser" ? [] : clone(upcomingBookings())));
+}
+
+export function cancelBooking(bookingId) {
+  return simulate(() => {
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (!booking) throw new ApiError("NOT_FOUND", "Booking not found.");
+    if (booking.status === "cancelled") throw new ApiError("ALREADY_CANCELLED", "This booking is already cancelled.");
+    if (bookingStart(booking) <= new Date()) {
+      throw new ApiError("TOO_LATE", "This booking has already started and can't be cancelled.");
+    }
+    booking.status = "cancelled";
+    pushNotification({
+      type: "booking",
+      title: "Booking cancelled",
+      body: `${booking.roomName} · ${formatDate(booking.date)}, ${formatTime(booking.start)} – ${formatTime(booking.end)}.`,
+      target: { screen: "MeetingRooms", params: undefined },
+    });
+    return { bookingId, status: "cancelled" };
   });
 }
