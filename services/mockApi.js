@@ -2,6 +2,7 @@ import { SERVICES } from "../data/brand";
 import { MOCK_CONTRACTS, MOCK_TENANT_NAME } from "../data/mockTenant";
 import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
 import { MOCK_ENQUIRIES } from "../data/mockEnquiries";
+import { MOCK_VIOLATIONS } from "../data/mockViolations";
 import { PAYMENT_METHODS } from "../data/paymentMethods";
 import { formatBHD } from "../data/pricing";
 import { MEETING_ROOMS, OPENING_HOUR, CLOSING_HOUR, DURATION_OPTIONS } from "../data/meetingRooms";
@@ -239,6 +240,7 @@ export function fetchDashboard(userState = "tenant") {
         nextDueDate: withDues.map((c) => c.dueDate).sort()[0] ?? null,
         openEnquiries: enquiries.filter((e) => e.status === "open").length,
         nextBooking: upcomingBookings()[0] ?? null,
+        openViolations: MOCK_VIOLATIONS.filter((v) => v.status === "open").length,
       },
       contracts: clone(contracts),
     };
@@ -481,5 +483,30 @@ export function cancelBooking(bookingId) {
       target: { screen: "MeetingRooms", params: undefined },
     });
     return { bookingId, status: "cancelled" };
+  });
+}
+
+// ---- Violations ------------------------------------------------------------
+
+// Adds the contract's unit and location so screens don't need a second request.
+function withUnit(violation) {
+  const contract = contracts.find((c) => c.id === violation.contractId);
+  return { ...clone(violation), unit: contract?.unit ?? null, location: contract?.location ?? null };
+}
+
+// Newest first; a new user has none.
+export function fetchViolations(userState = "tenant") {
+  return simulate(() =>
+    userState === "newUser"
+      ? []
+      : MOCK_VIOLATIONS.map(withUnit).sort((a, b) => b.issuedOn.localeCompare(a.issuedOn))
+  );
+}
+
+export function fetchViolation(violationId) {
+  return simulate(() => {
+    const violation = MOCK_VIOLATIONS.find((v) => v.id === violationId);
+    if (!violation) throw new ApiError("NOT_FOUND", "Notice not found.");
+    return withUnit(violation);
   });
 }

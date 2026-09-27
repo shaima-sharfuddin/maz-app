@@ -238,6 +238,12 @@ export default function HomeDashboardScreen({ navigation, route }) {
             onPress={() => navigation.navigate("Support")}
           />
           <QuickAction
+            icon="shield-checkmark-outline"
+            label="Violations"
+            caption={summary.openViolations > 0 ? `${summary.openViolations} open` : "All clear"}
+            onPress={() => navigation.navigate("Violations")}
+          />
+          <QuickAction
             icon="notifications-outline"
             label="Notifications"
             caption={unreadCount ? `${unreadCount} unread` : unreadCount === 0 ? "All caught up" : undefined}

@@ -109,6 +109,9 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/BookMeetingRoomScreen.js ✅ — Date (today … +60 days), Duration 1/2/3 h, SlotPicker of start times from
   fetchRoomAvailability (a start is offered only if the whole duration is free; a stale pick is cleared), Notes →
   bookMeetingRoom → resets to [HomeDashboard, MeetingRooms]. SLOT_TAKEN reloads the grid
+- screens/ViolationsScreen.js ✅ — read-only notices grouped Open / Resolved → ViolationDetail
+- screens/ViolationDetailScreen.js ✅ — details (DetailCard; fine if any, "added to your contract balance"),
+  description, resolution; "Contact support" → NewEnquiry with prefill (category "Violation query")
 
 ## Components built so far (working, in JavaScript)
 - components/AnimatedButton.js ✅ — press-scale animation + haptic; `disabled` (greyed, inert) and `loading`
@@ -140,6 +143,7 @@ an earlier TypeScript version — the conversion is complete and current files a
 - utils/formatDate.js — formatDate ("05 Mar 2027"), formatMonth ("Oct 2026"), formatTime ("14:00" → "2:00 PM"),
   formatTimestamp ("Today, 2:05 PM" / "24 Sep 2026"), toISODate (local "YYYY-MM-DD"); shared with DateField
 - data/meetingRooms.js — PLACEHOLDER rooms, opening hours (08–18), durations, booking window
+- data/mockViolations.js — MOCK notices (2 open, 1 resolved with a fine); PLACEHOLDER types
 - data/mockEnquiries.js — MOCK support enquiries (one open, one answered)
 - data/mockNotifications.js — MOCK notifications per demo account type; mock actions (e.g. payment) push new ones
 - data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026)
@@ -153,7 +157,8 @@ an earlier TypeScript version — the conversion is complete and current files a
   submitRequest, fetchRequestStatus, fetchDashboard, fetchContract, payOutstandingBalance,
   fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
   fetchEnquiries, fetchEnquiry, submitEnquiry,
-  fetchMeetingRooms, fetchRoomAvailability, bookMeetingRoom, fetchBookings, cancelBooking), all via simulate()
+  fetchMeetingRooms, fetchRoomAvailability, bookMeetingRoom, fetchBookings, cancelBooking,
+  fetchViolations, fetchViolation), all via simulate()
 - services/apiError.js — ApiError { code, message } that every API function rejects with
 - validation/schemas.js — reusable Zod field + form schemas (see "Forms & API calls")
 - hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls");
@@ -169,8 +174,7 @@ an earlier TypeScript version — the conversion is complete and current files a
 - data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
 
 ## Screens NOT built yet
-- BillViewer ("View bill" in the wireframe),
-  ViolationsList
+- BillViewer ("View bill" in the wireframe)
 - Unconfirmed (see Open questions): DocumentUpload, ContractReview
 
 ## Design conventions to follow for every new screen
@@ -260,6 +264,9 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Meeting rooms: the real rooms, opening hours, how far ahead / how long bookings can be, the cancellation
   cutoff, and whether bookings are charged, use included hours, or are free for tenants (no price shown yet).
   Availability of other tenants is simulated (data/meetingRooms.js + roomSlots in mockApi).
+- Violations: what MAZ actually records (building rules, documents, late payments?), whether tenants
+  acknowledge or respond to a notice in-app, and whether fines are paid separately or only via the contract
+  balance (currently read-only; questions go through a pre-filled support enquiry).
 - Support: real enquiry categories, where enquiries are routed (email / WhatsApp / ticketing), whether tenants
   can reply in-app, and any response-time commitment to show.
 - Contracts/bills/payments API shape — all tenant data is mock (data/mockTenant.js) until then.

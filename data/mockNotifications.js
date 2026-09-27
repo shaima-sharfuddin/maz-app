@@ -14,6 +14,15 @@ export const MOCK_NOTIFICATIONS = {
       target: { screen: "ContractDetail", params: { contractId: "BH-2026-0184" } },
     },
     {
+      id: "NTF-1007",
+      type: "violation",
+      title: "Notice issued: Corridor obstruction",
+      body: "Please keep the corridor outside Office 204 clear. Tap to view the notice.",
+      createdAt: "2026-09-18T15:20:00",
+      read: true,
+      target: { screen: "ViolationDetail", params: { violationId: "VIO-5003" } },
+    },
+    {
       id: "NTF-1004",
       type: "notice",
       title: "Scheduled maintenance",

@@ -1,0 +1,130 @@
+import { useCallback } from "react";
+import { View, Text, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import AnimatedButton from "../components/AnimatedButton";
+import BackButton from "../components/BackButton";
+import ScreenTitle from "../components/ScreenTitle";
+import EmptyState from "../components/EmptyState";
+import PressableScale from "../components/PressableScale";
+import StatusBadge from "../components/StatusBadge";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
+import useAsync from "../hooks/useAsync";
+import { fetchViolations } from "../services/api";
+import { formatDate } from "../utils/formatDate";
+import { useTheme } from "../theme/ThemeContext";
+import { useDemo } from "../demo/DemoContext";
+
+function ViolationRow({ violation, onPress }) {
+  const { colors } = useTheme();
+  return (
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.98}
+      accessibilityRole="button"
+      accessibilityLabel={`${violation.title}, ${violation.status}`}
+      containerStyle={{ marginBottom: 10 }}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        borderRadius: 16,
+        padding: 16,
+      }}
+    >
+      <View style={{ flex: 1, marginRight: 12 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+          <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>{violation.title}</Text>
+          <StatusBadge status={violation.status} />
+        </View>
+        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+          {violation.unit ?? violation.contractId} · Issued {formatDate(violation.issuedOn)}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+    </PressableScale>
+  );
+}
+
+export default function ViolationsScreen({ navigation }) {
+  const { colors } = useTheme();
+  const { userState } = useDemo();
+  const loadViolations = useCallback(() => fetchViolations(userState), [userState]);
+  const { loading, data: violations, error, reload } = useAsync(loadViolations);
+
+  const section = (title, items) =>
+    items.length > 0 ? (
+      <View className="mb-8">
+        <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
+          {title}
+        </Text>
+        {items.map((violation) => (
+          <ViolationRow
+            key={violation.id}
+            violation={violation}
+            onPress={() => navigation.navigate("ViolationDetail", { violationId: violation.id })}
+          />
+        ))}
+      </View>
+    ) : null;
+
+  const renderContent = () => {
+    if (loading) {
+      return [0, 1, 2].map((key) => (
+        <SkeletonCard key={key} style={{ padding: 16, marginBottom: 10 }}>
+          <Skeleton width="60%" height={16} style={{ marginBottom: 8 }} />
+          <Skeleton width="45%" height={12} />
+        </SkeletonCard>
+      ));
+    }
+    if (error) {
+      return (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="We couldn't load your notices"
+          message="Please check your connection and try again."
+        >
+          <AnimatedButton label="Try again" onPress={reload} />
+        </EmptyState>
+      );
+    }
+    if (violations.length === 0) {
+      return (
+        <EmptyState
+          icon="shield-checkmark-outline"
+          title="No violations"
+          message="Your account is in good standing."
+        />
+      );
+    }
+    const open = violations.filter((v) => v.status === "open");
+    return (
+      <View>
+        {open.length === 0 ? (
+          <Text className="text-sm mb-6" style={{ color: colors.success }}>
+            {"✓"} No open notices — your account is in good standing.
+          </Text>
+        ) : null}
+        {section("Open", open)}
+        {section("Resolved", violations.filter((v) => v.status !== "open"))}
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        <View className="flex-1 px-6 pt-8 pb-10">
+          <BackButton onPress={() => navigation.goBack()} />
+          <ScreenTitle
+            title="Violations & compliance"
+            subtitle="Notices issued on your contracts, and how each was resolved."
+          />
+          {renderContent()}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
