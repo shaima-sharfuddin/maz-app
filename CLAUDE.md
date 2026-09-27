@@ -18,7 +18,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - auth/AuthContext.js: AuthProvider + useAuth() → { ready, isSignedIn, user: { email, name }, token,
   profileComplete, justCompletedProfile, signIn(logInResult), completeProfile(name), signOut() }
 - The session is stored encrypted with expo-secure-store (key maz.session) and restored on launch; the splash
-  screen waits for it, so logged-in users never see Welcome flash first
+  screen waits for it, so logged-in users never see Welcome flash first. Demo exception: Settings → Demo data →
+  "Always start at Welcome" discards it at launch instead
 - App.js renders route groups by auth state (React Navigation's auth-flow pattern): signed out → Welcome,
   SignUp, VerifyAccount, Login; signed in without profile → CompleteProfile, Settings; signed in → dashboard
   and all tenant screens. Screens never navigate across these groups — they call signIn / completeProfile /
@@ -162,9 +163,11 @@ an earlier TypeScript version — the conversion is complete and current files a
 - data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026), each with
   startDate / endDate / monthlyRate; `renewal` is added by requestRenewal
 - data/paymentMethods.js — PLACEHOLDER payment options (BenefitPay, card) until the gateway is confirmed
-- demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { userState: "tenant" | "newUser", simulateErrors },
-  persisted in AsyncStorage (maz.demoUserState, maz.demoSimulateErrors), toggled in Settings → "Demo data".
-  simulateErrors drives setMockFailuresEnabled. Remove once real account data exists
+- demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { userState: "tenant" | "newUser", simulateErrors,
+  startAtWelcome }, persisted in AsyncStorage (maz.demoUserState, maz.demoSimulateErrors, maz.demoStartAtWelcome),
+  toggled in Settings → "Demo data". simulateErrors drives setMockFailuresEnabled; startAtWelcome makes
+  AuthProvider discard the saved session at launch (every launch opens Welcome). Remove once real account data
+  exists (and drop the useDemo() read in auth/AuthContext.js)
 - services/api.js — the ONLY module screens import API functions from (re-exports ./mockApi today)
 - services/mockApi.js — every mock endpoint (signUp, verifyEmail, resendVerificationCode, logIn, logOut,
   requestPasswordReset, saveProfile, fetchPlans,

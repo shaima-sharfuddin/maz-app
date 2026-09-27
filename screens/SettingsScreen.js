@@ -20,14 +20,14 @@ const DEMO_OPTIONS = [
   { value: "newUser", label: "New user" },
 ];
 
-const ERROR_SIM_OPTIONS = [
+const ON_OFF_OPTIONS = [
   { value: "on", label: "On" },
   { value: "off", label: "Off" },
 ];
 
 export default function SettingsScreen({ navigation }) {
   const { colors, preference, setPreference, scheme } = useTheme();
-  const { userState, setUserState, simulateErrors, setSimulateErrors } = useDemo();
+  const { userState, setUserState, simulateErrors, setSimulateErrors, startAtWelcome, setStartAtWelcome } = useDemo();
   const { user, signOut } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -121,11 +121,21 @@ export default function SettingsScreen({ navigation }) {
               label="Simulate network errors (15%)"
               value={simulateErrors ? "on" : "off"}
               onChange={(next) => setSimulateErrors(next === "on")}
-              options={ERROR_SIM_OPTIONS}
+              options={ON_OFF_OPTIONS}
             />
             <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
               When on, about 1 in 7 requests fails at random so error states can be tested. Turn off before
               demos.
+            </Text>
+            <SegmentedControl
+              label="Always start at Welcome"
+              value={startAtWelcome ? "on" : "off"}
+              onChange={(next) => setStartAtWelcome(next === "on")}
+              options={ON_OFF_OPTIONS}
+            />
+            <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
+              When on, every app launch starts logged out at Welcome, so a demo can show sign-up and log-in. Takes
+              effect next time the app opens.
             </Text>
           </View>
         </View>

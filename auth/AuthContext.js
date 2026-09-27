@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { logOut as apiLogOut } from "../services/api";
+import { useDemo } from "../demo/DemoContext";
 
 // Session = { token, user: { email, name }, profileComplete }. Stored encrypted with SecureStore
 // (Keychain / Keystore) so the user stays logged in across app restarts.
@@ -23,7 +24,18 @@ export function AuthProvider({ children }) {
   // In-memory only: lets the dashboard show "Profile saved" right after onboarding.
   const [justCompletedProfile, setJustCompletedProfile] = useState(false);
 
+  // DEMO ONLY: with Settings → Demo data → "Always start at Welcome" on, launch discards the saved
+  // session instead of restoring it. Waits for the demo settings to load; runs once per launch.
+  const { ready: demoReady, startAtWelcome } = useDemo();
+  const restored = useRef(false);
+
   useEffect(() => {
+    if (!demoReady || restored.current) return;
+    restored.current = true;
+    if (startAtWelcome) {
+      persist(null).finally(() => setReady(true));
+      return;
+    }
     SecureStore.getItemAsync(SESSION_KEY)
       .then((saved) => {
         if (!saved) return;
@@ -32,7 +44,7 @@ export function AuthProvider({ children }) {
       })
       .catch(() => {})
       .finally(() => setReady(true));
-  }, []);
+  }, [demoReady, startAtWelcome]);
 
   // Called with logIn()'s result.
   const signIn = useCallback(({ token, user }) => {
