@@ -12,3 +12,22 @@ export function formatMonth(value) {
   const date = typeof value === "string" ? new Date(`${value}T00:00:00`) : value;
   return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
+
+// "14:05" → "2:05 PM"
+export function formatTime(value) {
+  const [hours, minutes] = value.split(":").map(Number);
+  const suffix = hours >= 12 ? "PM" : "AM";
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
+
+// Local date-time string ("2026-09-26T14:05:00") → "Today, 2:05 PM" / "Yesterday, 2:05 PM" / "24 Sep 2026".
+export function formatTimestamp(value) {
+  const [datePart, timePart = "00:00"] = value.split("T");
+  const date = new Date(`${datePart}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysAgo = Math.round((today - date) / 86400000);
+  if (daysAgo === 0) return `Today, ${formatTime(timePart.slice(0, 5))}`;
+  if (daysAgo === 1) return `Yesterday, ${formatTime(timePart.slice(0, 5))}`;
+  return formatDate(datePart);
+}

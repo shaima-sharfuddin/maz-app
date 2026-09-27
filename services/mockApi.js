@@ -1,6 +1,8 @@
 import { SERVICES } from "../data/brand";
 import { MOCK_CONTRACTS, MOCK_TENANT_NAME } from "../data/mockTenant";
+import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
 import { PAYMENT_METHODS } from "../data/paymentMethods";
+import { formatBHD } from "../data/pricing";
 import { ApiError } from "./apiError";
 
 // MOCK API — no backend yet. Screens import these via services/api.js; each function has the
@@ -58,6 +60,25 @@ const toISODate = (date) =>
 const contracts = clone(MOCK_CONTRACTS);
 // In-memory stand-in for the backend's request store (cleared on app reload).
 const submittedRequests = new Map();
+// Notifications per demo account type; actions below push new ones (see pushNotification).
+const notifications = clone(MOCK_NOTIFICATIONS);
+
+// Local date + time, e.g. "2026-09-27T14:05:00" (same format as the mock data).
+const toISODateTime = (date) =>
+  `${toISODate(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`;
+
+// Adds a notification to the tenant's list, as the backend would after an action (payment, booking, …).
+function pushNotification({ type, title, body, target = null }) {
+  notifications.tenant.unshift({
+    id: newId("NTF"),
+    type,
+    title,
+    body,
+    createdAt: toISODateTime(new Date()),
+    read: false,
+    target,
+  });
+}
 
 // ---- Auth & profile --------------------------------------------------------
 
@@ -222,6 +243,13 @@ export function payOutstandingBalance(contractId, methodId) {
     contract.payment = { method: method.label, lastAmount: amount, lastDate: paidDate, receipt };
     if (contract.bill) contract.paidThrough = contract.bill.periodEnd;
 
+    pushNotification({
+      type: "payment",
+      title: "Payment received",
+      body: `Thank you — ${formatBHD(amount)} received for ${contract.unit} (receipt ${receipt}).`,
+      target: { screen: "ContractDetail", params: { contractId: contract.id } },
+    });
+
     return {
       receipt,
       amount,
@@ -231,5 +259,37 @@ export function payOutstandingBalance(contractId, methodId) {
       unit: `${contract.unit} · ${contract.location}`,
       bills: paidBills.map((bill) => bill.number),
     };
+  });
+}
+
+// ---- Notifications ---------------------------------------------------------
+
+// userState: the Settings demo toggle — each mock account type has its own list. Newest first.
+export function fetchNotifications(userState = "tenant") {
+  return simulate(() =>
+    clone(notifications[userState] ?? []).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  );
+}
+
+// → { count } — drives the unread dot on the dashboard bell.
+export function fetchUnreadCount(userState = "tenant") {
+  return simulate(() => ({ count: (notifications[userState] ?? []).filter((n) => !n.read).length }));
+}
+
+export function markNotificationRead(id) {
+  return simulate(() => {
+    const notification = [...notifications.tenant, ...notifications.newUser].find((n) => n.id === id);
+    if (!notification) throw new ApiError("NOT_FOUND", "Notification not found.");
+    notification.read = true;
+    return { id, read: true };
+  });
+}
+
+export function markAllNotificationsRead(userState = "tenant") {
+  return simulate(() => {
+    (notifications[userState] ?? []).forEach((n) => {
+      n.read = true;
+    });
+    return { read: true };
   });
 }

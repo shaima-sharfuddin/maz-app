@@ -72,8 +72,10 @@ an earlier TypeScript version — the conversion is complete and current files a
   open, Owner Details collapsed); required: Customer Name, Owner Name, Gender. First screen for a new account:
   "Not you? Log out" instead of Back. Save → saveProfile → completeProfile() → dashboard
 - screens/HomeDashboardScreen.js ✅ — two states, chosen by the Settings demo toggle (useDemo):
-  • Tenant (default): "Welcome back, Sara", StatCards (Active / Expired contracts, Payment due), "Your
-    contracts" rows (StatusBadge, tap → ContractDetail), "Find a new office" → BrowsePlans
+  • Tenant (default): "Welcome back, Sara", StatCards (Active / Expired contracts, Payment due), "Quick
+    actions" 2×2 tiles (QuickAction), "Your contracts" rows (StatusBadge, tap → ContractDetail),
+    "Find a new office" → BrowsePlans
+  • Header: notifications bell (unread dot from fetchUnreadCount, refreshed on focus) + settings gear
   • New user: "no office leased" card with Browse Plans, trust stats, services, testimonials placeholder
 - screens/SettingsScreen.js ✅ — Account (logged-in user + Log out with confirmation), Appearance (System / Light /
   Dark, persisted), Demo data (dashboard state, error simulation)
@@ -95,6 +97,8 @@ an earlier TypeScript version — the conversion is complete and current files a
   [HomeDashboard, ContractDetail, PaymentReceipt] so both re-load with the settled balance
 - screens/PaymentReceiptScreen.js ✅ — success state + receipt details; "Back to contract" / "Go to dashboard".
   Labelled "Demo receipt — no money was charged"
+- screens/NotificationsScreen.js ✅ — in-app notifications (fetchNotifications): unread rows tinted with a dot,
+  tap marks read (best effort) and opens `target` { screen, params }; "Mark all as read". No push yet
 
 ## Components built so far (working, in JavaScript)
 - components/AnimatedButton.js ✅ — press-scale animation + haptic; `disabled` (greyed, inert) and `loading`
@@ -119,7 +123,9 @@ an earlier TypeScript version — the conversion is complete and current files a
   PLACEHOLDER_MONTHLY_RATE_BHD and PLACEHOLDER_LOCATION until real pricing/location exist
 - components/StatusBadge.js ✅ — pill for active / expired / due / paid / upcoming (theme success/danger tints)
 - components/StatCard.js ✅ — label + big value + caption card (dashboard stats)
-- utils/formatDate.js — formatDate ("05 Mar 2027") and formatMonth ("Oct 2026"); shared with DateField
+- utils/formatDate.js — formatDate ("05 Mar 2027"), formatMonth ("Oct 2026"), formatTime ("14:00" → "2:00 PM"),
+  formatTimestamp ("Today, 2:05 PM" / "24 Sep 2026"); shared with DateField
+- data/mockNotifications.js — MOCK notifications per demo account type; mock actions (e.g. payment) push new ones
 - data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026)
 - data/paymentMethods.js — PLACEHOLDER payment options (BenefitPay, card) until the gateway is confirmed
 - demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { userState: "tenant" | "newUser", simulateErrors },
@@ -128,7 +134,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - services/api.js — the ONLY module screens import API functions from (re-exports ./mockApi today)
 - services/mockApi.js — every mock endpoint (signUp, verifyEmail, resendVerificationCode, logIn, logOut,
   requestPasswordReset, saveProfile, fetchPlans,
-  submitRequest, fetchRequestStatus, fetchDashboard, fetchContract, payOutstandingBalance), all via simulate()
+  submitRequest, fetchRequestStatus, fetchDashboard, fetchContract, payOutstandingBalance,
+  fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead), all via simulate()
 - services/apiError.js — ApiError { code, message } that every API function rejects with
 - validation/schemas.js — reusable Zod field + form schemas (see "Forms & API calls")
 - hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls");
@@ -145,7 +152,7 @@ an earlier TypeScript version — the conversion is complete and current files a
 
 ## Screens NOT built yet
 - BillViewer ("View bill" in the wireframe),
-  MeetingRoomBooking, ViolationsList, Notifications, SupportEnquiries
+  MeetingRoomBooking, ViolationsList, SupportEnquiries
 - Unconfirmed (see Open questions): DocumentUpload, ContractReview
 
 ## Design conventions to follow for every new screen
@@ -230,4 +237,6 @@ or showing an error/result. Nothing may do nothing when tapped.
   BenefitPay app? card form?). PaymentScreen is a MOCK — method options and the success result are
   placeholders; nothing is charged. Also confirm whether receipts are emailed.
 - Bills: is there a bill/invoice viewer ("View bill" in the wireframe) — PDF, in-app, or email only?
+- Notifications: in-app only for now. Push notifications need expo-notifications + a backend that sends them —
+  confirm which events MAZ wants pushed (bills, request stages, bookings, notices).
 - Contracts/bills/payments API shape — all tenant data is mock (data/mockTenant.js) until then.

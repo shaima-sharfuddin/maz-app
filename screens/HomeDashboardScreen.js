@@ -1,7 +1,8 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, Image, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import AnimatedButton from "../components/AnimatedButton";
 import TrustStats from "../components/TrustStats";
 import ScreenTitle from "../components/ScreenTitle";
@@ -11,7 +12,7 @@ import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchDashboard } from "../services/api";
+import { fetchDashboard, fetchUnreadCount } from "../services/api";
 import { TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES } from "../data/brand";
 import { formatBHD } from "../data/pricing";
 import { formatDate, formatMonth } from "../utils/formatDate";
@@ -106,6 +107,44 @@ function ContractRow({ contract, onPress }) {
   );
 }
 
+// Tenant shortcut tile (2 per row): icon, label and a short status caption.
+function QuickAction({ icon, label, caption, onPress }) {
+  const { colors } = useTheme();
+  return (
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.98}
+      accessibilityRole="button"
+      accessibilityLabel={caption ? `${label}, ${caption}` : label}
+      containerStyle={{ flexBasis: "47%", flexGrow: 1 }}
+      style={{
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        borderRadius: 16,
+        padding: 16,
+        minHeight: 112,
+      }}
+    >
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: colors.primarySoft,
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 12,
+        }}
+      >
+        <Ionicons name={icon} size={18} color={colors.primary} />
+      </View>
+      <Text style={{ color: colors.text, fontSize: 15, fontWeight: "600", marginBottom: 2 }}>{label}</Text>
+      {caption ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>{caption}</Text> : null}
+    </PressableScale>
+  );
+}
+
 export default function HomeDashboardScreen({ navigation, route }) {
   const { colors } = useTheme();
   const { userState } = useDemo();
@@ -115,6 +154,27 @@ export default function HomeDashboardScreen({ navigation, route }) {
   // Re-fetches when the Settings demo toggle changes (tenant ↔ new user).
   const loadDashboard = useCallback(() => fetchDashboard(userState), [userState]);
   const { loading, data, error, reload } = useAsync(loadDashboard);
+
+  // The bell's unread count has its own loader, refreshed whenever the dashboard regains focus
+  // (e.g. back from Notifications). The last known count stays up while it refreshes.
+  const loadUnread = useCallback(() => fetchUnreadCount(userState), [userState]);
+  const unread = useAsync(loadUnread);
+  const [unreadCount, setUnreadCount] = useState(null);
+  useEffect(() => {
+    if (unread.data) setUnreadCount(unread.data.count);
+    else if (unread.error) setUnreadCount(null);
+  }, [unread.data, unread.error]);
+  const skipFirstFocus = useRef(true);
+  const reloadUnread = unread.reload;
+  useFocusEffect(
+    useCallback(() => {
+      if (skipFirstFocus.current) {
+        skipFirstFocus.current = false;
+        return;
+      }
+      reloadUnread();
+    }, [reloadUnread])
+  );
 
   const isTenant = userState === "tenant";
 
@@ -162,6 +222,16 @@ export default function HomeDashboardScreen({ navigation, route }) {
           value={formatBHD(summary.paymentDue)}
           caption={summary.nextDueDate ? `Due by ${formatDate(summary.nextDueDate)}` : "Nothing due"}
         />
+
+        <SectionHeading>Quick actions</SectionHeading>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 32 }}>
+          <QuickAction
+            icon="notifications-outline"
+            label="Notifications"
+            caption={unreadCount ? `${unreadCount} unread` : unreadCount === 0 ? "All caught up" : undefined}
+            onPress={() => navigation.navigate("Notifications")}
+          />
+        </View>
 
         <SectionHeading>Your contracts</SectionHeading>
         {contracts.length === 0 ? (
@@ -262,14 +332,39 @@ export default function HomeDashboardScreen({ navigation, route }) {
               style={{ width: 120, height: 30 }}
               resizeMode="contain"
             />
-            <PressableScale
-              onPress={() => navigation.navigate("Settings")}
-              accessibilityRole="button"
-              accessibilityLabel="Settings"
-              style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
-            >
-              <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
-            </PressableScale>
+            <View style={{ flexDirection: "row" }}>
+              <PressableScale
+                onPress={() => navigation.navigate("Notifications")}
+                accessibilityRole="button"
+                accessibilityLabel={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
+                style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+              >
+                <Ionicons name="notifications-outline" size={22} color={colors.textSecondary} />
+                {unreadCount ? (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 10,
+                      right: 10,
+                      width: 9,
+                      height: 9,
+                      borderRadius: 5,
+                      backgroundColor: colors.primary,
+                      borderWidth: 1.5,
+                      borderColor: colors.background,
+                    }}
+                  />
+                ) : null}
+              </PressableScale>
+              <PressableScale
+                onPress={() => navigation.navigate("Settings")}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+                style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+              >
+                <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
+              </PressableScale>
+            </View>
           </View>
 
           {profileSaved ? (
