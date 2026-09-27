@@ -32,6 +32,7 @@ import BookMeetingRoomScreen from "./screens/BookMeetingRoomScreen";
 import ViolationsScreen from "./screens/ViolationsScreen";
 import ViolationDetailScreen from "./screens/ViolationDetailScreen";
 import RenewContractScreen from "./screens/RenewContractScreen";
+import BillViewerScreen from "./screens/BillViewerScreen";
 
 // Keep the splash up until saved state (theme, demo data, login session) has loaded, so the first
 // frame never shows the wrong theme, the wrong dashboard state, or the wrong (logged-out) screens.
@@ -111,6 +112,7 @@ function AppNavigator() {
             <Stack.Screen name="Violations" component={ViolationsScreen} />
             <Stack.Screen name="ViolationDetail" component={ViolationDetailScreen} />
             <Stack.Screen name="RenewContract" component={RenewContractScreen} />
+            <Stack.Screen name="BillViewer" component={BillViewerScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
           </Stack.Group>
         )}

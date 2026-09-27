@@ -1,12 +1,15 @@
 import { useCallback } from "react";
 import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import StatusBadge from "../components/StatusBadge";
 import DetailCard from "../components/DetailCard";
 import EmptyState from "../components/EmptyState";
+import PressableScale from "../components/PressableScale";
+import TextLink from "../components/TextLink";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import { fetchContract } from "../services/api";
@@ -55,6 +58,7 @@ export default function ContractDetailScreen({ navigation, route }) {
 
     const hasDues = contract.outstanding > 0;
     const dueBills = contract.bills.filter((bill) => bill.status === "due");
+    const openBill = (billNumber) => navigation.navigate("BillViewer", { contractId: contract.id, billNumber });
     const canRenew = contract.status === "active" && !contract.renewal;
     const renewButton = canRenew ? (
       <View style={{ marginTop: hasDues ? 4 : 16 }}>
@@ -113,7 +117,11 @@ export default function ContractDetailScreen({ navigation, route }) {
                 value: `${formatDate(contract.bill.periodStart)} – ${formatDate(contract.bill.periodEnd)}`,
               },
             ]}
-          />
+          >
+            <TextLink align="left" onPress={() => openBill(contract.bill.number)} style={{ marginBottom: 6 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: "600" }}>View bill {"→"}</Text>
+            </TextLink>
+          </DetailCard>
         ) : null}
 
         {contract.payment ? (
@@ -148,8 +156,13 @@ export default function ContractDetailScreen({ navigation, route }) {
               Bills
             </Text>
             {contract.bills.map((bill) => (
-              <View
+              <PressableScale
                 key={bill.number}
+                onPress={() => openBill(bill.number)}
+                scaleTo={0.98}
+                accessibilityRole="button"
+                accessibilityLabel={`View bill ${bill.number}, ${bill.status}`}
+                containerStyle={{ marginBottom: 10 }}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -158,7 +171,6 @@ export default function ContractDetailScreen({ navigation, route }) {
                   borderColor: colors.surfaceBorder,
                   borderRadius: 16,
                   padding: 16,
-                  marginBottom: 10,
                 }}
               >
                 <View style={{ flex: 1, marginRight: 12 }}>
@@ -170,7 +182,8 @@ export default function ContractDetailScreen({ navigation, route }) {
                   </Text>
                 </View>
                 <StatusBadge status={bill.status} />
-              </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} style={{ marginLeft: 8 }} />
+              </PressableScale>
             ))}
 
             <View style={{ marginTop: 22 }}>

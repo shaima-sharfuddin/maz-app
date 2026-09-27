@@ -255,6 +255,50 @@ export function fetchContract(contractId) {
   });
 }
 
+// Last day of the month that `isoDate` falls in: "2026-10-01" → "2026-10-31".
+const monthEnd = (isoDate) => {
+  const date = new Date(`${isoDate}T00:00:00`);
+  return toISODate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+};
+
+// One bill with everything BillViewer shows. Looks in the contract's bills list first, then falls
+// back to its current bill (contract.bill, which settled contracts keep without a bills list).
+// PLACEHOLDER line items: a single rent line — the real invoice breakdown (VAT, services) is unknown.
+export function fetchBill(contractId, billNumber) {
+  return simulate(() => {
+    const contract = contracts.find((c) => c.id === contractId);
+    if (!contract) throw new ApiError("NOT_FOUND", "Contract not found.");
+
+    const listed = contract.bills.find((b) => b.number === billNumber);
+    const current = contract.bill?.number === billNumber ? contract.bill : null;
+    if (!listed && !current) throw new ApiError("NOT_FOUND", "Bill not found.");
+
+    const periodStart = listed ? listed.month : current.periodStart;
+    const periodEnd = listed ? monthEnd(listed.month) : current.periodEnd;
+    const amount = listed ? listed.amount : contract.monthlyRate;
+    const status = listed ? listed.status : "paid";
+    const product = contract.type === "incubator" ? "Incubator membership" : "Office suite rent";
+    // A settled bill shows the contract's latest payment (the mock keeps one payment per contract).
+    const payment = status === "paid" && contract.payment
+      ? { method: contract.payment.method, paidOn: contract.payment.lastDate, receipt: contract.payment.receipt }
+      : null;
+
+    return {
+      number: billNumber,
+      contractId: contract.id,
+      unit: contract.unit,
+      location: contract.location,
+      periodStart,
+      periodEnd,
+      dueDate: listed?.dueDate ?? null,
+      status,
+      lineItems: [{ label: product, amount }],
+      total: amount,
+      payment,
+    };
+  });
+}
+
 // ⚠️ MOCK PAYMENT — no gateway, nothing is charged. Settles the contract's outstanding balance:
 // due bills become paid, the balance clears, and the payment details show this payment.
 // The real version will hand off to the confirmed gateway (BenefitPay?) and return its result.

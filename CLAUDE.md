@@ -92,7 +92,10 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/ContractDetailScreen.js ✅ — per the recruiter wireframe: contract no. + unit + StatusBadge, Contract term
   (start / end, plus the pending renewal), Bill details, Payment details, Payment due + bills list, "Pay outstanding
   balance" → Payment. Expired / fully paid contracts show "No outstanding balance" instead of the dues section.
-  Active contracts without a pending renewal show "Renew contract" → RenewContract
+  Active contracts without a pending renewal show "Renew contract" → RenewContract. "View bill" (Bill details) and
+  each bills-list row → BillViewer
+- screens/BillViewerScreen.js ✅ — bill summary from fetchBill: status, contract + billing period + due date,
+  Charges (PLACEHOLDER single rent line) + total, Payment (when paid), "Pay outstanding balance" when due
 - screens/PaymentScreen.js ✅ — MOCK payment: amount due + due bills, payment method (BenefitPay / card —
   PLACEHOLDER options), "Pay BHD …" → payOutstandingBalance → resets stack to
   [HomeDashboard, ContractDetail, PaymentReceipt] so both re-load with the settled balance
@@ -166,7 +169,7 @@ an earlier TypeScript version — the conversion is complete and current files a
   fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
   fetchEnquiries, fetchEnquiry, submitEnquiry,
   fetchMeetingRooms, fetchRoomAvailability, bookMeetingRoom, fetchBookings, cancelBooking,
-  fetchViolations, fetchViolation, requestRenewal), all via simulate()
+  fetchViolations, fetchViolation, requestRenewal, fetchBill), all via simulate()
 - services/apiError.js — ApiError { code, message } that every API function rejects with
 - validation/schemas.js — reusable Zod field + form schemas (see "Forms & API calls")
 - hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls");
@@ -182,7 +185,6 @@ an earlier TypeScript version — the conversion is complete and current files a
 - data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
 
 ## Screens NOT built yet
-- BillViewer ("View bill" in the wireframe)
 - Unconfirmed (see Open questions): DocumentUpload, ContractReview
 
 ## Design conventions to follow for every new screen
@@ -266,7 +268,8 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Payment: which gateway (the wireframe shows BenefitPay) and what the real pay flow looks like (redirect to
   BenefitPay app? card form?). PaymentScreen is a MOCK — method options and the success result are
   placeholders; nothing is charged. Also confirm whether receipts are emailed.
-- Bills: is there a bill/invoice viewer ("View bill" in the wireframe) — PDF, in-app, or email only?
+- Bills: BillViewer is an in-app summary with one rent line. Confirm the real invoice format — official PDF
+  (download/share), VAT breakdown, other charges (services, fines) — and whether invoices are also emailed.
 - Notifications: in-app only for now. Push notifications need expo-notifications + a backend that sends them —
   confirm which events MAZ wants pushed (bills, request stages, bookings, notices).
 - Meeting rooms: the real rooms, opening hours, how far ahead / how long bookings can be, the cancellation
