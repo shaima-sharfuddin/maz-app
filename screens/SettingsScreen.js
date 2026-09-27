@@ -1,10 +1,13 @@
-import { View, Text, ScrollView } from "react-native";
+import { useState } from "react";
+import { View, Text, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import SegmentedControl from "../components/SegmentedControl";
+import AnimatedButton from "../components/AnimatedButton";
 import { useTheme } from "../theme/ThemeContext";
 import { useDemo } from "../demo/DemoContext";
+import { useAuth } from "../auth/AuthContext";
 
 const APPEARANCE_OPTIONS = [
   { value: "system", label: "System" },
@@ -25,6 +28,23 @@ const ERROR_SIM_OPTIONS = [
 export default function SettingsScreen({ navigation }) {
   const { colors, preference, setPreference, scheme } = useTheme();
   const { userState, setUserState, simulateErrors, setSimulateErrors } = useDemo();
+  const { user, signOut } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // Logging out switches the navigator back to Welcome (App.js), so no navigate() is needed.
+  const confirmLogOut = () => {
+    Alert.alert("Log out?", "You'll need to log in again to see your contracts and payments.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: async () => {
+          setLoggingOut(true);
+          await signOut();
+        },
+      },
+    ]);
+  };
 
   const sectionHeading = (label) => (
     <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
@@ -48,6 +68,27 @@ export default function SettingsScreen({ navigation }) {
           <BackButton onPress={() => navigation.goBack()} />
 
           <ScreenTitle title="Settings" subtitle="Tailor your MAZ experience." />
+
+          {user ? (
+            <>
+              {sectionHeading("Account")}
+              <View style={[cardStyle, { paddingBottom: 16, marginBottom: 32 }]}>
+                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Logged in as</Text>
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginTop: 2 }}>
+                  {user.name || user.email}
+                </Text>
+                {user.name ? <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>{user.email}</Text> : null}
+                <View style={{ marginTop: 12 }}>
+                  <AnimatedButton
+                    label={loggingOut ? "Logging out…" : "Log out"}
+                    variant="ghost"
+                    loading={loggingOut}
+                    onPress={confirmLogOut}
+                  />
+                </View>
+              </View>
+            </>
+          ) : null}
 
           {sectionHeading("Appearance")}
           <View style={[cardStyle, { marginBottom: 32 }]}>

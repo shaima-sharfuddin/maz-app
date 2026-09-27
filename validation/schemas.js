@@ -63,6 +63,8 @@ export const pastOrTodayDate = z
   .date({ error: "Select a date" })
   .refine((d) => d <= endOfToday(), "Date can't be in the future");
 
+export const otpCode = z.string().regex(/^\d{6}$/, "Enter the 6-digit code");
+
 export const requiredText = (label) => z.string().trim().min(1, `${label} is required`);
 export const requiredSelect = (label) => z.string().min(1, `Select ${label.toLowerCase()}`);
 export const optionalText = z.string().trim();
@@ -84,6 +86,10 @@ export const signUpSchema = z.object({
   fullName,
   email,
   phone,
+});
+
+export const verifyAccountSchema = z.object({
+  code: otpCode,
 });
 
 export const loginSchema = z.object({

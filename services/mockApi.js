@@ -61,18 +61,65 @@ const submittedRequests = new Map();
 
 // ---- Auth & profile --------------------------------------------------------
 
+// Accounts created this session (cleared on app reload). Any other email logs in as an existing
+// tenant with a completed profile, so demos can skip sign-up.
+const registeredUsers = new Map(); // email → { fullName, phone, verified, profileComplete }
+const emailKey = (email) => email.trim().toLowerCase();
+
+// ⚠️ MOCK — the real backend emails a random code. This fixed code is shown on the Verify screen.
+export const MOCK_OTP_CODE = "123456";
+
 // payload: { fullName, email, phone } → { userId, email }
 export function signUp(payload) {
-  return simulate(() => ({ userId: newId("USR"), email: payload.email }));
+  return simulate(() => {
+    registeredUsers.set(emailKey(payload.email), {
+      fullName: payload.fullName,
+      phone: payload.phone,
+      verified: false,
+      profileComplete: false,
+    });
+    return { userId: newId("USR"), email: payload.email };
+  });
 }
 
-// payload: { email, password } → { token, user }
+// payload: { email, code } → { verified: true }
+export function verifyEmail(payload) {
+  return simulate(() => {
+    if (payload.code !== MOCK_OTP_CODE) throw new ApiError("INVALID_CODE", "That code isn't right. Check your email and try again.");
+    const user = registeredUsers.get(emailKey(payload.email));
+    if (user) user.verified = true;
+    return { verified: true };
+  });
+}
+
+// email → { sent: true }
+export function resendVerificationCode(email) {
+  return simulate(() => ({ sent: true, email }));
+}
+
+// payload: { email, password } → { token, user: { email, name, profileComplete } }
 // Dev shortcut: the password "wrong" always fails with INVALID_CREDENTIALS, to test that error.
 export function logIn(payload) {
   return simulate(() => {
     if (payload.password === "wrong") throw new ApiError("INVALID_CREDENTIALS", "Incorrect email or password.");
-    return { token: newId("TKN"), user: { email: payload.email, name: MOCK_TENANT_NAME } };
+    const registered = registeredUsers.get(emailKey(payload.email));
+    if (registered && !registered.verified) {
+      throw new ApiError("EMAIL_NOT_VERIFIED", "Please verify your email before logging in.");
+    }
+    return {
+      token: newId("TKN"),
+      user: {
+        email: payload.email.trim(),
+        name: registered ? registered.fullName : MOCK_TENANT_NAME,
+        profileComplete: registered ? registered.profileComplete : true,
+      },
+    };
   });
+}
+
+// Best effort: logging out locally must never be blocked by the network, so this never fails.
+export function logOut() {
+  return simulate(() => ({ loggedOut: true }), { canFail: false });
 }
 
 // email → { sent: true }
@@ -80,9 +127,13 @@ export function requestPasswordReset(email) {
   return simulate(() => ({ sent: true, email }));
 }
 
-// payload: { customer, owner } (the Create Customer form) → { customerId }
-export function saveProfile() {
-  return simulate(() => ({ customerId: newId("CUS") }));
+// payload: { email, customer, owner } (the Create Customer form) → { customerId }
+export function saveProfile(payload) {
+  return simulate(() => {
+    const user = payload?.email ? registeredUsers.get(emailKey(payload.email)) : null;
+    if (user) user.profileComplete = true;
+    return { customerId: newId("CUS") };
+  });
 }
 
 // ---- Plans & requests ------------------------------------------------------

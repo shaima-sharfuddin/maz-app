@@ -22,10 +22,10 @@ export default function SignUpScreen({ navigation }) {
   } = useZodForm(signUpSchema, { fullName: "", email: "", phone: "" });
   const { submit, loading, error } = useSubmit(signUp);
 
-  // Verify-account (OTP) isn't built yet, so a new account goes straight to Log in.
+  // Flow: Sign up → Verify account (OTP) → Log in.
   const onSubmit = handleSubmit(async (values) => {
     const result = await submit(values);
-    if (result) navigation.navigate("Login", { email: result.email, justSignedUp: true });
+    if (result) navigation.navigate("VerifyAccount", { email: result.email });
   });
 
   return (

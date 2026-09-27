@@ -9,7 +9,6 @@ import SelectField from "../components/SelectField";
 import SegmentedControl from "../components/SegmentedControl";
 import FormField from "../components/FormField";
 import ErrorBanner from "../components/ErrorBanner";
-import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import TextLink from "../components/TextLink";
 import useZodForm from "../hooks/useZodForm";
@@ -18,6 +17,7 @@ import { completeProfileSchema } from "../validation/schemas";
 import { saveProfile } from "../services/api";
 import { COMPANIES, GENDERS, NATIONALITIES } from "../data/formOptions";
 import { useTheme } from "../theme/ThemeContext";
+import { useAuth } from "../auth/AuthContext";
 
 const DEFAULT_VALUES = {
   customer: {
@@ -49,8 +49,9 @@ const tomorrow = () => {
 };
 
 // Field set mirrors MAZ's admin "Create Customer" form (rules in validation/schemas.js).
-export default function CompleteProfileScreen({ navigation }) {
+export default function CompleteProfileScreen() {
   const { colors } = useTheme();
+  const { user, completeProfile, signOut } = useAuth();
   const {
     control,
     handleSubmit,
@@ -69,15 +70,11 @@ export default function CompleteProfileScreen({ navigation }) {
   ].filter(Boolean);
   const ownerFieldsMissing = !ownerName?.trim() || !gender;
 
+  // Marking the profile complete switches the navigator to the dashboard screens (App.js), so this
+  // onboarding form can't be reached with Back afterwards.
   const onSubmit = handleSubmit(async (values) => {
-    const result = await submit(values);
-    if (result) {
-      // reset() makes the dashboard the only route, so back can't return to this form.
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "HomeDashboard", params: { ownerName: values.owner.ownerName.trim(), profileSaved: true } }],
-      });
-    }
+    const result = await submit({ ...values, email: user?.email });
+    if (result) completeProfile(values.owner.ownerName.trim());
   });
 
   const today = new Date();
@@ -87,7 +84,15 @@ export default function CompleteProfileScreen({ navigation }) {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 pt-8 pb-10">
-            <BackButton onPress={() => navigation.goBack()} />
+            {/* First screen after logging in, so there's nothing to go back to — offer log out instead. */}
+            <TextLink align="left" onPress={signOut} style={{ marginBottom: 12 }}>
+              <Text className="text-sm" style={{ color: colors.textMuted }}>
+                {user?.email ? `Not ${user.email}? ` : ""}
+                <Text className="font-medium" style={{ color: colors.text }}>
+                  Log out
+                </Text>
+              </Text>
+            </TextLink>
 
             <ScreenTitle
               title="Complete your profile"

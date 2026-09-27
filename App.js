@@ -8,8 +8,10 @@ import * as SplashScreen from "expo-splash-screen";
 
 import { ThemeProvider, useTheme } from "./theme/ThemeContext";
 import { DemoProvider, useDemo } from "./demo/DemoContext";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import SignUpScreen from "./screens/SignUpScreen";
+import VerifyAccountScreen from "./screens/VerifyAccountScreen";
 import LoginScreen from "./screens/LoginScreen";
 import CompleteProfileScreen from "./screens/CompleteProfileScreen";
 import HomeDashboardScreen from "./screens/HomeDashboardScreen";
@@ -22,8 +24,8 @@ import ContractDetailScreen from "./screens/ContractDetailScreen";
 import PaymentScreen from "./screens/PaymentScreen";
 import PaymentReceiptScreen from "./screens/PaymentReceiptScreen";
 
-// Keep the splash up until saved preferences (theme + demo data) have loaded, so the first frame
-// never shows the wrong theme or the wrong dashboard state.
+// Keep the splash up until saved state (theme, demo data, login session) has loaded, so the first
+// frame never shows the wrong theme, the wrong dashboard state, or the wrong (logged-out) screens.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Stack = createNativeStackNavigator();
@@ -31,7 +33,8 @@ const Stack = createNativeStackNavigator();
 function AppNavigator() {
   const { ready: themeReady, isDark, colors } = useTheme();
   const { ready: demoReady } = useDemo();
-  const ready = themeReady && demoReady;
+  const { ready: authReady, isSignedIn, profileComplete, justCompletedProfile } = useAuth();
+  const ready = themeReady && demoReady && authReady;
 
   useEffect(() => {
     if (ready) SplashScreen.hide();
@@ -55,6 +58,8 @@ function AppNavigator() {
 
   if (!ready) return null;
 
+  // Auth-gated routes: only the screens for the current session state exist, so signing in/out
+  // switches screen sets automatically and Back can never reach the other side.
   return (
     <NavigationContainer theme={navigationTheme}>
       {/* One status bar for the whole app: light icons on dark, dark icons on light. */}
@@ -62,19 +67,35 @@ function AppNavigator() {
       <Stack.Navigator
         screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}
       >
-        <Stack.Screen name="Welcome" component={WelcomeScreen} />
-        <Stack.Screen name="SignUp" component={SignUpScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
-        <Stack.Screen name="HomeDashboard" component={HomeDashboardScreen} />
-        <Stack.Screen name="BrowsePlans" component={BrowsePlansScreen} />
-        <Stack.Screen name="SelectTerm" component={SelectTermScreen} />
-        <Stack.Screen name="SubmitRequest" component={SubmitRequestScreen} />
-        <Stack.Screen name="RequestStatus" component={RequestStatusScreen} />
-        <Stack.Screen name="ContractDetail" component={ContractDetailScreen} />
-        <Stack.Screen name="Payment" component={PaymentScreen} />
-        <Stack.Screen name="PaymentReceipt" component={PaymentReceiptScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
+        {!isSignedIn ? (
+          <Stack.Group>
+            <Stack.Screen name="Welcome" component={WelcomeScreen} />
+            <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="VerifyAccount" component={VerifyAccountScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+          </Stack.Group>
+        ) : !profileComplete ? (
+          <Stack.Group>
+            <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+          </Stack.Group>
+        ) : (
+          <Stack.Group>
+            <Stack.Screen
+              name="HomeDashboard"
+              component={HomeDashboardScreen}
+              initialParams={{ profileSaved: justCompletedProfile }}
+            />
+            <Stack.Screen name="BrowsePlans" component={BrowsePlansScreen} />
+            <Stack.Screen name="SelectTerm" component={SelectTermScreen} />
+            <Stack.Screen name="SubmitRequest" component={SubmitRequestScreen} />
+            <Stack.Screen name="RequestStatus" component={RequestStatusScreen} />
+            <Stack.Screen name="ContractDetail" component={ContractDetailScreen} />
+            <Stack.Screen name="Payment" component={PaymentScreen} />
+            <Stack.Screen name="PaymentReceipt" component={PaymentReceiptScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+          </Stack.Group>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -85,7 +106,9 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <DemoProvider>
-          <AppNavigator />
+          <AuthProvider>
+            <AppNavigator />
+          </AuthProvider>
         </DemoProvider>
       </ThemeProvider>
     </SafeAreaProvider>

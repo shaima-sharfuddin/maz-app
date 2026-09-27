@@ -17,6 +17,7 @@ import { formatBHD } from "../data/pricing";
 import { formatDate, formatMonth } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
 import { useDemo } from "../demo/DemoContext";
+import { useAuth } from "../auth/AuthContext";
 
 function SectionHeading({ children }) {
   const { colors } = useTheme();
@@ -108,8 +109,8 @@ function ContractRow({ contract, onPress }) {
 export default function HomeDashboardScreen({ navigation, route }) {
   const { colors } = useTheme();
   const { userState } = useDemo();
-  const ownerName = route.params?.ownerName;
-  const profileSaved = route.params?.profileSaved;
+  const { user } = useAuth();
+  const profileSaved = route.params?.profileSaved; // set right after onboarding (App.js initialParams)
 
   // Re-fetches when the Settings demo toggle changes (tenant ↔ new user).
   const loadDashboard = useCallback(() => fetchDashboard(userState), [userState]);
@@ -249,7 +250,7 @@ export default function HomeDashboardScreen({ navigation, route }) {
     </View>
   );
 
-  const name = ownerName || (isTenant ? data?.tenantName : undefined);
+  const name = user?.name || (isTenant ? data?.tenantName : undefined);
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>

@@ -13,10 +13,12 @@ import useSubmit from "../hooks/useSubmit";
 import { loginSchema } from "../validation/schemas";
 import { logIn, requestPasswordReset } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
+import { useAuth } from "../auth/AuthContext";
 
 export default function LoginScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const justSignedUp = route.params?.justSignedUp;
+  const { signIn } = useAuth();
+  const justVerified = route.params?.justVerified;
   const {
     control,
     handleSubmit,
@@ -29,10 +31,14 @@ export default function LoginScreen({ navigation, route }) {
   const reset = useSubmit(requestPasswordReset);
   const [resetSentTo, setResetSentTo] = useState("");
 
+  // Saving the session switches the navigator to the signed-in screens (App.js) — no navigate() needed.
+  // New accounts land on Complete Profile; existing ones on the dashboard.
   const onSubmit = handleSubmit(async (values) => {
     const result = await login.submit(values);
-    if (result) navigation.navigate("CompleteProfile");
+    if (result) signIn(result);
   });
+
+  const notVerified = login.errorCode === "EMAIL_NOT_VERIFIED";
 
   // Uses the email already typed above; if it's missing/invalid, surface that field's error instead.
   const onForgotPassword = async () => {
@@ -53,9 +59,9 @@ export default function LoginScreen({ navigation, route }) {
 
             <ScreenTitle title="Welcome back" subtitle="Log in to your MAZ account." />
 
-            {justSignedUp ? (
+            {justVerified ? (
               <Text className="text-sm mb-6" style={{ color: colors.success, marginTop: -16 }}>
-                {"✓"} Account created — please log in.
+                {"✓"} Email verified — please log in.
               </Text>
             ) : null}
 
@@ -99,7 +105,15 @@ export default function LoginScreen({ navigation, route }) {
                 disabled={!isValid}
                 loading={login.loading}
               />
-              <ErrorBanner message={login.error} onRetry={onSubmit} />
+              <ErrorBanner
+                message={login.error}
+                retryLabel={notVerified ? "Verify email" : "Try again"}
+                onRetry={
+                  notVerified
+                    ? () => navigation.navigate("VerifyAccount", { email: getValues("email").trim() })
+                    : onSubmit
+                }
+              />
             </View>
 
             <TextLink onPress={() => navigation.navigate("SignUp")} style={{ marginTop: 12 }}>

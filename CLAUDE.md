@@ -14,6 +14,19 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Deep navy background: #101828
 - Crimson: #a31c37
 
+## Auth & sessions
+- auth/AuthContext.js: AuthProvider + useAuth() → { ready, isSignedIn, user: { email, name }, token,
+  profileComplete, justCompletedProfile, signIn(logInResult), completeProfile(name), signOut() }
+- The session is stored encrypted with expo-secure-store (key maz.session) and restored on launch; the splash
+  screen waits for it, so logged-in users never see Welcome flash first
+- App.js renders route groups by auth state (React Navigation's auth-flow pattern): signed out → Welcome,
+  SignUp, VerifyAccount, Login; signed in without profile → CompleteProfile, Settings; signed in → dashboard
+  and all tenant screens. Screens never navigate across these groups — they call signIn / completeProfile /
+  signOut and the navigator switches. Any new screen must be added to the right group
+- Mock accounts: emails signed up this session must verify (code 123456) and complete their profile; any
+  other email logs in as the existing tenant "Sara". logOut() never fails (best effort)
+- Not yet: session expiry / 401 handling and token refresh — add once the real API defines them
+
 ## Theme system (light + dark) — never hardcode colors
 - theme/theme.js defines BRAND plus PALETTES.light / PALETTES.dark (same token names in both)
 - theme/ThemeContext.js: ThemeProvider + useTheme() → { colors, scheme, isDark, preference, setPreference, ready }
@@ -33,7 +46,7 @@ an earlier TypeScript version — the conversion is complete and current files a
 
 ## User flow (full sequence, in order)
 1. Sign up (name, email, phone)
-2. Verify account (OTP or email link)
+2. Verify account (6-digit code sent by email — VerifyAccountScreen)
 3. Log in
 4. Complete profile (company + owner details — matches MAZ's real "Create Customer" form)
 5. Home dashboard (new user state: prompt to browse plans; active tenant state: contract status, quick actions)
@@ -46,20 +59,24 @@ an earlier TypeScript version — the conversion is complete and current files a
    The office admin assigns the actual unit — users request a plan, not a specific unit.
 7. Ongoing tenant features: Book meeting rooms, track violations/compliance,
    renew/extend contract, notifications, support enquiries
-8. Log out
+8. Log out (Settings → Account)
 
 ## Screens built so far (working, in JavaScript)
 - screens/WelcomeScreen.js ✅
-- screens/SignUpScreen.js ✅
-- screens/LoginScreen.js ✅
+- screens/SignUpScreen.js ✅ — signUp → VerifyAccount { email }
+- screens/VerifyAccountScreen.js ✅ — 6-digit OtpInput (auto-submits), resend with 30s cooldown, verifyEmail →
+  replaces itself with Login { email, justVerified }. Shows "Demo mode: use code 123456" (MOCK_OTP_CODE)
+- screens/LoginScreen.js ✅ — logIn → signIn(session) (navigator switches automatically); EMAIL_NOT_VERIFIED
+  offers "Verify email"; Forgot password → requestPasswordReset
 - screens/CompleteProfileScreen.js ✅ — fields match MAZ's "Create Customer" form exactly (Company Details
-  open, Owner Details collapsed); required: Customer Name, Owner Name, Gender. Save validates, then resets
-  the stack to HomeDashboard (nothing persisted — no backend)
+  open, Owner Details collapsed); required: Customer Name, Owner Name, Gender. First screen for a new account:
+  "Not you? Log out" instead of Back. Save → saveProfile → completeProfile() → dashboard
 - screens/HomeDashboardScreen.js ✅ — two states, chosen by the Settings demo toggle (useDemo):
   • Tenant (default): "Welcome back, Sara", StatCards (Active / Expired contracts, Payment due), "Your
     contracts" rows (StatusBadge, tap → ContractDetail), "Find a new office" → BrowsePlans
   • New user: "no office leased" card with Browse Plans, trust stats, services, testimonials placeholder
-- screens/SettingsScreen.js ✅ — Appearance: System / Light / Dark theme toggle (persisted)
+- screens/SettingsScreen.js ✅ — Account (logged-in user + Log out with confirmation), Appearance (System / Light /
+  Dark, persisted), Demo data (dashboard state, error simulation)
 - screens/BrowsePlansScreen.js ✅ — trust stats + a card per service with Select; selecting shows a fixed
   "Continue with {plan}" footer → SelectTerm (passes { plan })
 - screens/SelectTermScreen.js ✅ — "Select your duration": SegmentedControl 1/3/6/12 months (default 1) +
@@ -109,15 +126,19 @@ an earlier TypeScript version — the conversion is complete and current files a
   persisted in AsyncStorage (maz.demoUserState, maz.demoSimulateErrors), toggled in Settings → "Demo data".
   simulateErrors drives setMockFailuresEnabled. Remove once real account data exists
 - services/api.js — the ONLY module screens import API functions from (re-exports ./mockApi today)
-- services/mockApi.js — every mock endpoint (signUp, logIn, requestPasswordReset, saveProfile, fetchPlans,
+- services/mockApi.js — every mock endpoint (signUp, verifyEmail, resendVerificationCode, logIn, logOut,
+  requestPasswordReset, saveProfile, fetchPlans,
   submitRequest, fetchRequestStatus, fetchDashboard, fetchContract, payOutstandingBalance), all via simulate()
 - services/apiError.js — ApiError { code, message } that every API function rejects with
 - validation/schemas.js — reusable Zod field + form schemas (see "Forms & API calls")
-- hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls")
+- hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls");
+  useSubmit also returns errorCode (the ApiError code) for screens that react to specific errors
 - hooks/useAsync.js — { loading, data, error, reload } for any loader; results go stale when the loader changes
 - components/FormField.js — react-hook-form Controller wrapper for any field component
 - components/FieldError.js — inline field error (icon + danger text); used by all field components
-- components/ErrorBanner.js — submit-failure banner with "Try again"
+- components/ErrorBanner.js — submit-failure banner with "Try again" (custom retryLabel supported)
+- components/OtpInput.js — 6-box one-time-code field (single hidden TextInput: paste + OS code autofill), FormField-compatible
+- auth/AuthContext.js — session (see "Auth & sessions")
 - data/formOptions.js — dropdown options; COMPANIES holds the 4 real values from MAZ's admin panel;
   ACTIVITIES is a PLACEHOLDER until the real Activity list comes from the API
 - data/brand.js — TRUST_STATS, BAHRAIN_ADVANTAGES, SERVICES from MAZ's marketing site
