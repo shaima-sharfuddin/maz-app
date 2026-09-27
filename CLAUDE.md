@@ -89,9 +89,10 @@ an earlier TypeScript version — the conversion is complete and current files a
   Submit validates, calls mock submitRequest, then resets the stack to [HomeDashboard, RequestStatus]
 - screens/RequestStatusScreen.js ✅ — StatusStepper + confirmation + summary; loads fetchRequestStatus
   (mock always returns step 1 — swap for the real API to show the true stage)
-- screens/ContractDetailScreen.js ✅ — per the recruiter wireframe: contract no. + unit + StatusBadge, Bill details,
-  Payment details, Payment due + bills list, "Pay outstanding balance" → Payment. Expired / fully paid
-  contracts show "No outstanding balance" instead of the dues section
+- screens/ContractDetailScreen.js ✅ — per the recruiter wireframe: contract no. + unit + StatusBadge, Contract term
+  (start / end, plus the pending renewal), Bill details, Payment details, Payment due + bills list, "Pay outstanding
+  balance" → Payment. Expired / fully paid contracts show "No outstanding balance" instead of the dues section.
+  Active contracts without a pending renewal show "Renew contract" → RenewContract
 - screens/PaymentScreen.js ✅ — MOCK payment: amount due + due bills, payment method (BenefitPay / card —
   PLACEHOLDER options), "Pay BHD …" → payOutstandingBalance → resets stack to
   [HomeDashboard, ContractDetail, PaymentReceipt] so both re-load with the settled balance
@@ -109,6 +110,10 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/BookMeetingRoomScreen.js ✅ — Date (today … +60 days), Duration 1/2/3 h, SlotPicker of start times from
   fetchRoomAvailability (a start is offered only if the whole duration is free; a stale pick is cleared), Notes →
   bookMeetingRoom → resets to [HomeDashboard, MeetingRooms]. SLOT_TAKEN reloads the grid
+- screens/RenewContractScreen.js ✅ — renewal REQUEST (admin approves): SegmentedControl 1/3/6/12 months +
+  EstimateCard (current rate × months, current → new end date) + optional Remark (renewalSchema) →
+  requestRenewal → resets to [HomeDashboard, ContractDetail { renewalRequested }]. Non-active or already-requested
+  contracts show an EmptyState instead of the form
 - screens/ViolationsScreen.js ✅ — read-only notices grouped Open / Resolved → ViolationDetail
 - screens/ViolationDetailScreen.js ✅ — details (DetailCard; fine if any, "added to your contract balance"),
   description, resolution; "Contact support" → NewEnquiry with prefill (category "Violation query")
@@ -132,10 +137,12 @@ an earlier TypeScript version — the conversion is complete and current files a
   steps (defaults to REQUEST_STEPS). Completed = check, current = filled crimson, upcoming = muted
 - components/RequestSummaryCard.js ✅ — Plan / Location / Term / Estimated price recap
 - data/requestSteps.js — REQUEST_STEPS, the 5 request stages (single source for StatusStepper + API mapping)
-- data/pricing.js — TERM_OPTIONS, formatTerm, formatBHD (3 decimals), estimateTotal, buildRequestSummary;
+- data/pricing.js — TERM_OPTIONS, formatTerm, formatBHD (3 decimals), estimateTotal, buildRequestSummary,
+  extendEndDate (renewal end date);
   PLACEHOLDER_MONTHLY_RATE_BHD and PLACEHOLDER_LOCATION until real pricing/location exist
 - components/StatusBadge.js ✅ — pill for active / expired / due / paid / upcoming / open / resolved / answered /
   confirmed / cancelled / requested (theme success/danger tints, muted otherwise)
+- components/EstimateCard.js ✅ — "Estimated amount" rows + big total + note (SelectTerm, RenewContract)
 - components/SlotPicker.js ✅ — FormField-compatible grid of time-slot pills; `slots` [{ value, label, disabled }]
 - components/DetailCard.js ✅ — titled card of label/value rows (value may be a node, e.g. StatusBadge); used by
   ContractDetail, EnquiryDetail and other detail screens
@@ -146,7 +153,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - data/mockViolations.js — MOCK notices (2 open, 1 resolved with a fine); PLACEHOLDER types
 - data/mockEnquiries.js — MOCK support enquiries (one open, one answered)
 - data/mockNotifications.js — MOCK notifications per demo account type; mock actions (e.g. payment) push new ones
-- data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026)
+- data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026), each with
+  startDate / endDate / monthlyRate; `renewal` is added by requestRenewal
 - data/paymentMethods.js — PLACEHOLDER payment options (BenefitPay, card) until the gateway is confirmed
 - demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { userState: "tenant" | "newUser", simulateErrors },
   persisted in AsyncStorage (maz.demoUserState, maz.demoSimulateErrors), toggled in Settings → "Demo data".
@@ -158,7 +166,7 @@ an earlier TypeScript version — the conversion is complete and current files a
   fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
   fetchEnquiries, fetchEnquiry, submitEnquiry,
   fetchMeetingRooms, fetchRoomAvailability, bookMeetingRoom, fetchBookings, cancelBooking,
-  fetchViolations, fetchViolation), all via simulate()
+  fetchViolations, fetchViolation, requestRenewal), all via simulate()
 - services/apiError.js — ApiError { code, message } that every API function rejects with
 - validation/schemas.js — reusable Zod field + form schemas (see "Forms & API calls")
 - hooks/useZodForm.js, hooks/useSubmit.js — form + submit-button standards (see "Forms & API calls");
@@ -267,6 +275,9 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Violations: what MAZ actually records (building rules, documents, late payments?), whether tenants
   acknowledge or respond to a notice in-app, and whether fines are paid separately or only via the contract
   balance (currently read-only; questions go through a pre-filled support enquiry).
+- Renewal: real renewal pricing (currently the contract's current monthly rate), whether renewals can change
+  unit or plan, how far before the end date a renewal can be requested, and whether expired contracts can be
+  renewed (currently no — they start a new request).
 - Support: real enquiry categories, where enquiries are routed (email / WhatsApp / ticketing), whether tenants
   can reply in-app, and any response-time commitment to show.
 - Contracts/bills/payments API shape — all tenant data is mock (data/mockTenant.js) until then.

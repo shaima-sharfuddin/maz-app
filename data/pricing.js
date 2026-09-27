@@ -1,3 +1,5 @@
+import { toISODate } from "../utils/formatDate";
+
 // Duration options and price estimates for an office request (from the recruiter's
 // "Select your duration" wireframe). Shared by SelectTermScreen and SubmitRequestScreen.
 
@@ -36,4 +38,14 @@ export function buildRequestSummary(planTitle, months) {
     estimatedPrice: formatBHD(estimateTotal(months)),
     isPlaceholder: true,
   };
+}
+
+// New end date after extending a contract by `months`: "2026-12-31" + 3 → "2027-03-31".
+// Works from the day after the current end, so month-end contracts stay month-end.
+export function extendEndDate(endDate, months) {
+  const date = new Date(`${endDate}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  date.setMonth(date.getMonth() + months);
+  date.setDate(date.getDate() - 1);
+  return toISODate(date);
 }

@@ -156,3 +156,8 @@ export const bookingSchema = z.object({
   durationHours: z.number(),
   notes: z.string().trim().max(300, "Keep notes under 300 characters"),
 });
+
+export const renewalSchema = z.object({
+  termMonths: z.number(),
+  remark: z.string().trim().max(500, "Keep remarks under 500 characters"),
+});

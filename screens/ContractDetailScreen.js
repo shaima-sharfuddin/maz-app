@@ -10,7 +10,7 @@ import EmptyState from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import { fetchContract } from "../services/api";
-import { formatBHD } from "../data/pricing";
+import { formatBHD, formatTerm } from "../data/pricing";
 import { formatDate, formatMonth } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
 
@@ -35,6 +35,7 @@ function DetailSkeleton() {
 export default function ContractDetailScreen({ navigation, route }) {
   const { colors } = useTheme();
   const contractId = route.params?.contractId;
+  const renewalRequested = route.params?.renewalRequested; // set by RenewContract after a successful request
   const loadContract = useCallback(() => fetchContract(contractId), [contractId]);
   const { loading, data: contract, error, reload } = useAsync(loadContract);
 
@@ -54,6 +55,31 @@ export default function ContractDetailScreen({ navigation, route }) {
 
     const hasDues = contract.outstanding > 0;
     const dueBills = contract.bills.filter((bill) => bill.status === "due");
+    const canRenew = contract.status === "active" && !contract.renewal;
+    const renewButton = canRenew ? (
+      <View style={{ marginTop: hasDues ? 4 : 16 }}>
+        <AnimatedButton
+          label="Renew contract"
+          variant={hasDues ? "ghost" : "primary"}
+          onPress={() => navigation.navigate("RenewContract", { contractId: contract.id })}
+        />
+      </View>
+    ) : null;
+
+    const termRows = [
+      ...(contract.startDate ? [{ label: "Start date", value: formatDate(contract.startDate) }] : []),
+      ...(contract.endDate
+        ? [{ label: contract.status === "expired" ? "Ended" : "End date", value: formatDate(contract.endDate) }]
+        : []),
+      ...(contract.renewal
+        ? [
+            { label: "Renewal", value: <StatusBadge status={contract.renewal.status} /> },
+            { label: "Renewal term", value: formatTerm(contract.renewal.termMonths) },
+            { label: "Proposed end date", value: formatDate(contract.renewal.newEndDate) },
+            { label: "Requested", value: formatDate(contract.renewal.requestedOn) },
+          ]
+        : []),
+    ];
 
     return (
       <View>
@@ -68,6 +94,14 @@ export default function ContractDetailScreen({ navigation, route }) {
                 : null}
           </Text>
         </View>
+
+        {renewalRequested && contract.renewal ? (
+          <Text className="text-sm mb-4" style={{ color: colors.success }}>
+            {"✓"} Renewal requested — we'll confirm the new terms by email.
+          </Text>
+        ) : null}
+
+        {termRows.length > 0 ? <DetailCard title="Contract term" rows={termRows} /> : null}
 
         {contract.bill ? (
           <DetailCard
@@ -145,17 +179,21 @@ export default function ContractDetailScreen({ navigation, route }) {
                 onPress={() => navigation.navigate("Payment", { contractId: contract.id })}
               />
             </View>
+            {renewButton}
           </>
         ) : (
-          <EmptyState
-            icon="checkmark-circle-outline"
-            title="No outstanding balance"
-            message={
-              contract.status === "expired"
-                ? "This contract has ended and is fully settled."
-                : "You're all paid up on this contract."
-            }
-          />
+          <>
+            <EmptyState
+              icon="checkmark-circle-outline"
+              title="No outstanding balance"
+              message={
+                contract.status === "expired"
+                  ? "This contract has ended and is fully settled."
+                  : "You're all paid up on this contract."
+              }
+            />
+            {renewButton}
+          </>
         )}
       </View>
     );

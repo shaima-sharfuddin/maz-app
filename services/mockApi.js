@@ -4,7 +4,7 @@ import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
 import { MOCK_ENQUIRIES } from "../data/mockEnquiries";
 import { MOCK_VIOLATIONS } from "../data/mockViolations";
 import { PAYMENT_METHODS } from "../data/paymentMethods";
-import { formatBHD } from "../data/pricing";
+import { formatBHD, formatTerm, extendEndDate, TERM_OPTIONS } from "../data/pricing";
 import { MEETING_ROOMS, OPENING_HOUR, CLOSING_HOUR, DURATION_OPTIONS } from "../data/meetingRooms";
 import { toISODate, formatDate, formatTime } from "../utils/formatDate";
 import { ApiError } from "./apiError";
@@ -508,5 +508,34 @@ export function fetchViolation(violationId) {
     const violation = MOCK_VIOLATIONS.find((v) => v.id === violationId);
     if (!violation) throw new ApiError("NOT_FOUND", "Notice not found.");
     return withUnit(violation);
+  });
+}
+
+// ---- Contract renewal ------------------------------------------------------
+
+// payload: { termMonths, remark } → { contractId, renewal }. Like a new office request, a renewal is
+// reviewed by the MAZ admin; the contract shows it as "requested" until then.
+export function requestRenewal(contractId, payload) {
+  return simulate(() => {
+    const contract = contracts.find((c) => c.id === contractId);
+    if (!contract) throw new ApiError("NOT_FOUND", "Contract not found.");
+    if (contract.status !== "active") throw new ApiError("NOT_ACTIVE", "Only active contracts can be renewed.");
+    if (contract.renewal) throw new ApiError("RENEWAL_PENDING", "A renewal request for this contract is already under review.");
+    if (!TERM_OPTIONS.includes(payload.termMonths)) throw new ApiError("INVALID_TERM", "Choose a renewal term.");
+
+    contract.renewal = {
+      status: "requested",
+      termMonths: payload.termMonths,
+      remark: payload.remark?.trim() ?? "",
+      requestedOn: toISODate(new Date()),
+      newEndDate: extendEndDate(contract.endDate, payload.termMonths),
+    };
+    pushNotification({
+      type: "renewal",
+      title: "Renewal request received",
+      body: `${contract.unit} · ${formatTerm(payload.termMonths)}. We'll confirm the new terms by email.`,
+      target: { screen: "ContractDetail", params: { contractId: contract.id } },
+    });
+    return { contractId, renewal: clone(contract.renewal) };
   });
 }

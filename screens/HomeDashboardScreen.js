@@ -71,6 +71,7 @@ function TenantSkeleton() {
 function contractCaption(contract) {
   if (contract.status === "expired") return `Contract ${contract.id} · Ended ${formatDate(contract.endDate)}`;
   if (contract.outstanding > 0) return `Contract ${contract.id} · ${formatBHD(contract.outstanding)} due`;
+  if (contract.renewal) return `Contract ${contract.id} · Renewal requested`;
   return `Contract ${contract.id} · Paid through ${formatMonth(contract.paidThrough)}`;
 }
 

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import SegmentedControl from "../components/SegmentedControl";
+import EstimateCard from "../components/EstimateCard";
 import {
   TERM_OPTIONS,
   DEFAULT_TERM_MONTHS,
@@ -42,48 +43,12 @@ export default function SelectTermScreen({ navigation, route }) {
 
           <SegmentedControl label="Duration" value={months} onChange={setMonths} options={TERM_SEGMENTS} />
 
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.surfaceBorder,
-              borderRadius: 16,
-              paddingHorizontal: 20,
-              paddingTop: 18,
-              paddingBottom: 8,
-              marginTop: 4,
-              marginBottom: 32,
-            }}
-          >
-            <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 6 }}>
-              Estimated amount
-            </Text>
-            {rows.map((row) => (
-              <View
-                key={row.label}
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  paddingVertical: 12,
-                  borderBottomWidth: 1,
-                  borderBottomColor: colors.surfaceBorder,
-                }}
-              >
-                <Text style={{ color: colors.textMuted, fontSize: 14 }}>{row.label}</Text>
-                <Text style={{ color: colors.text, fontSize: 14, fontWeight: "500" }}>{row.value}</Text>
-              </View>
-            ))}
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingVertical: 14 }}>
-              <Text style={{ color: colors.textMuted, fontSize: 14 }}>Estimated total</Text>
-              {/* Same text box every render, so switching durations never shifts the layout. */}
-              <Text style={{ color: colors.text, fontSize: 22, fontWeight: "700" }}>
-                {formatBHD(estimateTotal(months))}
-              </Text>
-            </View>
-            <Text style={{ color: colors.textSubtle, fontSize: 12, lineHeight: 16, paddingBottom: 6 }}>
-              Sample rate — MAZ confirms final pricing after reviewing your request.
-            </Text>
-          </View>
+          <EstimateCard
+            rows={rows}
+            total={formatBHD(estimateTotal(months))}
+            note="Sample rate — MAZ confirms final pricing after reviewing your request."
+            style={{ marginTop: 4, marginBottom: 32 }}
+          />
 
           <AnimatedButton
             label="Continue to your details"
