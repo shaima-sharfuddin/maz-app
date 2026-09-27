@@ -86,8 +86,11 @@ an earlier TypeScript version — the conversion is complete and current files a
 - screens/SubmitRequestScreen.js ✅ — (this is the screen previously listed as "BookingForm") Full Name, Email,
   Company Name, Activity dropdown, optional Remark + RequestSummaryCard built by buildRequestSummary
   (term is real; location and rate are PLACEHOLDERS).
-  Submit validates, calls mock submitRequest, then resets the stack to [HomeDashboard, RequestStatus]
-- screens/RequestStatusScreen.js ✅ — StatusStepper + confirmation + summary; loads fetchRequestStatus
+  Submit validates, calls mock submitRequest, then PUSHES RequestStatus (no stack reset), so Back retraces
+  RequestStatus → SubmitRequest → SelectTerm → BrowsePlans → dashboard. After submitting, the form's button
+  becomes "View request status" so it can't be sent twice
+- screens/RequestStatusScreen.js ✅ — StatusStepper + confirmation + summary; loads fetchRequestStatus.
+  Back → previous step; "Back to dashboard" → popToTop
   (mock always returns step 1 — swap for the real API to show the true stage)
 - screens/ContractDetailScreen.js ✅ — per the recruiter wireframe: contract no. + unit + StatusBadge, Contract term
   (start / end, plus the pending renewal), Bill details, Payment details, Payment due + bills list, "Pay outstanding

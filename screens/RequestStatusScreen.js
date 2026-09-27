@@ -94,7 +94,8 @@ export default function RequestStatusScreen({ navigation, route }) {
             </View>
           ) : null}
 
-          <AnimatedButton label="Back to dashboard" variant="ghost" onPress={() => navigation.goBack()} />
+          {/* Back (above) retraces the request steps; this jumps straight to the dashboard. */}
+          <AnimatedButton label="Back to dashboard" variant="ghost" onPress={() => navigation.popToTop()} />
         </View>
       </ScrollView>
     </SafeAreaView>

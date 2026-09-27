@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
@@ -28,6 +29,9 @@ export default function SubmitRequestScreen({ navigation, route }) {
     formState: { isValid },
   } = useZodForm(submitRequestSchema, { fullName: "", email: "", companyName: "", activity: "", remark: "" });
   const { submit, loading, error } = useSubmit(submitRequest);
+  // Set once the request is sent. The screen stays in the stack (so Back retraces every step),
+  // but the form can't be sent twice — its button opens the status screen instead.
+  const [submittedId, setSubmittedId] = useState(null);
 
   const summary = buildRequestSummary(
     route.params?.plan?.title ?? FALLBACK_PLAN_TITLE,
@@ -37,13 +41,12 @@ export default function SubmitRequestScreen({ navigation, route }) {
   const onSubmit = handleSubmit(async (values) => {
     const result = await submit({ ...values, summary });
     if (result) {
-      // Dashboard underneath so Back leaves the flow; the form can't be re-submitted.
-      navigation.reset({
-        index: 1,
-        routes: [{ name: "HomeDashboard" }, { name: "RequestStatus", params: { requestId: result.requestId, summary } }],
-      });
+      setSubmittedId(result.requestId);
+      navigation.navigate("RequestStatus", { requestId: result.requestId, summary });
     }
   });
+
+  const viewStatus = () => navigation.navigate("RequestStatus", { requestId: submittedId, summary });
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -106,13 +109,24 @@ export default function SubmitRequestScreen({ navigation, route }) {
               <RequestSummaryCard summary={summary} />
             </View>
 
-            <AnimatedButton
-              label={loading ? "Submitting…" : "Submit Request"}
-              onPress={onSubmit}
-              disabled={!isValid}
-              loading={loading}
-            />
-            <ErrorBanner message={error} onRetry={onSubmit} />
+            {submittedId ? (
+              <>
+                <Text className="text-sm text-center mb-4" style={{ color: colors.success }}>
+                  {"✓"} Request {submittedId} submitted
+                </Text>
+                <AnimatedButton label="View request status" onPress={viewStatus} />
+              </>
+            ) : (
+              <>
+                <AnimatedButton
+                  label={loading ? "Submitting…" : "Submit Request"}
+                  onPress={onSubmit}
+                  disabled={!isValid}
+                  loading={loading}
+                />
+                <ErrorBanner message={error} onRetry={onSubmit} />
+              </>
+            )}
 
             <Text className="text-sm leading-5 text-center mt-4" style={{ color: colors.textMuted }}>
               After submission, a confirmation and status updates are sent to the email you provided.
