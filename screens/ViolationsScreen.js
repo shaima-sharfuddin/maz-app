@@ -8,9 +8,10 @@ import ScreenTitle from "../components/ScreenTitle";
 import EmptyState from "../components/EmptyState";
 import PressableScale from "../components/PressableScale";
 import StatusBadge from "../components/StatusBadge";
+import SectionHeading from "../components/SectionHeading";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchViolations } from "../services/api";
+import { fetchViolations, VIOLATIONS_ARE_DEMO, errorMessage } from "../services/api";
 import { formatDate } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
 import { useDemo } from "../demo/DemoContext";
@@ -22,7 +23,14 @@ function ViolationRow({ violation, onPress }) {
       onPress={onPress}
       scaleTo={0.98}
       accessibilityRole="button"
-      accessibilityLabel={`${violation.title}, ${violation.status}`}
+      accessibilityLabel={[
+        violation.title,
+        violation.status,
+        violation.demo ? "demo data" : null,
+        violation.status === "open" && violation.dueDate ? `due ${formatDate(violation.dueDate)}` : null,
+      ]
+        .filter(Boolean)
+        .join(", ")}
       containerStyle={{ marginBottom: 10 }}
       style={{
         flexDirection: "row",
@@ -38,10 +46,16 @@ function ViolationRow({ violation, onPress }) {
         <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
           <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>{violation.title}</Text>
           <StatusBadge status={violation.status} />
+          {violation.demo ? <StatusBadge status="demo" /> : null}
         </View>
         <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-          {violation.unit ?? violation.contractId} · Issued {formatDate(violation.issuedOn)}
+          {[violation.unit ?? violation.contractId, `Issued ${formatDate(violation.issuedOn)}`].filter(Boolean).join(" · ")}
         </Text>
+        {violation.status === "open" && violation.dueDate ? (
+          <Text style={{ color: colors.danger, fontSize: 13, lineHeight: 18, marginTop: 2 }}>
+            Due {formatDate(violation.dueDate)}
+          </Text>
+        ) : null}
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
     </PressableScale>
@@ -57,9 +71,7 @@ export default function ViolationsScreen({ navigation }) {
   const section = (title, items) =>
     items.length > 0 ? (
       <View className="mb-8">
-        <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
-          {title}
-        </Text>
+        <SectionHeading>{title}</SectionHeading>
         {items.map((violation) => (
           <ViolationRow
             key={violation.id}
@@ -84,7 +96,7 @@ export default function ViolationsScreen({ navigation }) {
         <EmptyState
           icon="cloud-offline-outline"
           title="We couldn't load your notices"
-          message="Please check your connection and try again."
+          message={errorMessage(error)}
         >
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>
@@ -94,7 +106,7 @@ export default function ViolationsScreen({ navigation }) {
       return (
         <EmptyState
           icon="shield-checkmark-outline"
-          title="No violations"
+          title="No violations — you're all clear"
           message="Your account is in good standing."
         />
       );
@@ -102,6 +114,15 @@ export default function ViolationsScreen({ navigation }) {
     const open = violations.filter((v) => v.status === "open");
     return (
       <View>
+        {/* Demo records (services/violationService.js — MOCK): never presented as MAZ's. */}
+        {VIOLATIONS_ARE_DEMO ? (
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.textSubtle} />
+            <Text style={{ flex: 1, color: colors.textSubtle, fontSize: 12, lineHeight: 16 }}>
+              Demo data — sample notices to show how violations will work. MAZ&apos;s violation records aren&apos;t connected yet.
+            </Text>
+          </View>
+        ) : null}
         {open.length === 0 ? (
           <Text className="text-sm mb-6" style={{ color: colors.success }}>
             {"✓"} No open notices — your account is in good standing.

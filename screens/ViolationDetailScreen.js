@@ -9,7 +9,8 @@ import EmptyState from "../components/EmptyState";
 import StatusBadge from "../components/StatusBadge";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchViolation } from "../services/api";
+import { fetchViolation, VIOLATIONS_ARE_DEMO, errorMessage } from "../services/api";
+import { Ionicons } from "@expo/vector-icons";
 import { formatBHD } from "../data/pricing";
 import { formatDate } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
@@ -62,7 +63,7 @@ export default function ViolationDetailScreen({ navigation, route }) {
         <EmptyState
           icon="cloud-offline-outline"
           title="We couldn't load this notice"
-          message="Please check your connection and try again."
+          message={errorMessage(error)}
         >
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>
@@ -71,10 +72,14 @@ export default function ViolationDetailScreen({ navigation, route }) {
 
     const rows = [
       { label: "Status", value: <StatusBadge status={violation.status} /> },
-      { label: "Contract", value: violation.contractId },
-      ...(violation.unit ? [{ label: "Unit", value: `${violation.unit} · ${violation.location}` }] : []),
-      { label: "Category", value: violation.category },
+      ...(violation.demo ? [{ label: "Source", value: <StatusBadge status="demo" /> }] : []),
+      { label: "Contract", value: violation.contractId ?? "Not linked (demo record)" },
+      ...(violation.unit ? [{ label: "Unit", value: [violation.unit, violation.location].filter(Boolean).join(" · ") }] : []),
+      ...(violation.category ? [{ label: "Category", value: violation.category }] : []),
       { label: "Issued", value: formatDate(violation.issuedOn) },
+      ...(violation.status === "open" && violation.dueDate
+        ? [{ label: "Due date", value: formatDate(violation.dueDate), emphasize: true }]
+        : []),
       ...(violation.fine ? [{ label: "Fine", value: formatBHD(violation.fine), emphasize: true }] : []),
     ];
 
@@ -89,6 +94,16 @@ export default function ViolationDetailScreen({ navigation, route }) {
             </Text>
           ) : null}
         </DetailCard>
+
+        {/* Demo record (services/violationService.js — MOCK). */}
+        {VIOLATIONS_ARE_DEMO && violation.demo ? (
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.textSubtle} />
+            <Text style={{ flex: 1, color: colors.textSubtle, fontSize: 12, lineHeight: 16 }}>
+              Demo data — a sample notice, not a MAZ record.
+            </Text>
+          </View>
+        ) : null}
 
         <TextCard title="Details" body={violation.description} />
 
@@ -107,7 +122,7 @@ export default function ViolationDetailScreen({ navigation, route }) {
               navigation.navigate("NewEnquiry", {
                 prefill: {
                   category: "Violation query",
-                  contractId: violation.contractId,
+                  contractId: violation.contractId ?? null,
                   subject: `${violation.id}: ${violation.title}`,
                 },
               })

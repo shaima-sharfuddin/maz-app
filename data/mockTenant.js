@@ -25,9 +25,9 @@ export const MOCK_CONTRACTS = [
   },
   {
     id: "BH-2026-0117",
-    unit: "Incubator Desk I-12",
+    unit: "Office 112",
     location: "Manama",
-    type: "incubator",
+    type: "office",
     status: "active",
     startDate: "2026-04-01",
     endDate: "2027-03-31",

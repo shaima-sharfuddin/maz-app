@@ -9,7 +9,7 @@ import EmptyState from "../components/EmptyState";
 import StatusBadge from "../components/StatusBadge";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchEnquiry } from "../services/api";
+import { fetchEnquiry, errorMessage } from "../services/api";
 import { formatTimestamp } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
 
@@ -62,7 +62,7 @@ export default function EnquiryDetailScreen({ navigation, route }) {
         <EmptyState
           icon="cloud-offline-outline"
           title="We couldn't load this enquiry"
-          message="Please check your connection and try again."
+          message={errorMessage(error)}
         >
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>

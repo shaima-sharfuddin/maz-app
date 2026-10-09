@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { BAHRAIN, ACTIVITIES } from "../data/formOptions";
+import { findCountry } from "../data/countryCodes";
+import { MIN_LEASE_MONTHS, MAX_LEASE_MONTHS } from "../data/pricing";
 
 // Reusable field rules for every form in the app (used via hooks/useZodForm.js).
 // Plain Zod, no React — so the same rules can later be shared with the backend.
@@ -36,6 +39,36 @@ export const phone = z
   .trim()
   .min(1, "Phone number is required")
   .refine((v) => BH_PHONE_RE.test(v.replace(/[\s-]/g, "")), "Enter a valid Bahrain number, e.g. +973 3xxx xxxx");
+
+// ---- International mobile number (New User sign-up) ------------------------
+// The number is typed without the dial code (picked separately). Spaces, dashes, dots and brackets are ignored;
+// a leading domestic "0" is dropped where people commonly type one (country.trunk, e.g. UK 07…).
+const PHONE_SEPARATORS_RE = /[\s\-().]/g;
+
+// (iso, typed) → the national number as stored: digits only, trunk "0" removed.
+export function nationalPhoneDigits(iso, typed) {
+  const digits = String(typed ?? "").replace(PHONE_SEPARATORS_RE, "");
+  return findCountry(iso)?.trunk && digits.startsWith("0") ? digits.slice(1) : digits;
+}
+
+// The problem with a mobile number for the chosen country, or null when it's fine. Lengths come from
+// data/countryCodes.js; countries without one get the international limits (E.164: at most 15 digits in all).
+export function mobileNumberIssue(iso, typed) {
+  if (!String(typed ?? "").trim()) return "Mobile Number is required";
+  const country = findCountry(iso);
+  if (!country) return "Select a country code";
+  if (!/^\d+$/.test(String(typed).replace(PHONE_SEPARATORS_RE, ""))) return "Use digits only";
+  const national = nationalPhoneDigits(iso, typed);
+  const maxForCode = 15 - (country.dial.length - 1);
+  const [min, max] = country.len ?? [4, maxForCode];
+  if (national.length < min || national.length > Math.min(max, maxForCode)) {
+    const digits = min === max ? `${min} digits` : `${min}–${max} digits`;
+    return `Enter a valid ${country.name} number (${digits})`;
+  }
+  // +1 (US, Canada, Caribbean): area codes never start with 0 or 1.
+  if (country.dial === "+1" && !/^[2-9]/.test(national)) return `Enter a valid ${country.name} number`;
+  return null;
+}
 
 export const fullName = z
   .string()
@@ -93,12 +126,6 @@ export const optional = (schema) =>
 
 // ---- Form schemas ----------------------------------------------------------
 
-export const signUpSchema = z.object({
-  fullName,
-  email,
-  phone,
-});
-
 export const verifyAccountSchema = z.object({
   code: otpCode,
 });
@@ -130,15 +157,8 @@ export const completeProfileSchema = z.object({
     passportExpiryDate: optional(futureDate),
     nationality: optionalText,
     gender: requiredSelect("Gender"),
+    ownerType: requiredSelect("Owner Type"),
   }),
-});
-
-export const submitRequestSchema = z.object({
-  fullName,
-  email,
-  companyName: requiredText("Company Name"),
-  activity: requiredSelect("Activity"),
-  remark: z.string().trim().max(500, "Keep remarks under 500 characters"),
 });
 
 export const supportEnquirySchema = z.object({
@@ -155,6 +175,58 @@ export const bookingSchema = z.object({
   start: z.string().min(1, "Select a time slot"),
   durationHours: z.number(),
   notes: z.string().trim().max(300, "Keep notes under 300 characters"),
+});
+
+// New User sign-up (WelcomeScreen → "New User"). Mobile Number: country code (any country) + a number valid for
+// it (mobileNumberIssue). Bahrain → CPR Number required; any other nationality → Passport Number required. The screen only renders the field that applies and clears the other one.
+export const newUserSignUpSchema = z
+  .object({
+    companyName: requiredText("Company Name"),
+    customerName: requiredText("Customer Name"),
+    // Business activity (restored at the recruiter's request, 2026-10-10): required, one choice from ACTIVITIES —
+    // SAMPLE options until MAZ provides its activity list. Kept in the app only; never sent to MAZ.
+    activity: requiredSelect("Activity").refine((value) => !value || ACTIVITIES.includes(value), {
+      message: "Select an activity from the list",
+    }),
+    email,
+    phoneCountry: requiredSelect("Country code"), // ISO code; the dial code is derived (data/countryCodes.js)
+    phoneNumber: z.string(),
+    nationality: requiredSelect("Nationality"),
+    cprNumber: z.string(),
+    passportNumber: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    const phoneIssue = values.phoneCountry ? mobileNumberIssue(values.phoneCountry, values.phoneNumber) : null;
+    if (phoneIssue) ctx.addIssue({ code: "custom", path: ["phoneNumber"], message: phoneIssue });
+    if (!values.nationality) return;
+    if (values.nationality === BAHRAIN) {
+      const result = cprNumber.safeParse(values.cprNumber);
+      if (!result.success) {
+        const message = values.cprNumber.trim() ? result.error.issues[0].message : "CPR Number is required";
+        ctx.addIssue({ code: "custom", path: ["cprNumber"], message });
+      }
+    } else if (!values.passportNumber.trim()) {
+      ctx.addIssue({ code: "custom", path: ["passportNumber"], message: "Passport Number is required" });
+    }
+  });
+
+// EditProfile: only the non-sensitive account fields (the email is shown read-only). Nationality and the
+// CPR / passport number are collected at sign-up but never shown or edited in the signed-in app.
+export const editProfileSchema = z.object({
+  companyName: requiredText("Company Name"),
+  customerName: requiredText("Customer Name"),
+  email,
+});
+
+// SelectTerm: lease length in whole months (MIN_LEASE_MONTHS–MAX_LEASE_MONTHS) and how often the tenant
+// pays — an INSTALLMENTS code ("12" Monthly, "4" Quarterly, "2" Half-Yearly, "1" Yearly).
+export const selectTermSchema = z.object({
+  termMonths: z
+    .number()
+    .int("Choose a whole number of months")
+    .min(MIN_LEASE_MONTHS, `Choose at least ${MIN_LEASE_MONTHS} month`)
+    .max(MAX_LEASE_MONTHS, `Choose up to ${MAX_LEASE_MONTHS} months`),
+  paymentFrequency: requiredSelect("Payment frequency"),
 });
 
 export const renewalSchema = z.object({

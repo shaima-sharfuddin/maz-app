@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { View, Text } from "react-native";
+import { useEffect, useState } from "react";
+import { Animated, Easing, View, Text } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import PressableScale from "./PressableScale";
+import FadeIn from "./FadeIn";
 import { useTheme } from "../theme/ThemeContext";
+import { TYPE } from "../theme/theme";
 
 // Uncontrolled by default (defaultExpanded). Pass `expanded` + `onToggle` to control it from the parent,
 // e.g. to open a collapsed section that contains a validation error.
@@ -12,6 +15,18 @@ export default function SectionCard({ title, subtitle, defaultExpanded = true, e
   const expanded = controlled ? expandedProp : expandedState;
   const toggle = () => (controlled ? onToggle?.(!expanded) : setExpandedState((prev) => !prev));
 
+  // The chevron turns with the state; the revealed content settles in (FadeIn) instead of popping.
+  const [rotation] = useState(() => new Animated.Value(expanded ? 1 : 0));
+  useEffect(() => {
+    Animated.timing(rotation, {
+      toValue: expanded ? 1 : 0,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [expanded, rotation]);
+  const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
+
   return (
     <View
       style={{
@@ -19,7 +34,7 @@ export default function SectionCard({ title, subtitle, defaultExpanded = true, e
         borderWidth: 1,
         borderColor: colors.surfaceBorder,
         borderRadius: 16,
-        marginBottom: 16,
+        marginBottom: 32, // section spacing (mb-8) — each card is its own block of the form
         overflow: "hidden",
       }}
     >
@@ -36,15 +51,21 @@ export default function SectionCard({ title, subtitle, defaultExpanded = true, e
         }}
       >
         <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>{title}</Text>
+          <Text style={[TYPE.cardTitle, { color: colors.text }]}>{title}</Text>
           {subtitle ? (
             <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>{subtitle}</Text>
           ) : null}
         </View>
-        <Text style={{ color: colors.textMuted, fontSize: 14 }}>{expanded ? "▲" : "▼"}</Text>
+        <Animated.View style={{ transform: [{ rotate }] }}>
+          <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+        </Animated.View>
       </PressableScale>
 
-      {expanded ? <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>{children}</View> : null}
+      {expanded ? (
+        <FadeIn offset={4} style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+          {children}
+        </FadeIn>
+      ) : null}
     </View>
   );
 }

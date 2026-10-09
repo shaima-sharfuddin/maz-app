@@ -3,10 +3,11 @@ import { Animated, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
 
 // Shared press feedback for every tappable element: subtle scale-down + light haptic.
-// Large surfaces (cards, rows) should pass a gentler scaleTo, e.g. 0.98.
+// Large surfaces (cards, rows) should pass a gentler scaleTo, e.g. 0.98. A short, critically damped spring —
+// no overshoot, so presses feel precise rather than bouncy.
 export default function PressableScale({
   onPress,
-  scaleTo = 0.96,
+  scaleTo = 0.97,
   containerStyle,
   style,
   children,
@@ -19,8 +20,8 @@ export default function PressableScale({
     Animated.spring(scale, {
       toValue,
       useNativeDriver: true,
-      speed: 40,
-      bounciness: 4,
+      speed: 50,
+      bounciness: 0,
     }).start();
   };
 

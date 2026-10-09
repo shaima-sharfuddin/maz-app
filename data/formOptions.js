@@ -1,10 +1,25 @@
+import { GENDER, OWNER_TYPE } from "./enums";
+
 // Exact values from MAZ's admin "Create Customer" form.
 export const COMPANIES = ["MAZ COMPANY", "MAZ BUSINESS CENTER INCUBATOR", "MAZ BUSINESS CENTER", "MAZ BDB"];
 
-export const GENDERS = ["Male", "Female"];
+// Labels from the backend's GENDER enum ("m" → "Male", "f" → "Female"). The form stores the label;
+// convert back to the code when profiles are POSTed to /customers.
+export const GENDERS = Object.values(GENDER);
 
-// PLACEHOLDER — sample Bahrain business activities for the Submit Request form.
-// Replace with the real Activity list (MAZ's activity codes) from the API once available.
+// New User sign-up (client feedback, 2026-10-07): a short GCC-focused list. Bahrain asks for a CPR number,
+// every other choice for a passport number. Country names, unlike NATIONALITIES' demonyms below — the
+// format the backend expects for nationality is still unconfirmed.
+export const BAHRAIN = "Bahrain";
+export const GCC_NATIONALITIES = [BAHRAIN, "Saudi Arabia", "UAE", "Kuwait", "Qatar", "Oman", "Other"];
+
+// { value: code, label } from the backend's OwnerTypeEnum — the form stores the code ("o", "p" …),
+// ready to send to the API as-is.
+export const OWNER_TYPES = Object.entries(OWNER_TYPE).map(([value, label]) => ({ value, label }));
+
+// PLACEHOLDER — SAMPLE Bahrain business activities for the New User sign-up's Activity field (Company step).
+// Not MAZ's list: MAZ links activities to a contract by numeric id (contracts.activity_id, e.g. [145, 21]) and there
+// is no endpoint to fetch the list yet. Replace with the real Activity list from the API once available.
 export const ACTIVITIES = [
   "Management Consultancy",
   "Real Estate Activities",

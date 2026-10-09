@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from "react";
+import { errorMessage } from "../services/errorMessages";
 
 // Wraps an API call for a submit button: tracks loading, blocks double taps, and keeps the
 // error for ErrorBanner. submit() resolves to the result, or undefined if it failed.
+// The message is errorMessage(e): an ApiError's own (user-safe) message, never an unexpected exception's text.
 // `errorCode` is the ApiError code (e.g. "INVALID_CREDENTIALS") for screens that react to specific errors.
 export default function useSubmit(asyncFn) {
   const [loading, setLoading] = useState(false);
@@ -17,7 +19,7 @@ export default function useSubmit(asyncFn) {
       try {
         return await asyncFn(...args);
       } catch (e) {
-        setFailure({ message: e?.message || "Something went wrong. Please try again.", code: e?.code ?? null });
+        setFailure({ message: errorMessage(e), code: e?.code ?? null });
         return undefined;
       } finally {
         inFlight.current = false;

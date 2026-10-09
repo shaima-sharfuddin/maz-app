@@ -7,16 +7,21 @@ import FormField from "../components/FormField";
 import ErrorBanner from "../components/ErrorBanner";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
+import IconBadge from "../components/IconBadge";
 import TextLink from "../components/TextLink";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import { verifyAccountSchema } from "../validation/schemas";
 import { verifyEmail, resendVerificationCode, MOCK_OTP_CODE } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
+import { useAuth } from "../auth/AuthContext";
+import { useDemo } from "../demo/DemoContext";
 
 const RESEND_COOLDOWN_S = 30;
 
-// Step 2 of the flow: Sign up → Verify account → Log in.
+// Email OTP after New User sign-up (and from Login's "Verify email" for an account that never verified).
+// A New User's verifyEmail result carries their session: they're signed in at once and land on the new-user
+// dashboard ("What are you looking for?") — no confirmation screen (client feedback). Otherwise → Login.
 export default function VerifyAccountScreen({ navigation, route }) {
   const { colors } = useTheme();
   const email = route.params?.email ?? "";
@@ -27,6 +32,8 @@ export default function VerifyAccountScreen({ navigation, route }) {
     formState: { isValid },
   } = useZodForm(verifyAccountSchema, { code: "" });
 
+  const { signIn } = useAuth();
+  const { setUserState } = useDemo();
   const verify = useSubmit(verifyEmail);
   const resend = useSubmit(resendVerificationCode);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_S);
@@ -41,7 +48,12 @@ export default function VerifyAccountScreen({ navigation, route }) {
 
   const onSubmit = handleSubmit(async ({ code }) => {
     const result = await verify.submit({ email, code });
-    if (result) {
+    if (result?.session) {
+      // DEMO: a brand-new account has no contracts, so the dashboard shows the new-user state.
+      setUserState("newUser");
+      // Switches the navigator to the signed-in screens (App.js) — the dashboard is the first screen.
+      signIn(result.session);
+    } else if (result) {
       navigation.replace("Login", { email, justVerified: true });
     } else {
       setValue("code", "", { shouldValidate: false }); // clear a wrong code so it can be retyped
@@ -64,7 +76,9 @@ export default function VerifyAccountScreen({ navigation, route }) {
           <View className="flex-1 px-6 pt-8 pb-10">
             <BackButton onPress={() => navigation.goBack()} />
 
+            <IconBadge icon="mail-unread-outline" style={{ marginBottom: 20 }} />
             <ScreenTitle
+              eyebrow="MAZ Business Center"
               title="Verify your email"
               subtitle={`Enter the 6-digit code we sent to ${email || "your email"}.`}
             />

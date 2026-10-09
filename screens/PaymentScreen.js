@@ -5,16 +5,19 @@ import { Ionicons } from "@expo/vector-icons";
 import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
-import PressableScale from "../components/PressableScale";
 import EmptyState from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import useAsync from "../hooks/useAsync";
 import useSubmit from "../hooks/useSubmit";
-import { fetchContract, payOutstandingBalance } from "../services/api";
+import { fetchContract, payOutstandingBalance, fetchRequestInvoice, payRequestInvoice, errorMessage } from "../services/api";
 import { PAYMENT_METHODS } from "../data/paymentMethods";
 import { formatBHD } from "../data/pricing";
 import { formatDate, formatMonth } from "../utils/formatDate";
+import { unitWithLocation } from "../utils/formatUnit";
+import SectionHeading from "../components/SectionHeading";
+import PaymentMethodOption from "../components/PaymentMethodOption";
+import DetailCard from "../components/DetailCard";
 import { useTheme } from "../theme/ThemeContext";
 
 function PaymentSkeleton() {
@@ -35,73 +38,35 @@ function PaymentSkeleton() {
   );
 }
 
-function MethodOption({ method, selected, onSelect }) {
-  const { colors } = useTheme();
-  return (
-    <PressableScale
-      onPress={onSelect}
-      scaleTo={0.98}
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      containerStyle={{ marginBottom: 10 }}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: selected ? colors.primaryTint : colors.surface,
-        borderWidth: 1.5,
-        borderColor: selected ? colors.primary : colors.surfaceBorder,
-        borderRadius: 16,
-        padding: 16,
-      }}
-    >
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          backgroundColor: colors.inputBackground,
-          borderWidth: 1,
-          borderColor: colors.inputBorder,
-          alignItems: "center",
-          justifyContent: "center",
-          marginRight: 14,
-        }}
-      >
-        <Ionicons name={method.icon} size={20} color={colors.textSecondary} />
-      </View>
-      <View style={{ flex: 1, marginRight: 12 }}>
-        <Text style={{ color: colors.text, fontSize: 15, fontWeight: "600" }}>{method.label}</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>{method.description}</Text>
-      </View>
-      <Ionicons
-        name={selected ? "radio-button-on" : "radio-button-off"}
-        size={22}
-        color={selected ? colors.primary : colors.textSubtle}
-      />
-    </PressableScale>
-  );
-}
-
 // ⚠️ MOCK PAYMENT — no gateway is connected and nothing is charged (see CLAUDE.md → Open questions).
+// Pays either a contract's outstanding balance ({ contractId }) or a new office request's invoice
+// ({ requestId }, from RequestStatus at "Invoice Generated"). Both loaders return the same shape.
 export default function PaymentScreen({ navigation, route }) {
   const { colors } = useTheme();
   const contractId = route.params?.contractId;
-  const loadContract = useCallback(() => fetchContract(contractId), [contractId]);
-  const { loading, data: contract, error, reload } = useAsync(loadContract);
+  const requestId = route.params?.requestId;
+  const isInvoice = Boolean(requestId);
+  const loadPayable = useCallback(
+    () => (requestId ? fetchRequestInvoice(requestId) : fetchContract(contractId)),
+    [requestId, contractId]
+  );
+  const { loading, data: contract, error, reload } = useAsync(loadPayable);
 
   const [methodId, setMethodId] = useState(PAYMENT_METHODS[0].id);
-  const pay = useSubmit(payOutstandingBalance);
+  const pay = useSubmit(isInvoice ? payRequestInvoice : payOutstandingBalance);
 
   const handlePay = async () => {
-    const receipt = await pay.submit(contractId, methodId);
+    const receipt = await pay.submit(isInvoice ? requestId : contractId, methodId);
     if (!receipt) return; // error is shown by the ErrorBanner below
-    // Fresh stack so the dashboard and contract re-load with the settled balance,
-    // and Back from the receipt can't return to this (now paid) screen.
+    // Fresh stack so the screen underneath re-loads with the payment, and Back from the Payment Successful
+    // screen can't return to this (now paid) screen. The dashboard stays at the root of the stack.
     navigation.reset({
       index: 2,
       routes: [
         { name: "HomeDashboard" },
-        { name: "ContractDetail", params: { contractId } },
+        isInvoice
+          ? { name: "RequestStatus", params: { requestId } }
+          : { name: "ContractDetail", params: { contractId } },
         { name: "PaymentReceipt", params: { receipt } },
       ],
     });
@@ -114,7 +79,7 @@ export default function PaymentScreen({ navigation, route }) {
         <EmptyState
           icon="cloud-offline-outline"
           title="We couldn't load this payment"
-          message="Please check your connection and try again."
+          message={errorMessage(error)}
         >
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>
@@ -125,9 +90,13 @@ export default function PaymentScreen({ navigation, route }) {
         <EmptyState
           icon="checkmark-circle-outline"
           title="Nothing to pay"
-          message="This contract has no outstanding balance."
+          message={isInvoice ? "This invoice is already paid." : "This contract has no outstanding balance."}
         >
-          <AnimatedButton label="Back to contract" variant="ghost" onPress={() => navigation.goBack()} />
+          <AnimatedButton
+            label={isInvoice ? "Back to request" : "Back to contract"}
+            variant="ghost"
+            onPress={() => navigation.goBack()}
+          />
         </EmptyState>
       );
     }
@@ -148,14 +117,26 @@ export default function PaymentScreen({ navigation, route }) {
           }}
         >
           <Text style={{ color: colors.textMuted, fontSize: 13 }}>Amount due</Text>
-          <Text style={{ color: colors.text, fontSize: 32, fontWeight: "700", marginVertical: 6 }}>
+          <Text style={{ color: colors.text, fontSize: 32, lineHeight: 36, fontWeight: "800", letterSpacing: -0.5, marginVertical: 6 }}>
             {formatBHD(contract.outstanding)}
           </Text>
           <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: "center" }}>
-            {contract.unit} · {contract.location}
+            {unitWithLocation(contract.unit, contract.location)}
             {contract.dueDate ? `\nDue by ${formatDate(contract.dueDate)}` : ""}
           </Text>
         </View>
+
+        {isInvoice ? (
+          // What this payment is for, so the amount is never out of context.
+          <DetailCard
+            title="You're paying for"
+            rows={[
+              contract.invoiceNumber ? { label: "Invoice", value: contract.invoiceNumber } : null,
+              contract.description ? { label: "Service", value: contract.description } : null,
+              contract.paymentFrequency ? { label: "Payment frequency", value: contract.paymentFrequency } : null,
+            ].filter(Boolean)}
+          />
+        ) : null}
 
         <View
           style={{
@@ -181,18 +162,18 @@ export default function PaymentScreen({ navigation, route }) {
             >
               <View>
                 <Text style={{ color: colors.text, fontSize: 14, fontWeight: "600" }}>{bill.number}</Text>
-                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{formatMonth(bill.month)}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                  {bill.periodLabel ?? formatMonth(bill.month)}
+                </Text>
               </View>
               <Text style={{ color: colors.text, fontSize: 14, fontWeight: "500" }}>{formatBHD(bill.amount)}</Text>
             </View>
           ))}
         </View>
 
-        <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
-          Payment method
-        </Text>
+        <SectionHeading>Payment method</SectionHeading>
         {PAYMENT_METHODS.map((method) => (
-          <MethodOption
+          <PaymentMethodOption
             key={method.id}
             method={method}
             selected={method.id === methodId}
@@ -200,7 +181,7 @@ export default function PaymentScreen({ navigation, route }) {
           />
         ))}
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 24 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 32 }}>
           <Ionicons name="information-circle-outline" size={16} color={colors.textSubtle} />
           <Text style={{ flex: 1, color: colors.textSubtle, fontSize: 12, lineHeight: 16 }}>
             Demo payment — no money is charged. The real payment gateway is still to be confirmed.
@@ -223,8 +204,8 @@ export default function PaymentScreen({ navigation, route }) {
         <View className="flex-1 px-6 pt-8 pb-10">
           <BackButton onPress={() => navigation.goBack()} />
           <ScreenTitle
-            eyebrow={contractId ? `Contract ${contractId}` : undefined}
-            title="Pay outstanding balance"
+            eyebrow={isInvoice ? `Request ${requestId}` : contractId ? `Contract ${contractId}` : undefined}
+            title={isInvoice ? "Pay your invoice" : "Pay outstanding balance"}
             subtitle="Review the amount and choose how you'd like to pay."
           />
           {renderContent()}

@@ -7,21 +7,42 @@ import { useTheme } from "../theme/ThemeContext";
 
 // `onBlur` fires when the sheet closes (so form validation treats the field as touched);
 // `error` shows an inline message + danger border.
+// `options` are strings (value = label) or { value, label } — e.g. an enum code with its label,
+// where the form stores the code ("p") and the field shows the label ("Partner").
+const normalize = (option) => (typeof option === "string" ? { value: option, label: option } : option);
+
+// `compact` (e.g. the country-code half of the Mobile Number field): no label above, no bottom margin and no
+// inline error — the parent shows those; `label` still titles the sheet. `formatSelected(value)` replaces the
+// selected option's label in the field itself (e.g. "🇦🇪 +971" for "🇦🇪  United Arab Emirates  +971").
 
 // Lists longer than this get a search box.
 const SEARCH_THRESHOLD = 10;
 
-export default function SelectField({ label, value, onChange, onBlur, error, options, placeholder = "Select an option" }) {
+export default function SelectField({
+  label,
+  value,
+  onChange,
+  onBlur,
+  error,
+  options,
+  placeholder = "Select an option",
+  compact = false,
+  formatSelected,
+}) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const insets = useSafeAreaInsets();
 
-  const searchable = options.length > SEARCH_THRESHOLD;
+  const items = useMemo(() => options.map(normalize), [options]);
+  const selectedItem = items.find((item) => item.value === value);
+  const selectedLabel = selectedItem && formatSelected ? formatSelected(selectedItem.value) : (selectedItem?.label ?? value);
+
+  const searchable = items.length > SEARCH_THRESHOLD;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter((option) => option.toLowerCase().includes(q)) : options;
-  }, [options, query]);
+    return q ? items.filter((item) => item.label.toLowerCase().includes(q)) : items;
+  }, [items, query]);
 
   const close = () => {
     setOpen(false);
@@ -29,37 +50,37 @@ export default function SelectField({ label, value, onChange, onBlur, error, opt
     onBlur?.();
   };
 
-  const select = (option) => {
-    onChange(option);
+  const select = (item) => {
+    onChange(item.value);
     close();
   };
 
   return (
-    <View style={{ marginBottom: 20 }}>
-      <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{label}</Text>
+    <View style={{ marginBottom: compact ? 0 : 20 }}>
+      {compact ? null : <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>{label}</Text>}
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="button"
-        accessibilityLabel={`${label}: ${value || "not selected"}`}
+        accessibilityLabel={`${label}: ${selectedLabel || "not selected"}`}
         accessibilityHint={error || undefined}
         style={{
           flexDirection: "row",
           alignItems: "center",
           backgroundColor: colors.inputBackground,
           borderRadius: 12,
-          paddingHorizontal: 16,
+          paddingHorizontal: compact ? 12 : 16,
           paddingVertical: 12,
           minHeight: 48,
           borderWidth: 1.5,
           borderColor: error ? colors.danger : open ? colors.primary : colors.inputBorder,
         }}
       >
-        <Text style={{ flex: 1, color: value ? colors.text : colors.textSubtle, fontSize: 14 }}>
-          {value || placeholder}
+        <Text style={[{ color: value ? colors.text : colors.textSubtle, fontSize: 14 }, compact ? { marginRight: 8 } : { flex: 1 }]}>
+          {selectedLabel || placeholder}
         </Text>
         <Text style={{ color: colors.textMuted, fontSize: 12 }}>{"▼"}</Text>
       </Pressable>
-      <FieldError message={error} />
+      {compact ? null : <FieldError message={error} />}
 
       {/* Translucent bars (Android): the backdrop covers the full screen; the sheet pads by insets.bottom. */}
       <Modal
@@ -122,10 +143,10 @@ export default function SelectField({ label, value, onChange, onBlur, error, opt
 
             <FlatList
               data={filtered}
-              keyExtractor={(item) => item}
+              keyExtractor={(item) => String(item.value)}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
-                const selected = item === value;
+                const selected = item.value === value;
                 return (
                   <PressableScale
                     onPress={() => select(item)}
@@ -142,7 +163,7 @@ export default function SelectField({ label, value, onChange, onBlur, error, opt
                         fontWeight: selected ? "600" : "400",
                       }}
                     >
-                      {item}
+                      {item.label}
                     </Text>
                     {selected ? <Text style={{ color: colors.primary, fontSize: 16 }}>{"✓"}</Text> : null}
                   </PressableScale>

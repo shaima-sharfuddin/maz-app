@@ -12,7 +12,7 @@ import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import useAsync from "../hooks/useAsync";
 import { supportEnquirySchema } from "../validation/schemas";
-import { fetchDashboard, submitEnquiry } from "../services/api";
+import { fetchContracts, submitEnquiry } from "../services/api";
 import { SUPPORT_CATEGORIES } from "../data/formOptions";
 import { useTheme } from "../theme/ThemeContext";
 import { useDemo } from "../demo/DemoContext";
@@ -41,9 +41,14 @@ export default function NewEnquiryScreen({ navigation, route }) {
   const { submit, loading, error } = useSubmit(submitEnquiry);
 
   // The optional Contract field lists the tenant's contracts; it's simply left out if they can't load.
-  const loadContracts = useCallback(() => fetchDashboard(userState), [userState]);
-  const { data: dashboard } = useAsync(loadContracts);
-  const contracts = useMemo(() => dashboard?.contracts ?? [], [dashboard]);
+  // Just the contract list (shared / cached in the service layer) — no customer record or dashboard figures needed.
+  // The New User dashboard state has no contracts.
+  const loadContracts = useCallback(
+    () => (userState === "newUser" ? Promise.resolve([]) : fetchContracts()),
+    [userState]
+  );
+  const { data: loadedContracts } = useAsync(loadContracts);
+  const contracts = useMemo(() => loadedContracts ?? [], [loadedContracts]);
   const contractOptions = useMemo(() => [NO_CONTRACT, ...contracts.map(contractLabel)], [contracts]);
 
   useEffect(() => {
@@ -113,7 +118,7 @@ export default function NewEnquiryScreen({ navigation, route }) {
               style={{ minHeight: 120 }}
             />
 
-            <View className="mt-2">
+            <View className="mt-4">
               <AnimatedButton
                 label={loading ? "Sending…" : "Send enquiry"}
                 onPress={onSubmit}

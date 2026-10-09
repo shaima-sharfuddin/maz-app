@@ -36,3 +36,9 @@ export function formatTimestamp(value) {
 export function toISODate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+
+// Local date-time string ("2026-10-07T10:32:00") → "07 Oct 2026 · 10:32 AM" (request timeline).
+export function formatDateTime(value) {
+  const [datePart, timePart = "00:00"] = value.split("T");
+  return `${formatDate(datePart)} · ${formatTime(timePart.slice(0, 5))}`;
+}

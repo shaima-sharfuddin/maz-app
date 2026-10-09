@@ -1,26 +1,35 @@
-import { SERVICES } from "../data/brand";
+import { SERVICES, BROWSE_PLAN_IDS } from "../data/brand";
 import { MOCK_CONTRACTS, MOCK_TENANT_NAME } from "../data/mockTenant";
 import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
 import { MOCK_ENQUIRIES } from "../data/mockEnquiries";
 import { MOCK_VIOLATIONS } from "../data/mockViolations";
 import { PAYMENT_METHODS } from "../data/paymentMethods";
-import { formatBHD, formatTerm, extendEndDate, TERM_OPTIONS } from "../data/pricing";
+import {
+  formatBHD,
+  formatTerm,
+  firstInvoice,
+  paymentFrequencyLabel,
+  DEFAULT_LEASE_MONTHS,
+} from "../data/pricing";
+import { CONTRACT_STATUS } from "../data/enums";
 import { MEETING_ROOMS, OPENING_HOUR, CLOSING_HOUR, DURATION_OPTIONS } from "../data/meetingRooms";
 import { toISODate, formatDate, formatTime } from "../utils/formatDate";
 import { ApiError } from "./apiError";
+import { errorMessage } from "./errorMessages";
 
 // MOCK API — no backend yet. Screens import these via services/api.js; each function has the
 // same signature and result shape the real endpoint should have, so swapping is local to /services.
 //
 // Every call goes through simulate(): a random 800–1200 ms delay, then a random failure
-// MOCK_FAILURE_RATE of the time (while enabled) so error states are exercised during development.
-// The Settings → Demo data → "Simulate network errors" switch turns failures off for demos.
+// MOCK_FAILURE_RATE of the time — only while enabled, which is OFF by default so demos behave deterministically.
+// Developers turn it on in Settings → Demo data → "Simulate network errors" (hidden unless demo controls are
+// enabled — see demo/DemoContext.js).
 
 export const MOCK_FAILURE_RATE = 0.15;
 const MIN_LATENCY_MS = 800;
 const MAX_LATENCY_MS = 1200;
 
-let failuresEnabled = true;
+let failuresEnabled = false;
 export function setMockFailuresEnabled(enabled) {
   failuresEnabled = enabled;
 }
@@ -34,8 +43,9 @@ const RANDOM_FAILURES = [
 // Waits, then (maybe) fails at random, then runs `produce`. The random failure is decided BEFORE
 // produce() runs, so a failed call never changes mock data (e.g. a failed payment stays unpaid).
 // produce() may itself throw an ApiError for rule-based errors (e.g. "Contract not found").
-function simulate(produce, { canFail = true } = {}) {
-  const latency = MIN_LATENCY_MS + Math.random() * (MAX_LATENCY_MS - MIN_LATENCY_MS);
+// `instant` skips the latency (e.g. the demo login — its wait was pure demo latency before the dashboard).
+function simulate(produce, { canFail = true, instant = false } = {}) {
+  const latency = instant ? 0 : MIN_LATENCY_MS + Math.random() * (MAX_LATENCY_MS - MIN_LATENCY_MS);
   return new Promise((resolve, reject) => {
     setTimeout(() => {
       if (canFail && failuresEnabled && Math.random() < MOCK_FAILURE_RATE) {
@@ -46,7 +56,8 @@ function simulate(produce, { canFail = true } = {}) {
       try {
         resolve(produce());
       } catch (error) {
-        reject(error instanceof ApiError ? error : new ApiError("UNKNOWN", error?.message || "Something went wrong."));
+        // An unexpected exception keeps its technical text out of the UI (errorMessage → generic sentence).
+        reject(error instanceof ApiError ? error : new ApiError("UNKNOWN", errorMessage(error)));
       }
     }, latency);
   });
@@ -58,7 +69,7 @@ const newId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}`;
 // Working copy of the tenant's contracts so a mock payment can update balances for the rest of the
 // session (resets on app reload). Screens always receive copies, never the store itself.
 const contracts = clone(MOCK_CONTRACTS);
-// In-memory stand-in for the backend's request store (cleared on app reload).
+// In-memory stand-in for the backend's request store (cleared on app reload), in submission order.
 const submittedRequests = new Map();
 // Notifications per demo account type; actions below push new ones (see pushNotification).
 const notifications = clone(MOCK_NOTIFICATIONS);
@@ -118,32 +129,23 @@ function pushNotification({ type, title, body, target = null }) {
 
 // Accounts created this session (cleared on app reload). Any other email logs in as an existing
 // tenant with a completed profile, so demos can skip sign-up.
-const registeredUsers = new Map(); // email → { fullName, phone, verified, profileComplete }
+const registeredUsers = new Map(); // email → { fullName, phone, companyName?, verified, profileComplete }
+// New User quick sign-ups, by email: the full form, kept for later reuse (cleared on app reload).
+const quickSignUps = new Map();
 const emailKey = (email) => email.trim().toLowerCase();
 
 // ⚠️ MOCK — the real backend emails a random code. This fixed code is shown on the Verify screen.
 export const MOCK_OTP_CODE = "123456";
 
-// payload: { fullName, email, phone } → { userId, email }
-export function signUp(payload) {
-  return simulate(() => {
-    registeredUsers.set(emailKey(payload.email), {
-      fullName: payload.fullName,
-      phone: payload.phone,
-      verified: false,
-      profileComplete: false,
-    });
-    return { userId: newId("USR"), email: payload.email };
-  });
-}
-
-// payload: { email, code } → { verified: true }
+// payload: { email, code } → { verified: true, session? }. For a New User sign-up the result also carries
+// the session ({ token, user }), so the app signs them in straight after verifying — no separate log in.
 export function verifyEmail(payload) {
   return simulate(() => {
     if (payload.code !== MOCK_OTP_CODE) throw new ApiError("INVALID_CODE", "That code isn't right. Check your email and try again.");
     const user = registeredUsers.get(emailKey(payload.email));
     if (user) user.verified = true;
-    return { verified: true };
+    const quick = quickSignUps.get(emailKey(payload.email));
+    return quick ? { verified: true, session: quickSession(quick) } : { verified: true };
   });
 }
 
@@ -152,7 +154,8 @@ export function resendVerificationCode(email) {
   return simulate(() => ({ sent: true, email }));
 }
 
-// payload: { email, password } → { token, user: { email, name, profileComplete } }
+// payload: { email, password } → { token, user: { email, name, companyName, activity, profileComplete } }
+// (activity: the sign-up Activity of a New User account; null for everyone else)
 // Dev shortcut: the password "wrong" always fails with INVALID_CREDENTIALS, to test that error.
 export function logIn(payload) {
   return simulate(() => {
@@ -166,9 +169,59 @@ export function logIn(payload) {
       user: {
         email: payload.email.trim(),
         name: registered ? registered.fullName : MOCK_TENANT_NAME,
+        companyName: registered?.companyName ?? null,
+        activity: registered?.activity ?? null,
         profileComplete: registered ? registered.profileComplete : true,
       },
     };
+  }, { instant: true });
+}
+
+// The session a verified New User sign-up gets — the same shape as logIn's.
+const quickSession = (record) => ({
+  token: newId("TKN"),
+  user: {
+    email: record.email,
+    name: record.customerName,
+    companyName: record.companyName,
+    activity: record.activity,
+    profileComplete: true,
+  },
+});
+
+// New User sign-up (the client's short form, replacing the old SignUp + CompleteProfile).
+// payload: { companyName, customerName, activity, email, countryCode, phoneNumber, phoneCountry, nationality,
+// cprNumber | passportNumber } → { email }. activity is one of the SAMPLE ACTIVITIES (kept in memory only). The mobile is kept as the dial code ("+971") + national number.
+// The account starts UNVERIFIED: the app goes on to VerifyAccount (code MOCK_OTP_CODE), whose verifyEmail
+// returns the session. Logging in before verifying fails with EMAIL_NOT_VERIFIED; afterwards it returns the
+// same name and company.
+export function quickSignUp(payload) {
+  return simulate(() => {
+    const email = payload.email.trim();
+    const record = {
+      companyName: payload.companyName.trim(),
+      customerName: payload.customerName.trim(),
+      activity: payload.activity || null,
+      email,
+      countryCode: payload.countryCode,
+      phoneNumber: payload.phoneNumber,
+      phoneCountry: payload.phoneCountry, // ISO code — +1 / +44 / +7 are shared by several countries
+      nationality: payload.nationality,
+      // Only the ID that applies to the nationality is kept.
+      cprNumber: payload.cprNumber?.trim() || null,
+      passportNumber: payload.passportNumber?.trim() || null,
+      createdAt: toISODateTime(new Date()),
+    };
+    quickSignUps.set(emailKey(email), record);
+    registeredUsers.set(emailKey(email), {
+      fullName: record.customerName,
+      phone: `${record.countryCode} ${record.phoneNumber}`,
+      companyName: record.companyName,
+      activity: record.activity,
+      verified: false,
+      profileComplete: true,
+    });
+    return { email };
   });
 }
 
@@ -182,121 +235,269 @@ export function requestPasswordReset(email) {
   return simulate(() => ({ sent: true, email }));
 }
 
-// payload: { email, customer, owner } (the Create Customer form) → { customerId }
+// Saved Create Customer profiles by customer id (cleared on app reload).
+const savedProfiles = new Map();
+
+// payload: { email, customer, owner } (the Create Customer form) → { customerId }.
+// owner.ownerType is an OwnerTypeEnum code ("o" Owner, "p" Partner … — data/enums.js).
 export function saveProfile(payload) {
   return simulate(() => {
+    const customerId = newId("CUS");
+    savedProfiles.set(customerId, {
+      email: payload?.email ?? null,
+      customer: clone(payload?.customer ?? {}),
+      owner: clone(payload?.owner ?? {}),
+    });
     const user = payload?.email ? registeredUsers.get(emailKey(payload.email)) : null;
     if (user) user.profileComplete = true;
-    return { customerId: newId("CUS") };
+    return { customerId };
   });
+}
+
+// ⚠️ MOCK — profile edits from EditProfile, by sign-in email (cleared on app reload). The real save will be
+// PUT /customers/{id} once the recruiter confirms its fields. Only the non-sensitive account fields are kept and
+// returned here: { companyName, customerName, email } — never nationality or the CPR / passport number.
+const profileEdits = new Map();
+const PROFILE_FIELDS = ["companyName", "customerName", "email"];
+const copyProfile = (values) => Object.fromEntries(PROFILE_FIELDS.map((key) => [key, values?.[key] ?? ""]));
+
+// (email, { companyName, customerName }) → { email }. A New User's stored account follows the edit, so logging
+// in again returns the new name and company.
+export function updateProfile(email, values) {
+  return simulate(() => {
+    const saved = {
+      email,
+      companyName: values.companyName.trim(),
+      customerName: values.customerName.trim(),
+    };
+    profileEdits.set(emailKey(email), saved);
+    const registered = registeredUsers.get(emailKey(email));
+    if (registered) {
+      registered.fullName = saved.customerName;
+      registered.companyName = saved.companyName;
+    }
+    return { email };
+  });
+}
+
+// The edits saved this session for an account, or null. Synchronous (no latency) — read by
+// httpApi.fetchProfile, which otherwise pre-fills from the sign-up record or the session.
+export function mockProfileEdits(email) {
+  const saved = email ? profileEdits.get(emailKey(email)) : null;
+  return saved ? copyProfile(saved) : null;
+}
+
+// The company / name / email a New User entered at sign-up this session (quickSignUp), or null (existing tenants,
+// or after an app reload cleared the mock store). The sign-up's ID fields are not returned. Synchronous.
+export function mockSignUpProfile(email) {
+  const record = email ? quickSignUps.get(emailKey(email)) : null;
+  return record ? copyProfile(record) : null;
 }
 
 // ---- Plans & requests ------------------------------------------------------
 
+// Only the services Browse Plans offers, in BROWSE_PLAN_IDS order (Startup Incubator is hidden, not deleted).
 export function fetchPlans() {
-  return simulate(() => clone(SERVICES));
+  return simulate(() => clone(BROWSE_PLAN_IDS.map((id) => SERVICES.find((service) => service.id === id)).filter(Boolean)));
 }
 
-// payload: { fullName, email, companyName, activity, remark, summary } → { requestId }
+// ⚠️ PLACEHOLDER — the unit MAZ "assigns" at step 4 in the demo (the admin picks the real one).
+const PLACEHOLDER_ASSIGNED_UNIT = "Office 312";
+const INVOICE_STEP = 5; // "Invoice Generated" in REQUEST_STEPS
+const INVOICE_DUE_DAYS = 7;
+
+// payload: { fullName, email, companyName, activity, remark, termMonths, paymentFrequency, summary } → { requestId }
+// paymentFrequency is an INSTALLMENTS code ("12" Monthly … "1" Yearly).
+// A request starts at step 1. The real backend moves it through the stages; in the demo,
+// advanceRequestStage does (RequestStatus shows a demo control for it).
 export function submitRequest(payload) {
   return simulate(() => {
     const requestId = newId("REQ");
-    submittedRequests.set(requestId, clone(payload));
+    const submittedAt = toISODateTime(new Date());
+    submittedRequests.set(requestId, {
+      requestId,
+      payload: clone(payload),
+      summary: clone(payload.summary),
+      termMonths: payload.termMonths ?? DEFAULT_LEASE_MONTHS,
+      paymentFrequency: payload.paymentFrequency ?? null,
+      submittedAt,
+      currentStep: 1,
+      // When each stage was reached (index = step − 1), for the timeline on RequestStatus.
+      stageReachedAt: [submittedAt],
+      unit: null, // { name, location } once assigned (step 4)
+      invoice: null, // { number, lineItems, amount, issuedOn, dueDate, description } once generated (step 5)
+      payment: null, // { method, paidDate, receipt } once the invoice is paid
+      contractStatus: null, // CONTRACT_STATUS code of the resulting contract — "b" Reviewing once paid
+    });
     return { requestId };
   });
 }
 
-// The real API will return the request's actual stage; the mock always reports step 1
-// ("Request Submitted"). currentStep is 1-based and indexes REQUEST_STEPS.
+// What screens see of a stored request (never the store object itself).
+const requestView = (request) => ({
+  requestId: request.requestId,
+  currentStep: request.currentStep,
+  submittedAt: request.submittedAt,
+  stageReachedAt: [...request.stageReachedAt],
+  summary: clone(request.summary),
+  activity: request.payload?.activity ?? null, // a New User's sign-up Activity (SAMPLE option, mock only); null for tenants
+  unit: request.unit ? clone(request.unit) : null,
+  invoice: request.invoice ? clone(request.invoice) : null,
+  payment: request.payment ? clone(request.payment) : null,
+  // The contract a paid request turns into, labelled from CONTRACT_STATUS (e.g. "b" → Reviewing).
+  contract: request.contractStatus
+    ? {
+        status: CONTRACT_STATUS[request.contractStatus].label.toLowerCase(),
+        label: CONTRACT_STATUS[request.contractStatus].label,
+      }
+    : null,
+});
+
+// → { requestId, currentStep (1-based, indexes REQUEST_STEPS), summary, activity, unit, invoice, payment, contract }.
+// An unknown id (e.g. after an app reload cleared the mock store) reports step 1 with no details.
 export function fetchRequestStatus(requestId) {
   return simulate(() => {
     const request = submittedRequests.get(requestId);
-    return { requestId, currentStep: 1, summary: request?.summary ?? null };
+    if (!request) {
+      return {
+        requestId,
+        currentStep: 1,
+        submittedAt: null,
+        stageReachedAt: [],
+        summary: null,
+        unit: null,
+        invoice: null,
+        payment: null,
+        contract: null,
+      };
+    }
+    return requestView(request);
+  });
+}
+
+// The tenant's most recent request (the dashboard's "Your office request" card), or null.
+export function fetchLatestRequest() {
+  return simulate(() => {
+    const latest = [...submittedRequests.values()].pop();
+    return latest ? requestView(latest) : null;
+  });
+}
+
+// Every request this user has submitted, newest first (My Requests). Same in-memory store as above —
+// cleared on app reload, until the real requests endpoint exists.
+export function fetchRequests() {
+  return simulate(() => [...submittedRequests.values()].reverse().map(requestView));
+}
+
+// ⚠️ DEMO ONLY — stands in for MAZ's admin moving the request on. Step 4 assigns a unit; step 5
+// issues the first invoice = first installment + deposit (separate line items; recruiter decision),
+// due in 7 days. Never fails at random, so the demo control always works.
+export function advanceRequestStage(requestId) {
+  return simulate(
+    () => {
+      const request = submittedRequests.get(requestId);
+      if (!request) throw new ApiError("NOT_FOUND", "Request not found.");
+      if (request.currentStep >= INVOICE_STEP) throw new ApiError("FINAL_STAGE", "This request is already at its last stage.");
+
+      request.currentStep += 1;
+      request.stageReachedAt.push(toISODateTime(new Date()));
+      if (request.currentStep === 4) {
+        request.unit = { name: PLACEHOLDER_ASSIGNED_UNIT, location: request.summary?.location ?? null };
+      }
+      if (request.currentStep === INVOICE_STEP) {
+        const issuedOn = new Date();
+        const { installment, deposit, total } = firstInvoice(request.paymentFrequency ?? "12", request.termMonths);
+        const frequency = paymentFrequencyLabel(request.paymentFrequency);
+        request.invoice = {
+          number: `INV-${issuedOn.getFullYear()}-${request.requestId.slice(-4)}`,
+          lineItems: [
+            { label: frequency ? `First installment (${frequency})` : "First installment", amount: installment },
+            { label: "Deposit", amount: deposit },
+          ],
+          amount: total,
+          issuedOn: toISODate(issuedOn),
+          dueDate: toISODate(daysFromToday(INVOICE_DUE_DAYS)),
+          description: `${request.summary?.plan ?? "Office"} · ${formatTerm(request.termMonths)}`,
+        };
+      }
+      return requestView(request);
+    },
+    { canFail: false }
+  );
+}
+
+// The request's invoice in the shape PaymentScreen reads for a contract
+// ({ outstanding, dueDate, unit, location, bills }) plus invoiceNumber / description / paymentFrequency for its
+// "You're paying for" card, so one payment screen serves both.
+export function fetchRequestInvoice(requestId) {
+  return simulate(() => {
+    const request = submittedRequests.get(requestId);
+    if (!request) throw new ApiError("NOT_FOUND", "Request not found.");
+    if (!request.invoice) throw new ApiError("NO_INVOICE", "Your invoice hasn't been issued yet.");
+    const { invoice } = request;
+    return {
+      requestId,
+      invoiceNumber: invoice.number,
+      description: invoice.description, // "Office Suites · 12 months"
+      paymentFrequency: request.summary?.paymentFrequency ?? null,
+      outstanding: request.payment ? 0 : invoice.amount,
+      dueDate: request.payment ? null : invoice.dueDate,
+      unit: request.unit?.name ?? null,
+      location: request.unit?.location ?? null,
+      // One row per invoice line (installment, deposit), so PaymentScreen lists them separately.
+      // `number` is the row's bold title (unique per line), `periodLabel` its caption.
+      bills: invoice.lineItems.map((item) => ({
+        number: item.label,
+        periodLabel: invoice.number,
+        amount: item.amount,
+        status: request.payment ? "paid" : "due",
+      })),
+    };
+  });
+}
+
+// ⚠️ MOCK PAYMENT — nothing is charged. Marks the request's invoice paid and returns a receipt in
+// the same shape as payOutstandingBalance (with requestId instead of contractId). Per the recruiter,
+// the resulting contract starts as "b" Reviewing. The real contract appears in GET /contracts once MAZ
+// creates it — the app can't write to the contracts API yet.
+export function payRequestInvoice(requestId, methodId) {
+  return simulate(() => {
+    const request = submittedRequests.get(requestId);
+    const method = PAYMENT_METHODS.find((m) => m.id === methodId);
+    if (!request) throw new ApiError("NOT_FOUND", "Request not found.");
+    if (!method) throw new ApiError("INVALID_METHOD", "Choose a payment method.");
+    if (!request.invoice) throw new ApiError("NO_INVOICE", "Your invoice hasn't been issued yet.");
+    if (request.payment) throw new ApiError("NOTHING_DUE", "This invoice is already paid.");
+
+    const now = new Date();
+    const paidDate = toISODate(now);
+    const receipt = `RCP-${paidDate.slice(0, 4)}-${paidDate.slice(5, 7)}${paidDate.slice(8, 10)}-${String(now.getTime()).slice(-4)}`;
+    request.payment = { method: method.label, paidDate, receipt };
+    request.contractStatus = "b"; // CONTRACT_STATUS.b — Reviewing
+
+    return {
+      receipt,
+      amount: request.invoice.amount,
+      paidDate,
+      method: method.label,
+      requestId,
+      contractId: null,
+      unit: [request.unit?.name, request.unit?.location].filter(Boolean).join(" · "),
+      bills: [request.invoice.number],
+    };
   });
 }
 
 // ---- Tenant: dashboard, contracts, payments --------------------------------
 
-// userState comes from the Settings demo toggle (demo/DemoContext.js):
-// "newUser" → no lease yet; "tenant" → contracts overview. The real API will decide this itself.
-export function fetchDashboard(userState = "tenant") {
-  return simulate(() => {
-    if (userState === "newUser") return { lease: null };
-
-    const active = contracts.filter((c) => c.status === "active");
-    const expired = contracts.filter((c) => c.status === "expired");
-    const withDues = contracts.filter((c) => c.outstanding > 0);
-    const countOf = (type) => active.filter((c) => c.type === type).length;
-
-    return {
-      tenantName: MOCK_TENANT_NAME,
-      summary: {
-        activeCount: active.length,
-        activeOffices: countOf("office"),
-        activeIncubators: countOf("incubator"),
-        expiredCount: expired.length,
-        latestExpiry: expired.map((c) => c.endDate).sort().slice(-1)[0] ?? null,
-        paymentDue: withDues.reduce((sum, c) => sum + c.outstanding, 0),
-        nextDueDate: withDues.map((c) => c.dueDate).sort()[0] ?? null,
-        openEnquiries: enquiries.filter((e) => e.status === "open").length,
-        nextBooking: upcomingBookings()[0] ?? null,
-        openViolations: MOCK_VIOLATIONS.filter((v) => v.status === "open").length,
-      },
-      contracts: clone(contracts),
-    };
-  });
-}
-
-export function fetchContract(contractId) {
-  return simulate(() => {
-    const contract = contracts.find((c) => c.id === contractId);
-    if (!contract) throw new ApiError("NOT_FOUND", "Contract not found.");
-    return clone(contract);
-  });
-}
-
-// Last day of the month that `isoDate` falls in: "2026-10-01" → "2026-10-31".
-const monthEnd = (isoDate) => {
-  const date = new Date(`${isoDate}T00:00:00`);
-  return toISODate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
-};
-
-// One bill with everything BillViewer shows. Looks in the contract's bills list first, then falls
-// back to its current bill (contract.bill, which settled contracts keep without a bills list).
-// PLACEHOLDER line items: a single rent line — the real invoice breakdown (VAT, services) is unknown.
-export function fetchBill(contractId, billNumber) {
-  return simulate(() => {
-    const contract = contracts.find((c) => c.id === contractId);
-    if (!contract) throw new ApiError("NOT_FOUND", "Contract not found.");
-
-    const listed = contract.bills.find((b) => b.number === billNumber);
-    const current = contract.bill?.number === billNumber ? contract.bill : null;
-    if (!listed && !current) throw new ApiError("NOT_FOUND", "Bill not found.");
-
-    const periodStart = listed ? listed.month : current.periodStart;
-    const periodEnd = listed ? monthEnd(listed.month) : current.periodEnd;
-    const amount = listed ? listed.amount : contract.monthlyRate;
-    const status = listed ? listed.status : "paid";
-    const product = contract.type === "incubator" ? "Incubator membership" : "Office suite rent";
-    // A settled bill shows the contract's latest payment (the mock keeps one payment per contract).
-    const payment = status === "paid" && contract.payment
-      ? { method: contract.payment.method, paidOn: contract.payment.lastDate, receipt: contract.payment.receipt }
-      : null;
-
-    return {
-      number: billNumber,
-      contractId: contract.id,
-      unit: contract.unit,
-      location: contract.location,
-      periodStart,
-      periodEnd,
-      dueDate: listed?.dueDate ?? null,
-      status,
-      lineItems: [{ label: product, amount }],
-      total: amount,
-      payment,
-    };
-  });
+// Dashboard figures for features that are still mock (enquiries, bookings, violations). Shared with
+// the real fetchDashboard in ./httpApi until those features get endpoints. Synchronous, no latency.
+export function mockTenantActivity() {
+  return {
+    openEnquiries: enquiries.filter((e) => e.status === "open").length,
+    nextBooking: upcomingBookings()[0] ?? null,
+    openViolations: MOCK_VIOLATIONS.filter((v) => v.status === "open").length,
+  };
 }
 
 // ⚠️ MOCK PAYMENT — no gateway, nothing is charged. Settles the contract's outstanding balance:
@@ -527,59 +728,5 @@ export function cancelBooking(bookingId) {
       target: { screen: "MeetingRooms", params: undefined },
     });
     return { bookingId, status: "cancelled" };
-  });
-}
-
-// ---- Violations ------------------------------------------------------------
-
-// Adds the contract's unit and location so screens don't need a second request.
-function withUnit(violation) {
-  const contract = contracts.find((c) => c.id === violation.contractId);
-  return { ...clone(violation), unit: contract?.unit ?? null, location: contract?.location ?? null };
-}
-
-// Newest first; a new user has none.
-export function fetchViolations(userState = "tenant") {
-  return simulate(() =>
-    userState === "newUser"
-      ? []
-      : MOCK_VIOLATIONS.map(withUnit).sort((a, b) => b.issuedOn.localeCompare(a.issuedOn))
-  );
-}
-
-export function fetchViolation(violationId) {
-  return simulate(() => {
-    const violation = MOCK_VIOLATIONS.find((v) => v.id === violationId);
-    if (!violation) throw new ApiError("NOT_FOUND", "Notice not found.");
-    return withUnit(violation);
-  });
-}
-
-// ---- Contract renewal ------------------------------------------------------
-
-// payload: { termMonths, remark } → { contractId, renewal }. Like a new office request, a renewal is
-// reviewed by the MAZ admin; the contract shows it as "requested" until then.
-export function requestRenewal(contractId, payload) {
-  return simulate(() => {
-    const contract = contracts.find((c) => c.id === contractId);
-    if (!contract) throw new ApiError("NOT_FOUND", "Contract not found.");
-    if (contract.status !== "active") throw new ApiError("NOT_ACTIVE", "Only active contracts can be renewed.");
-    if (contract.renewal) throw new ApiError("RENEWAL_PENDING", "A renewal request for this contract is already under review.");
-    if (!TERM_OPTIONS.includes(payload.termMonths)) throw new ApiError("INVALID_TERM", "Choose a renewal term.");
-
-    contract.renewal = {
-      status: "requested",
-      termMonths: payload.termMonths,
-      remark: payload.remark?.trim() ?? "",
-      requestedOn: toISODate(new Date()),
-      newEndDate: extendEndDate(contract.endDate, payload.termMonths),
-    };
-    pushNotification({
-      type: "renewal",
-      title: "Renewal request received",
-      body: `${contract.unit} · ${formatTerm(payload.termMonths)}. We'll confirm the new terms by email.`,
-      target: { screen: "ContractDetail", params: { contractId: contract.id } },
-    });
-    return { contractId, renewal: clone(contract.renewal) };
   });
 }

@@ -2,14 +2,116 @@ import { View, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeContext";
 import { REQUEST_STEPS } from "../data/requestSteps";
+import { formatDateTime } from "../utils/formatDate";
 
 const CIRCLE = 28;
 const RING = 36; // current step gets a soft halo around its circle
 
-// Horizontal progress tracker. `currentStep` is 1-based; a value past the last step
-// means every step is complete. Pass `steps` to reuse it for other processes.
-export default function StatusStepper({ currentStep, steps = REQUEST_STEPS }) {
+const statusLabel = { completed: "completed", current: "in progress", upcoming: "upcoming" };
+
+// Vertical timeline: one row per step with its label, when it was reached (`dates`, local ISO date-times
+// by step index — omitted where unknown) and, for the current step, its description. Status is shown by
+// the marker (check / filled number / outlined number) and the "In progress" caption, not colour alone.
+function VerticalStepper({ current, steps, dates }) {
   const { colors } = useTheme();
+  const lastIndex = steps.length - 1;
+
+  return (
+    <View accessibilityRole="progressbar">
+      {steps.map((step, index) => {
+        const status = index < current ? "completed" : index === current ? "current" : "upcoming";
+        const reachedAt = status !== "upcoming" ? dates?.[index] : null;
+        return (
+          <View
+            key={step.key}
+            style={{ flexDirection: "row" }}
+            accessible
+            accessibilityLabel={[
+              `Step ${index + 1} of ${steps.length}: ${step.label}, ${statusLabel[status]}`,
+              reachedAt ? formatDateTime(reachedAt) : null,
+            ]
+              .filter(Boolean)
+              .join(", ")}
+          >
+            <View style={{ alignItems: "center", width: CIRCLE, marginRight: 14 }}>
+              <View
+                style={{
+                  width: CIRCLE,
+                  height: CIRCLE,
+                  borderRadius: CIRCLE / 2,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: status === "upcoming" ? "transparent" : colors.primary,
+                  borderWidth: status === "upcoming" ? 1.5 : 0,
+                  borderColor: colors.inputBorder,
+                }}
+              >
+                {status === "completed" ? (
+                  <Ionicons name="checkmark" size={16} color={colors.onPrimary} />
+                ) : (
+                  <Text
+                    style={{
+                      color: status === "current" ? colors.onPrimary : colors.textSubtle,
+                      fontSize: 12,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {index + 1}
+                  </Text>
+                )}
+              </View>
+              {index < lastIndex ? (
+                <View
+                  style={{
+                    flex: 1,
+                    width: 2,
+                    minHeight: 16,
+                    marginVertical: 4,
+                    backgroundColor: index < current ? colors.primary : colors.surfaceBorder,
+                  }}
+                />
+              ) : null}
+            </View>
+
+            <View style={{ flex: 1, paddingTop: 4, paddingBottom: index < lastIndex ? 20 : 0 }}>
+              <Text
+                style={{
+                  color: status === "upcoming" ? colors.textSubtle : colors.text,
+                  fontSize: status === "current" ? 16 : 14,
+                  fontWeight: status === "upcoming" ? "500" : "600",
+                }}
+              >
+                {step.label}
+              </Text>
+              {status === "current" ? (
+                <Text className="text-xs font-semibold uppercase tracking-widest mt-1" style={{ color: colors.accent }}>
+                  In progress
+                </Text>
+              ) : null}
+              {reachedAt ? (
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>{formatDateTime(reachedAt)}</Text>
+              ) : null}
+              {status === "current" && step.description ? (
+                <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20, marginTop: 6 }}>
+                  {step.description}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// Progress tracker. `currentStep` is 1-based; a value past the last step means every step is complete.
+// Pass `steps` to reuse it for other processes. orientation "horizontal" (default): compact row of
+// numbered circles; "vertical": a timeline with `dates` and the current step's description.
+export default function StatusStepper({ currentStep, steps = REQUEST_STEPS, orientation = "horizontal", dates }) {
+  const { colors } = useTheme();
+  if (orientation === "vertical") {
+    return <VerticalStepper current={currentStep - 1} steps={steps} dates={dates} />;
+  }
   const current = currentStep - 1; // 0-based index of the active step
   const lastIndex = steps.length - 1;
 

@@ -13,19 +13,11 @@ import TextLink from "../components/TextLink";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import useSubmit from "../hooks/useSubmit";
-import { cancelBooking, fetchBookings, fetchMeetingRooms } from "../services/api";
+import { cancelBooking, fetchBookings, fetchMeetingRooms, errorMessage } from "../services/api";
 import { formatDate, formatTime } from "../utils/formatDate";
+import SectionHeading from "../components/SectionHeading";
 import { useTheme } from "../theme/ThemeContext";
 import { useDemo } from "../demo/DemoContext";
-
-function SectionHeading({ children }) {
-  const { colors } = useTheme();
-  return (
-    <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
-      {children}
-    </Text>
-  );
-}
 
 function BookingRow({ booking, onCancelled }) {
   const { colors } = useTheme();
@@ -107,7 +99,7 @@ function RoomCard({ room, onPress }) {
           marginRight: 14,
         }}
       >
-        <Ionicons name="people-outline" size={20} color={colors.primary} />
+        <Ionicons name="people-outline" size={22} color={colors.primary} />
       </View>
       <View style={{ flex: 1, marginRight: 12 }}>
         <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 2 }}>{room.name}</Text>
@@ -127,8 +119,8 @@ const listSkeleton = (count) =>
     </SkeletonCard>
   ));
 
-const loadError = (title, onRetry) => (
-  <EmptyState icon="cloud-offline-outline" title={title} message="Please check your connection and try again.">
+const loadError = (title, onRetry, error) => (
+  <EmptyState icon="cloud-offline-outline" title={title} message={errorMessage(error)}>
     <AnimatedButton label="Try again" onPress={onRetry} />
   </EmptyState>
 );
@@ -150,7 +142,7 @@ export default function MeetingRoomsScreen({ navigation, route }) {
 
   const renderBookings = () => {
     if (bookings.loading) return listSkeleton(1);
-    if (bookings.error) return loadError("We couldn't load your bookings", bookings.reload);
+    if (bookings.error) return loadError("We couldn't load your bookings", bookings.reload, bookings.error);
     if (bookings.data.length === 0) {
       return (
         <EmptyState
@@ -166,7 +158,7 @@ export default function MeetingRoomsScreen({ navigation, route }) {
 
   const renderRooms = () => {
     if (rooms.loading) return listSkeleton(3);
-    if (rooms.error) return loadError("We couldn't load meeting rooms", rooms.reload);
+    if (rooms.error) return loadError("We couldn't load meeting rooms", rooms.reload, rooms.error);
     return rooms.data.map((room) => (
       <RoomCard key={room.id} room={room} onPress={() => navigation.navigate("BookMeetingRoom", { room })} />
     ));

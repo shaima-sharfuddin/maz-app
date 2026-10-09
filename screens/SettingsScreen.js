@@ -5,8 +5,14 @@ import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import SegmentedControl from "../components/SegmentedControl";
 import AnimatedButton from "../components/AnimatedButton";
+import HeroPanel from "../components/HeroPanel";
+import SectionHeading from "../components/SectionHeading";
+import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeContext";
-import { useDemo } from "../demo/DemoContext";
+import { useCardStyle } from "../theme/surfaces";
+import { TYPE } from "../theme/theme";
+import FadeIn from "../components/FadeIn";
+import { useDemo, DEMO_CONTROLS_ENABLED } from "../demo/DemoContext";
 import { useAuth } from "../auth/AuthContext";
 
 const APPEARANCE_OPTIONS = [
@@ -25,10 +31,17 @@ const ON_OFF_OPTIONS = [
   { value: "off", label: "Off" },
 ];
 
-export default function SettingsScreen({ navigation }) {
+// Up to two initials for the profile avatar ("Sara Ahmed" → "SA", "sara@…" → "S").
+function initialsOf(text) {
+  const words = String(text ?? "").replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0].toUpperCase()).join("") || "?";
+}
+
+export default function SettingsScreen({ navigation, route }) {
   const { colors, preference, setPreference, scheme } = useTheme();
   const { userState, setUserState, simulateErrors, setSimulateErrors, startAtWelcome, setStartAtWelcome } = useDemo();
-  const { user, signOut } = useAuth();
+  const { user, profileComplete, signOut } = useAuth();
+  const profileUpdated = route.params?.profileUpdated; // set by EditProfile after a successful save
   const [loggingOut, setLoggingOut] = useState(false);
 
   // Logging out switches the navigator back to Welcome (App.js), so no navigate() is needed.
@@ -46,20 +59,8 @@ export default function SettingsScreen({ navigation }) {
     ]);
   };
 
-  const sectionHeading = (label) => (
-    <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
-      {label}
-    </Text>
-  );
-
-  const cardStyle = {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.surfaceBorder,
-    borderRadius: 16,
-    padding: 16,
-    paddingBottom: 0,
-  };
+  const card = useCardStyle();
+  const cardStyle = { ...card, padding: 16, paddingBottom: 0 };
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -70,74 +71,121 @@ export default function SettingsScreen({ navigation }) {
           <ScreenTitle title="Settings" subtitle="Tailor your MAZ experience." />
 
           {user ? (
-            <>
-              {sectionHeading("Account")}
-              <View style={[cardStyle, { paddingBottom: 16, marginBottom: 32 }]}>
-                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Logged in as</Text>
-                <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginTop: 2 }}>
-                  {user.name || user.email}
-                </Text>
-                {user.name ? <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>{user.email}</Text> : null}
-                <View style={{ marginTop: 12 }}>
-                  <AnimatedButton
-                    label={loggingOut ? "Logging out…" : "Log out"}
-                    variant="ghost"
-                    loading={loggingOut}
-                    onPress={confirmLogOut}
-                  />
+            <FadeIn>
+              <SectionHeading>Account</SectionHeading>
+              {profileUpdated ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                  <Text style={{ flex: 1, color: colors.success, fontSize: 14 }}>
+                    Profile updated in demo mode — not sent to MAZ
+                  </Text>
                 </View>
+              ) : null}
+              {/* Profile panel: who's signed in, on the brand navy surface. */}
+              <HeroPanel style={{ paddingHorizontal: 20, paddingVertical: 20 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 64 }}>
+                  <View
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 26,
+                      backgroundColor: colors.heroGlass,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: 14,
+                    }}
+                  >
+                    <Text style={{ color: colors.onHero, fontSize: 18, fontWeight: "700", letterSpacing: 0.5 }}>
+                      {initialsOf(user.name || user.email)}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[TYPE.caption, { color: colors.onHeroMuted }]}>Logged in as</Text>
+                    <Text style={[TYPE.cardTitle, { color: colors.onHero, fontSize: 17, marginTop: 2 }]}>
+                      {user.name || user.email}
+                    </Text>
+                    {user.name ? (
+                      <Text style={{ color: colors.onHeroMuted, fontSize: 13, marginTop: 2 }}>{user.email}</Text>
+                    ) : null}
+                  </View>
+                </View>
+              </HeroPanel>
+              <View style={{ marginTop: 12, marginBottom: 32 }}>
+                {/* Only once onboarding is done — before that, CompleteProfile is the profile form. */}
+                {profileComplete ? (
+                  <View style={{ marginBottom: 8 }}>
+                    <AnimatedButton
+                      label="Edit profile"
+                      variant="secondary"
+                      onPress={() => navigation.navigate("EditProfile")}
+                    />
+                  </View>
+                ) : null}
+                <AnimatedButton
+                  label={loggingOut ? "Logging out…" : "Log out"}
+                  variant="ghost"
+                  loading={loggingOut}
+                  onPress={confirmLogOut}
+                />
+              </View>
+            </FadeIn>
+          ) : null}
+
+          <FadeIn index={1}>
+            <SectionHeading>Appearance</SectionHeading>
+            <View style={[cardStyle, { marginBottom: 32 }]}>
+              <SegmentedControl
+                label="Theme"
+                value={preference}
+                onChange={setPreference}
+                options={APPEARANCE_OPTIONS}
+              />
+              {preference === "system" ? (
+                <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
+                  Matches your phone&apos;s setting (currently {scheme === "dark" ? "dark" : "light"}).
+                </Text>
+              ) : null}
+            </View>
+          </FadeIn>
+
+          {/* DEMO ONLY — developer controls, hidden from normal users (DEMO_CONTROLS_ENABLED, demo/DemoContext.js).
+              Remove this section once real account data comes from the backend. */}
+          {DEMO_CONTROLS_ENABLED ? (
+            <>
+              <SectionHeading>Demo data</SectionHeading>
+              <View style={cardStyle}>
+                <SegmentedControl
+                  label="Dashboard shows"
+                  value={userState}
+                  onChange={setUserState}
+                  options={DEMO_OPTIONS}
+                />
+                <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
+                  Demo only — switches the mock data used while there&apos;s no backend.
+                </Text>
+                <SegmentedControl
+                  label="Simulate network errors (15%)"
+                  value={simulateErrors ? "on" : "off"}
+                  onChange={(next) => setSimulateErrors(next === "on")}
+                  options={ON_OFF_OPTIONS}
+                />
+                <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
+                  When on, about 1 in 7 requests to mock features fails at random so error states can be tested.
+                  Live data (contracts, bills) is never affected. Turn off before demos.
+                </Text>
+                <SegmentedControl
+                  label="Always start at Welcome"
+                  value={startAtWelcome ? "on" : "off"}
+                  onChange={(next) => setStartAtWelcome(next === "on")}
+                  options={ON_OFF_OPTIONS}
+                />
+                <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
+                  When on, every app launch starts logged out at Welcome, so a demo can show sign-up and log-in. Takes
+                  effect next time the app opens.
+                </Text>
               </View>
             </>
           ) : null}
-
-          {sectionHeading("Appearance")}
-          <View style={[cardStyle, { marginBottom: 32 }]}>
-            <SegmentedControl
-              label="Theme"
-              value={preference}
-              onChange={setPreference}
-              options={APPEARANCE_OPTIONS}
-            />
-            {preference === "system" ? (
-              <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
-                Matches your phone&apos;s setting (currently {scheme === "dark" ? "dark" : "light"}).
-              </Text>
-            ) : null}
-          </View>
-
-          {/* DEMO ONLY — remove this section once real account data comes from the backend. */}
-          {sectionHeading("Demo data")}
-          <View style={cardStyle}>
-            <SegmentedControl
-              label="Dashboard shows"
-              value={userState}
-              onChange={setUserState}
-              options={DEMO_OPTIONS}
-            />
-            <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
-              Demo only — switches the mock data used while there&apos;s no backend.
-            </Text>
-            <SegmentedControl
-              label="Simulate network errors (15%)"
-              value={simulateErrors ? "on" : "off"}
-              onChange={(next) => setSimulateErrors(next === "on")}
-              options={ON_OFF_OPTIONS}
-            />
-            <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
-              When on, about 1 in 7 requests fails at random so error states can be tested. Turn off before
-              demos.
-            </Text>
-            <SegmentedControl
-              label="Always start at Welcome"
-              value={startAtWelcome ? "on" : "off"}
-              onChange={(next) => setStartAtWelcome(next === "on")}
-              options={ON_OFF_OPTIONS}
-            />
-            <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
-              When on, every app launch starts logged out at Welcome, so a demo can show sign-up and log-in. Takes
-              effect next time the app opens.
-            </Text>
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

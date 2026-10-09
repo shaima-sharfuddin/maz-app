@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { PALETTES } from "./theme";
+import { PALETTES, ELEVATION } from "./theme";
 
 const STORAGE_KEY = "maz.themePreference";
 export const THEME_PREFERENCES = ["system", "light", "dark"];
@@ -32,7 +32,15 @@ export function ThemeProvider({ children }) {
   const scheme = preference === "system" ? (systemScheme === "dark" ? "dark" : "light") : preference;
 
   const value = useMemo(
-    () => ({ scheme, isDark: scheme === "dark", colors: PALETTES[scheme], preference, setPreference, ready }),
+    () => ({
+      scheme,
+      isDark: scheme === "dark",
+      colors: PALETTES[scheme],
+      elevation: ELEVATION[scheme],
+      preference,
+      setPreference,
+      ready,
+    }),
     [scheme, preference, setPreference, ready]
   );
 

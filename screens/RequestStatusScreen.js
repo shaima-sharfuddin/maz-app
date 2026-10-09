@@ -1,75 +1,202 @@
 import { useCallback } from "react";
 import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import StatusStepper from "../components/StatusStepper";
+import StatusBadge from "../components/StatusBadge";
 import RequestSummaryCard from "../components/RequestSummaryCard";
+import DetailCard from "../components/DetailCard";
 import EmptyState from "../components/EmptyState";
+import ErrorBanner from "../components/ErrorBanner";
+import TextLink from "../components/TextLink";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchRequestStatus } from "../services/api";
-import { REQUEST_STEPS } from "../data/requestSteps";
+import useSubmit from "../hooks/useSubmit";
+import { fetchRequestStatus, advanceRequestStage, errorMessage } from "../services/api";
+import { REQUEST_STEPS, AFTER_PAYMENT_NEXT } from "../data/requestSteps";
+import { formatBHD } from "../data/pricing";
+import { formatDate } from "../utils/formatDate";
+import { unitWithLocation } from "../utils/formatUnit";
 import { useTheme } from "../theme/ThemeContext";
+
+const cardStyle = (colors) => ({
+  backgroundColor: colors.surface,
+  borderWidth: 1,
+  borderColor: colors.surfaceBorder,
+  borderRadius: 16,
+  padding: 20,
+  marginBottom: 16,
+});
 
 function StatusSkeleton() {
   return (
     <SkeletonCard style={{ marginBottom: 16 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
-        {REQUEST_STEPS.map((step) => (
-          <Skeleton key={step.key} width={28} height={28} radius={14} />
-        ))}
-      </View>
-      <Skeleton width="80%" height={12} />
+      {REQUEST_STEPS.map((step) => (
+        <View key={step.key} style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
+          <Skeleton width={28} height={28} radius={14} style={{ marginRight: 14 }} />
+          <Skeleton width="55%" height={14} />
+        </View>
+      ))}
     </SkeletonCard>
   );
 }
 
-// Placeholder until the backend exists: the mock always reports step 1. Once the API returns
-// the request's real stage, only fetchRequestStatus changes — this screen renders any step.
+// Heading for where the request is: just sent → in progress → invoice to pay → paid.
+function headingFor(status) {
+  if (status?.payment) {
+    return { title: "Payment received", subtitle: "Thank you. Your office is secured." };
+  }
+  if (status?.invoice) {
+    return { title: "Your invoice is ready", subtitle: "Pay your invoice to secure your office." };
+  }
+  if (status && status.currentStep > 1) {
+    return { title: "Request in progress", subtitle: "We'll email you whenever your request moves forward." };
+  }
+  return { title: "Request submitted", subtitle: "We've received your request. You'll receive updates by email." };
+}
+
+// The request's stage as a timeline (when each stage was reached, what happens next), plus what each stage
+// unlocks: the assigned unit (step 4), the invoice and "Pay invoice" (step 5), then the payment. The real
+// stage comes from fetchRequestStatus; in the demo it's moved on with advanceRequestStage (DEMO control at
+// the bottom).
 export default function RequestStatusScreen({ navigation, route }) {
   const { colors } = useTheme();
   const requestId = route.params?.requestId;
   const loadStatus = useCallback(() => fetchRequestStatus(requestId), [requestId]);
-  const { loading, data, error, reload } = useAsync(loadStatus);
+  // keepData: after the demo control moves the stage on, the old status stays up while it reloads.
+  const { loading, data, error, reload } = useAsync(loadStatus, { keepData: true });
+  const advance = useSubmit(advanceRequestStage);
 
   const summary = data?.summary ?? route.params?.summary;
+  const { title, subtitle } = headingFor(data);
+
+  const onAdvance = async () => {
+    if (await advance.submit(requestId)) reload();
+  };
 
   const renderStatus = () => {
-    if (loading) return <StatusSkeleton />;
+    if (loading && !data) return <StatusSkeleton />;
     if (error) {
       return (
         <EmptyState
           icon="cloud-offline-outline"
           title="We couldn't load your request status"
-          message="Please check your connection and try again."
+          message={errorMessage(error)}
         >
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>
       );
     }
-    const activeStep = REQUEST_STEPS[data.currentStep - 1];
+    // Once paid, every stage is complete.
+    const step = data.payment ? REQUEST_STEPS.length + 1 : data.currentStep;
+    const next = data.payment ? AFTER_PAYMENT_NEXT : REQUEST_STEPS[data.currentStep - 1]?.next;
     return (
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.surfaceBorder,
-          borderRadius: 16,
-          paddingHorizontal: 12,
-          paddingVertical: 20,
-          marginBottom: 16,
-        }}
-      >
-        <StatusStepper currentStep={data.currentStep} />
-        {activeStep ? (
-          <Text className="text-sm leading-5 text-center mt-5 px-2" style={{ color: colors.textMuted }}>
-            Current stage:{" "}
-            <Text style={{ color: colors.text, fontWeight: "600" }}>{activeStep.label}</Text>. Our team will review
-            your details, assign a suitable unit, and issue your invoice.
-          </Text>
+      <>
+        <View style={cardStyle(colors)}>
+          <StatusStepper orientation="vertical" currentStep={step} dates={data.stageReachedAt} />
+          {next ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "flex-start",
+                marginTop: 20,
+                paddingTop: 16,
+                borderTopWidth: 1,
+                borderTopColor: colors.surfaceBorder,
+              }}
+            >
+              <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+              <Text style={{ flex: 1, color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
+                <Text style={{ color: colors.text, fontWeight: "600" }}>Next: </Text>
+                {next}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </>
+    );
+  };
+
+  // Unit, invoice and payment details — only once the status has loaded without error.
+  const renderDetails = () => {
+    if (!data || error) return null;
+    const { unit, invoice, payment, contract } = data;
+    return (
+      <>
+        {unit ? (
+          <DetailCard
+            title="Your office"
+            rows={[{ label: "Assigned unit", value: unitWithLocation(unit.name, unit.location) }]}
+          />
         ) : null}
+
+        {invoice ? (
+          <DetailCard
+            title="Invoice"
+            rows={[
+              { label: "Status", value: <StatusBadge status={payment ? "paid" : "unpaid"} /> },
+              { label: "Invoice no.", value: invoice.number },
+              ...(payment ? [] : [{ label: "Due date", value: formatDate(invoice.dueDate) }]),
+              // First invoice = first installment + deposit, each on its own line.
+              ...(invoice.lineItems ?? []).map((item) => ({ label: item.label, value: formatBHD(item.amount) })),
+              { label: "Total", value: formatBHD(invoice.amount), emphasize: true },
+            ]}
+          >
+            <View style={{ borderTopWidth: 1, borderTopColor: colors.surfaceBorder, paddingVertical: 2 }}>
+              <TextLink align="left" onPress={() => navigation.navigate("RequestInvoice", { requestId })}>
+                <Text className="text-sm font-medium" style={{ color: colors.text }}>
+                  View full invoice
+                </Text>
+              </TextLink>
+            </View>
+          </DetailCard>
+        ) : null}
+
+        {contract ? (
+          <DetailCard
+            title="Your contract"
+            rows={[{ label: "Status", value: <StatusBadge status={contract.status} /> }]}
+          />
+        ) : null}
+
+        {payment ? (
+          <DetailCard
+            title="Payment"
+            rows={[
+              { label: "Paid on", value: formatDate(payment.paidDate) },
+              { label: "Method", value: payment.method },
+              { label: "Receipt", value: payment.receipt },
+            ]}
+          />
+        ) : null}
+
+        {invoice && !payment ? (
+          <View style={{ marginTop: 8, marginBottom: 32 }}>
+            <AnimatedButton
+              label={`Pay ${formatBHD(invoice.amount)}`}
+              onPress={() => navigation.navigate("Payment", { requestId })}
+            />
+          </View>
+        ) : null}
+      </>
+    );
+  };
+
+  // ⚠️ DEMO ONLY — stands in for MAZ's admin moving the request on. Remove once the real API
+  // reports the request's stage.
+  const renderDemoControl = () => {
+    if (!data || error || data.currentStep >= REQUEST_STEPS.length) return null;
+    return (
+      <View style={{ alignItems: "center", marginTop: 16 }}>
+        <TextLink onPress={advance.loading ? undefined : onAdvance}>
+          <Text className="text-xs" style={{ color: colors.textSubtle }}>
+            {advance.loading ? "Updating…" : "Demo mode: move to the next stage"}
+          </Text>
+        </TextLink>
+        <ErrorBanner message={advance.error} onRetry={onAdvance} />
       </View>
     );
   };
@@ -80,13 +207,10 @@ export default function RequestStatusScreen({ navigation, route }) {
         <View className="flex-1 px-6 pt-8 pb-10">
           <BackButton onPress={() => navigation.goBack()} />
 
-          <ScreenTitle
-            eyebrow={requestId ? `Request ${requestId}` : undefined}
-            title="Request submitted"
-            subtitle="We've received your request. You'll receive updates by email."
-          />
+          <ScreenTitle eyebrow={requestId ? `Request ${requestId}` : undefined} title={title} subtitle={subtitle} />
 
           {renderStatus()}
+          {renderDetails()}
 
           {summary ? (
             <View className="mb-8">
@@ -96,6 +220,8 @@ export default function RequestStatusScreen({ navigation, route }) {
 
           {/* Back (above) retraces the request steps; this jumps straight to the dashboard. */}
           <AnimatedButton label="Back to dashboard" variant="ghost" onPress={() => navigation.popToTop()} />
+
+          {renderDemoControl()}
         </View>
       </ScrollView>
     </SafeAreaView>

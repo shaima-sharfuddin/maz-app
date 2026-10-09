@@ -1,23 +1,23 @@
 import { View, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeContext";
+import { useCardStyle } from "../theme/surfaces";
+import { RADIUS } from "../theme/theme";
 
 // Friendly placeholder for anything that can be empty (no lease, no meetings, no results, load errors).
 // `dashed` marks content that is intentionally not available yet.
 export default function EmptyState({ icon, title, message, dashed = false, children }) {
   const { colors } = useTheme();
+  const card = useCardStyle();
 
   return (
     <View
-      style={{
-        backgroundColor: dashed ? "transparent" : colors.surface,
-        borderWidth: 1,
-        borderStyle: dashed ? "dashed" : "solid",
-        borderColor: dashed ? colors.dashedBorder : colors.surfaceBorder,
-        borderRadius: 16,
-        padding: 24,
-        alignItems: "center",
-      }}
+      style={[
+        dashed
+          ? { borderWidth: 1, borderStyle: "dashed", borderColor: colors.dashedBorder, borderRadius: RADIUS.card }
+          : card,
+        { paddingHorizontal: 24, paddingVertical: 28, alignItems: "center" },
+      ]}
     >
       <View
         style={{
@@ -30,13 +30,13 @@ export default function EmptyState({ icon, title, message, dashed = false, child
           marginBottom: 16,
         }}
       >
-        <Ionicons name={icon} size={26} color={colors.primary} />
+        <Ionicons name={icon} size={28} color={colors.primary} />
       </View>
-      <Text className="text-lg font-semibold text-center mb-2" style={{ color: colors.text }}>
+      <Text style={{ color: colors.text, fontSize: 17, lineHeight: 24, fontWeight: "600", textAlign: "center", marginBottom: 6 }}>
         {title}
       </Text>
       {message ? (
-        <Text className="text-sm leading-5 text-center" style={{ color: colors.textMuted }}>
+        <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20, textAlign: "center", maxWidth: 320 }}>
           {message}
         </Text>
       ) : null}

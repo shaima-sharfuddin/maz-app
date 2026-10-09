@@ -11,13 +11,15 @@ import TextLink from "../components/TextLink";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import { loginSchema } from "../validation/schemas";
-import { logIn, requestPasswordReset } from "../services/api";
+import { logIn, requestPasswordReset, AUTH_IS_MOCK } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 import { useAuth } from "../auth/AuthContext";
+import { useDemo } from "../demo/DemoContext";
 
 export default function LoginScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const { signIn } = useAuth();
+  const { signIn, sessionExpired } = useAuth();
+  const { setUserState } = useDemo();
   const justVerified = route.params?.justVerified;
   const {
     control,
@@ -28,17 +30,21 @@ export default function LoginScreen({ navigation, route }) {
   } = useZodForm(loginSchema, { email: route.params?.email ?? "", password: "" });
 
   const login = useSubmit(logIn);
+  const notVerified = login.errorCode === "EMAIL_NOT_VERIFIED";
   const reset = useSubmit(requestPasswordReset);
   const [resetSentTo, setResetSentTo] = useState("");
 
   // Saving the session switches the navigator to the signed-in screens (App.js) — no navigate() needed.
-  // New accounts land on Complete Profile; existing ones on the dashboard.
+  // The dashboard follows the account, never a leftover demo setting: an account linked to a MAZ customer
+  // (customerId) always opens the Existing User (tenant) dashboard; one without a customer yet (a New User who
+  // signed up in this session) opens the New User dashboard.
   const onSubmit = handleSubmit(async (values) => {
     const result = await login.submit(values);
-    if (result) signIn(result);
+    if (!result) return;
+    setUserState(result.user.customerId != null ? "tenant" : "newUser");
+    signIn(result);
   });
 
-  const notVerified = login.errorCode === "EMAIL_NOT_VERIFIED";
 
   // Uses the email already typed above; if it's missing/invalid, surface that field's error instead.
   const onForgotPassword = async () => {
@@ -57,7 +63,13 @@ export default function LoginScreen({ navigation, route }) {
           <View className="flex-1 px-6 pt-8 pb-10">
             <BackButton onPress={() => navigation.goBack()} />
 
-            <ScreenTitle title="Welcome back" subtitle="Log in to your MAZ account." />
+            <ScreenTitle eyebrow="MAZ Business Center" title="Welcome back" subtitle="Log in to your MAZ account." />
+
+            {sessionExpired ? (
+              <Text className="text-sm mb-6" style={{ color: colors.danger, marginTop: -16 }}>
+                Your session has expired. Please log in again.
+              </Text>
+            ) : null}
 
             {justVerified ? (
               <Text className="text-sm mb-6" style={{ color: colors.success, marginTop: -16 }}>
@@ -105,6 +117,7 @@ export default function LoginScreen({ navigation, route }) {
                 disabled={!isValid}
                 loading={login.loading}
               />
+              {/* A New User who signed up but never entered their code can verify from here. */}
               <ErrorBanner
                 message={login.error}
                 retryLabel={notVerified ? "Verify email" : "Try again"}
@@ -116,7 +129,14 @@ export default function LoginScreen({ navigation, route }) {
               />
             </View>
 
-            <TextLink onPress={() => navigation.navigate("SignUp")} style={{ marginTop: 12 }}>
+            {AUTH_IS_MOCK ? (
+              // Honest about the demo: MAZ has no login endpoint yet (services/authService.js).
+              <Text className="text-xs text-center mt-4" style={{ color: colors.textSubtle }}>
+                Demo sign-in — MAZ accounts aren&apos;t connected yet, so any email and password work.
+              </Text>
+            ) : null}
+
+            <TextLink onPress={() => navigation.navigate("NewUserSignUp")} style={{ marginTop: 12 }}>
               <Text className="text-sm" style={{ color: colors.textMuted }}>
                 {"Don't have an account? "}
                 <Text className="font-medium" style={{ color: colors.text }}>

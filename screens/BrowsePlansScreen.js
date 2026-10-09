@@ -1,114 +1,50 @@
-import { useState } from "react";
 import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
 import TrustStats from "../components/TrustStats";
 import BackButton from "../components/BackButton";
-import ScreenTitle from "../components/ScreenTitle";
-import PressableScale from "../components/PressableScale";
+import ServiceCard from "../components/ServiceCard";
 import EmptyState from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchPlans } from "../services/api";
+import { fetchPlans, errorMessage } from "../services/api";
 import { TRUST_STATS } from "../data/brand";
 import { useTheme } from "../theme/ThemeContext";
+import { TYPE } from "../theme/theme";
+import FadeIn from "../components/FadeIn";
+import PhotoHero from "../components/PhotoHero";
 
-function PlanCardSkeleton() {
+function ServiceCardSkeleton() {
   return (
-    <SkeletonCard style={{ marginBottom: 16 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-        <Skeleton width={44} height={44} radius={12} style={{ marginRight: 14 }} />
-        <Skeleton width="50%" height={18} />
+    <SkeletonCard style={{ marginBottom: 16, padding: 16, flexDirection: "row", alignItems: "center" }}>
+      <Skeleton width={44} height={44} radius={12} style={{ marginRight: 14 }} />
+      <View style={{ flex: 1 }}>
+        <Skeleton width="50%" height={16} style={{ marginBottom: 8 }} />
+        <Skeleton width="85%" height={12} />
       </View>
-      <Skeleton width="90%" height={12} style={{ marginBottom: 6 }} />
-      <Skeleton width="65%" height={12} style={{ marginBottom: 20 }} />
-      <Skeleton height={52} radius={12} />
     </SkeletonCard>
   );
 }
 
-function PlanCard({ plan, index, selected, onToggle }) {
-  const { colors } = useTheme();
-
-  return (
-    <PressableScale
-      onPress={onToggle}
-      scaleTo={0.98}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      containerStyle={{ marginBottom: 16 }}
-      style={{
-        backgroundColor: selected ? colors.primaryTint : colors.surface,
-        borderWidth: 1.5,
-        borderColor: selected ? colors.primary : colors.surfaceBorder,
-        borderRadius: 16,
-        padding: 20,
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-        {/* Simple monogram graphic. */}
-        <View
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            backgroundColor: colors.primarySoft,
-            alignItems: "center",
-            justifyContent: "center",
-            marginRight: 14,
-          }}
-        >
-          <Text className="text-base font-bold" style={{ color: colors.primary }}>
-            {String(index + 1).padStart(2, "0")}
-          </Text>
-        </View>
-        {/* Title and badge stack vertically so long titles wrap instead of being squeezed on small phones. */}
-        <View style={{ flex: 1 }}>
-          <Text className="text-lg font-semibold" style={{ color: colors.text }}>
-            {plan.title}
-          </Text>
-          {selected ? (
-            <Text className="text-xs font-semibold uppercase tracking-widest mt-1" style={{ color: colors.text }}>
-              {"✓"} Selected
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      <Text className="text-sm leading-5 mb-5" style={{ color: colors.textMuted }}>
-        {plan.description}
-      </Text>
-
-      <AnimatedButton
-        label={selected ? "Clear selection" : "Select"}
-        variant={selected ? "ghost" : "primary"}
-        onPress={onToggle}
-      />
-    </PressableScale>
-  );
-}
-
+// The services a customer can request (fetchPlans: Office Suites, Meeting Rooms, CR Registration).
+// Each opens Term & payments (SelectTerm) directly — or, for Meeting Rooms, the hourly booking.
 export default function BrowsePlansScreen({ navigation }) {
   const { colors } = useTheme();
   const { loading, data: plans, error, reload } = useAsync(fetchPlans);
-  const [selectedId, setSelectedId] = useState(null);
 
-  const toggleSelect = (plan) => {
-    setSelectedId((prev) => (prev === plan.id ? null : plan.id));
-  };
-
-  const selectedPlan = plans?.find((plan) => plan.id === selectedId);
+  const openService = (plan) =>
+    plan.hourly ? navigation.navigate("MeetingRooms") : navigation.navigate("SelectTerm", { plan });
 
   const renderPlans = () => {
     if (loading) {
-      return [0, 1, 2].map((key) => <PlanCardSkeleton key={key} />);
+      return [0, 1, 2].map((key) => <ServiceCardSkeleton key={key} />);
     }
     if (error) {
       return (
         <EmptyState
           icon="cloud-offline-outline"
-          title="We couldn't load plans"
-          message="Please check your connection and try again."
+          title="We couldn't load our services"
+          message={errorMessage(error)}
         >
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>
@@ -118,60 +54,48 @@ export default function BrowsePlansScreen({ navigation }) {
       return (
         <EmptyState
           icon="briefcase-outline"
-          title="No plans available right now"
+          title="No services available right now"
           message="Our team is preparing new offerings. Please check back shortly."
         />
       );
     }
     return plans.map((plan, index) => (
-      <PlanCard
-        key={plan.id}
-        plan={plan}
-        index={index}
-        selected={plan.id === selectedId}
-        onToggle={() => toggleSelect(plan)}
-      />
+      <FadeIn key={plan.id} index={index + 1}>
+        <ServiceCard plan={plan} onPress={() => openService(plan)} />
+      </FadeIn>
     ));
   };
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        {/* Banner: the screen's existing eyebrow, title and subtitle over an office-suite photo. */}
+        <PhotoHero
+          photo="plans"
+          overlay="navy"
+          minHeight={320}
+          contentStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 28, justifyContent: "space-between" }}
+        >
+          <BackButton onHero onPress={() => navigation.goBack()} />
+          <FadeIn style={{ paddingTop: 72 }}>
+            <Text style={[TYPE.overline, { color: colors.onHeroMuted, marginBottom: 10 }]}>MAZ Business Center</Text>
+            <Text accessibilityRole="header" style={[TYPE.screenTitle, { color: colors.onHero, marginBottom: 8, maxWidth: 300 }]}>
+              What are you looking for?
+            </Text>
+            <Text style={{ color: colors.onHeroMuted, fontSize: 15, lineHeight: 22, maxWidth: 320 }}>
+              Prestigious workspaces and seamless business services, tailored to how you work.
+            </Text>
+          </FadeIn>
+        </PhotoHero>
+
         <View className="flex-1 px-6 pt-8 pb-10">
-          <BackButton onPress={() => navigation.goBack()} />
-
-          <ScreenTitle
-            eyebrow="MAZ Business Center"
-            title="Browse plans"
-            subtitle="Prestigious workspaces and seamless business services, tailored to how you work."
-          />
-
-          <View className="mb-8">
-            <TrustStats stats={TRUST_STATS} />
-          </View>
-
           {renderPlans()}
+
+          <FadeIn index={4} style={{ marginTop: 16 }}>
+            <TrustStats stats={TRUST_STATS} variant="inline" />
+          </FadeIn>
         </View>
       </ScrollView>
-
-      {/* Fixed footer once a plan is chosen, so Continue is always reachable without scrolling. */}
-      {selectedPlan ? (
-        <View
-          style={{
-            paddingHorizontal: 24,
-            paddingTop: 12,
-            paddingBottom: 8,
-            backgroundColor: colors.background,
-            borderTopWidth: 1,
-            borderTopColor: colors.surfaceBorder,
-          }}
-        >
-          <AnimatedButton
-            label={`Continue with ${selectedPlan.title}`}
-            onPress={() => navigation.navigate("SelectTerm", { plan: selectedPlan })}
-          />
-        </View>
-      ) : null}
     </SafeAreaView>
   );
 }

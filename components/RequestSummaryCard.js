@@ -1,18 +1,27 @@
 import { View, Text } from "react-native";
 import { useTheme } from "../theme/ThemeContext";
 
-// Recap of an office request. summary: { plan, location, term, monthlyRate?, estimatedPrice, isPlaceholder? }
-// (build it with buildRequestSummary in data/pricing.js). isPlaceholder shows an on-screen note so
-// sample values aren't mistaken for a real quote.
+// Recap of an office request (build the summary with buildRequestSummary in data/pricing.js):
+// { plan, location, term, paymentFrequency?, monthlyRate?, firstInstallment?, deposit?, firstInvoiceTotal?,
+//   estimatedPrice, isPlaceholder? }. The first invoice = first installment + deposit, shown as separate
+// lines then the total. Summaries without those fields (older requests) fall back to the estimated total.
+// isPlaceholder shows an on-screen note so sample values aren't mistaken for a real quote.
 export default function RequestSummaryCard({ summary, title = "Request summary" }) {
   const { colors } = useTheme();
 
   const rows = [
-    { label: "Plan", value: summary.plan },
+    { label: "Service", value: summary.plan },
     { label: "Location", value: summary.location },
-    { label: "Term", value: summary.term },
+    { label: "Lease length", value: summary.term },
+    summary.paymentFrequency ? { label: "Payment frequency", value: summary.paymentFrequency } : null,
     summary.monthlyRate ? { label: "Monthly rate", value: summary.monthlyRate } : null,
-    { label: "Estimated total", value: summary.estimatedPrice, emphasize: true },
+    ...(summary.firstInvoiceTotal
+      ? [
+          { label: "First installment", value: summary.firstInstallment },
+          { label: "Deposit", value: summary.deposit },
+          { label: "First invoice total", value: summary.firstInvoiceTotal, emphasize: true },
+        ]
+      : [{ label: "Estimated total", value: summary.estimatedPrice, emphasize: true }]),
   ].filter(Boolean);
 
   return (
@@ -65,7 +74,7 @@ export default function RequestSummaryCard({ summary, title = "Request summary" 
             borderTopColor: colors.surfaceBorder,
           }}
         >
-          Sample location and rate — final details are confirmed by MAZ after your request.
+          Sample location, rate and deposit — final details are confirmed by MAZ after your request.
         </Text>
       ) : null}
     </View>

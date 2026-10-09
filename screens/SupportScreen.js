@@ -10,8 +10,9 @@ import PressableScale from "../components/PressableScale";
 import StatusBadge from "../components/StatusBadge";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchEnquiries } from "../services/api";
+import { fetchEnquiries, errorMessage } from "../services/api";
 import { formatTimestamp } from "../utils/formatDate";
+import SectionHeading from "../components/SectionHeading";
 import { useTheme } from "../theme/ThemeContext";
 import { useDemo } from "../demo/DemoContext";
 
@@ -69,7 +70,7 @@ export default function SupportScreen({ navigation, route }) {
         <EmptyState
           icon="cloud-offline-outline"
           title="We couldn't load your enquiries"
-          message="Please check your connection and try again."
+          message={errorMessage(error)}
         >
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>
@@ -105,7 +106,7 @@ export default function SupportScreen({ navigation, route }) {
 
           {submitted ? (
             <Text className="text-sm mb-4" style={{ color: colors.success }}>
-              {"✓"} Enquiry sent — we'll reply by email and here.
+              {"✓"} Enquiry sent — we&apos;ll reply by email and here.
             </Text>
           ) : null}
 
@@ -113,9 +114,7 @@ export default function SupportScreen({ navigation, route }) {
             <AnimatedButton label="New enquiry" onPress={() => navigation.navigate("NewEnquiry")} />
           </View>
 
-          <Text className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: colors.accent }}>
-            Your enquiries
-          </Text>
+          <SectionHeading>Your enquiries</SectionHeading>
           {renderEnquiries()}
         </View>
       </ScrollView>
