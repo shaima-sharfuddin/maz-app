@@ -14,6 +14,8 @@ import { submitRequest } from "../services/api";
 import { buildRequestSummary } from "../data/pricing";
 import { useTheme } from "../theme/ThemeContext";
 import { useAuth } from "../auth/AuthContext";
+import InfoNote from "../components/InfoNote";
+import { DEMO_NOTES } from "../data/demoNotes";
 
 // SelectTerm → here → RequestStatus: the last look before the request is sent. Submits with the
 // signed-in user's name, email and company (collected at sign-up — no details form, client feedback
@@ -80,8 +82,13 @@ export default function ReviewRequestScreen({ navigation, route }) {
           <ScreenTitle
             eyebrow={plan.title}
             title="Review your request"
-            subtitle="Check the details below. MAZ reviews every request and confirms your unit and final pricing."
+            subtitle="Check the details below. In the live service, MAZ reviews each request and confirms the unit and final pricing."
           />
+
+          {/* Office requests are MOCK (services/mockApi.js submitRequest): saved in the app, never sent to MAZ. */}
+          <InfoNote boxed style={{ marginBottom: 16 }}>
+            {DEMO_NOTES.reviewRequest}
+          </InfoNote>
 
           <RequestSummaryCard summary={summary} title="Your request" />
 
@@ -96,7 +103,7 @@ export default function ReviewRequestScreen({ navigation, route }) {
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
                 <Ionicons name="checkmark-circle" size={18} color={colors.success} style={{ marginRight: 6 }} />
                 <Text className="text-sm" style={{ color: colors.success }}>
-                  Request submitted
+                  Demo request saved
                 </Text>
               </View>
               <AnimatedButton label="View request status" onPress={() => openStatus(submitted)} />
@@ -104,7 +111,7 @@ export default function ReviewRequestScreen({ navigation, route }) {
           ) : (
             <>
               <AnimatedButton
-                label={loading ? "Submitting your request…" : "Submit request"}
+                label={loading ? "Saving your demo request…" : "Submit demo request"}
                 onPress={onSubmit}
                 loading={loading}
               />

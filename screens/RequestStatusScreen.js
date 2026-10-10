@@ -16,7 +16,9 @@ import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import useSubmit from "../hooks/useSubmit";
 import { fetchRequestStatus, advanceRequestStage, errorMessage } from "../services/api";
-import { REQUEST_STEPS, AFTER_PAYMENT_NEXT } from "../data/requestSteps";
+import { REQUEST_STEPS } from "../data/requestSteps";
+import { DEMO_NOTES, DEMO_REQUEST_STAGE_TEXT, DEMO_AFTER_PAYMENT_NEXT } from "../data/demoNotes";
+import InfoNote from "../components/InfoNote";
 import { formatBHD } from "../data/pricing";
 import { formatDate } from "../utils/formatDate";
 import { unitWithLocation } from "../utils/formatUnit";
@@ -44,18 +46,23 @@ function StatusSkeleton() {
   );
 }
 
-// Heading for where the request is: just sent → in progress → invoice to pay → paid.
+// ⚠️ The request is MOCK (services/mockApi.js): its stages are moved on by the demo control below, nothing is sent
+// to MAZ and no emails go out. The stages keep their real labels (data/requestSteps.js — the live process), but the
+// wording shown here is the demo's (data/demoNotes.js), so the screen never claims an email, a unit or a review.
+const DEMO_STEPS = REQUEST_STEPS.map((step) => ({ ...step, ...DEMO_REQUEST_STAGE_TEXT[step.key] }));
+
+// Heading for where the request is: just saved → in progress → invoice to pay → paid.
 function headingFor(status) {
   if (status?.payment) {
-    return { title: "Payment received", subtitle: "Thank you. Your office is secured." };
+    return { title: "Demo payment recorded", subtitle: "Your sample invoice is marked as paid in this app." };
   }
   if (status?.invoice) {
-    return { title: "Your invoice is ready", subtitle: "Pay your invoice to secure your office." };
+    return { title: "Your sample invoice is ready", subtitle: "Pay it with a demo payment to see the next step." };
   }
   if (status && status.currentStep > 1) {
-    return { title: "Request in progress", subtitle: "We'll email you whenever your request moves forward." };
+    return { title: "Request in progress", subtitle: "This demo request moves forward when you use the demo link below." };
   }
-  return { title: "Request submitted", subtitle: "We've received your request. You'll receive updates by email." };
+  return { title: "Request saved", subtitle: "Your demo request is saved in this app." };
 }
 
 // The request's stage as a timeline (when each stage was reached, what happens next), plus what each stage
@@ -92,11 +99,11 @@ export default function RequestStatusScreen({ navigation, route }) {
     }
     // Once paid, every stage is complete.
     const step = data.payment ? REQUEST_STEPS.length + 1 : data.currentStep;
-    const next = data.payment ? AFTER_PAYMENT_NEXT : REQUEST_STEPS[data.currentStep - 1]?.next;
+    const next = data.payment ? DEMO_AFTER_PAYMENT_NEXT : DEMO_STEPS[data.currentStep - 1]?.next;
     return (
       <>
         <View style={cardStyle(colors)}>
-          <StatusStepper orientation="vertical" currentStep={step} dates={data.stageReachedAt} />
+          <StatusStepper orientation="vertical" steps={DEMO_STEPS} currentStep={step} dates={data.stageReachedAt} />
           {next ? (
             <View
               style={{
@@ -128,8 +135,8 @@ export default function RequestStatusScreen({ navigation, route }) {
       <>
         {unit ? (
           <DetailCard
-            title="Your office"
-            rows={[{ label: "Assigned unit", value: unitWithLocation(unit.name, unit.location) }]}
+            title={DEMO_NOTES.sampleUnitTitle}
+            rows={[{ label: DEMO_NOTES.sampleUnitLabel, value: unitWithLocation(unit.name, unit.location) }]}
           />
         ) : null}
 
@@ -208,6 +215,10 @@ export default function RequestStatusScreen({ navigation, route }) {
           <BackButton onPress={() => navigation.goBack()} />
 
           <ScreenTitle eyebrow={requestId ? `Request ${requestId}` : undefined} title={title} subtitle={subtitle} />
+
+          <InfoNote boxed style={{ marginBottom: 16 }}>
+            {DEMO_NOTES.requestStatus}
+          </InfoNote>
 
           {renderStatus()}
           {renderDetails()}

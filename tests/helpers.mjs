@@ -71,9 +71,29 @@ globalThis.fetch = async (url, init = {}) => {
 // ---- app modules ----
 export const api = await import("../services/api.js");
 export const auth = await import("../services/authService.js");
+// What AuthContext does at launch: the phone's saved demo accounts have been read (none saved here). Without it, logIn
+// refuses with ACCOUNT_CHECK_FAILED — it never guesses who an unknown email is.
+auth.restoreDemoAccounts([]);
 
-// A fresh demo Existing User session (customer 1). Each login is a new session object → its own contracts cache.
-export async function loginExistingUser() {
+// TEST-ONLY: the fake live-auth verifier that tests/loader-hooks.mjs swaps in for services/liveAuth.js (npm test).
+const { issueVerifiedLiveSession } = await import("./fixtures/fakeLiveAuth.mjs");
+
+// A session as REAL MAZ authentication will create it (services/mazAuth.js — not built yet): issued — and so verified —
+// by the fake verifier, so the LIVE API code (services/httpApi.js) can be exercised against the fake fetch. In the app
+// no session can be verified (services/liveAuth.js answers false), so no session can load live customer data. Each
+// call is a new session object → its own contracts cache. Customer 1 owns the fixture contract CN-TEST-0001.
+export function loginLiveCustomer(customerId = 1) {
+  const session = issueVerifiedLiveSession({
+    token: `TKN-LIVE-${Math.random().toString(36).slice(2)}`,
+    user: { email: `live.${Math.random().toString(36).slice(2)}@example.com`, name: "Live Customer", companyName: null, customerId },
+    profileComplete: true,
+  });
+  auth.setCurrentSession(session);
+  return session;
+}
+
+// A fresh MOCK demo tenant (what Login gives any email that isn't a New User demo account): SAMPLE data only.
+export async function loginDemoTenant() {
   const session = await auth.logIn({ email: `tenant.${Math.random().toString(36).slice(2)}@example.com`, password: "x" });
   auth.setCurrentSession(session);
   return session;

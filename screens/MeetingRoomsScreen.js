@@ -17,7 +17,9 @@ import { cancelBooking, fetchBookings, fetchMeetingRooms, errorMessage } from ".
 import { formatDate, formatTime } from "../utils/formatDate";
 import SectionHeading from "../components/SectionHeading";
 import { useTheme } from "../theme/ThemeContext";
-import { useDemo } from "../demo/DemoContext";
+import { useAccountState } from "../auth/AuthContext";
+import InfoNote from "../components/InfoNote";
+import { DEMO_NOTES } from "../data/demoNotes";
 
 function BookingRow({ booking, onCancelled }) {
   const { colors } = useTheme();
@@ -50,6 +52,7 @@ function BookingRow({ booking, onCancelled }) {
       <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
         <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>{booking.roomName}</Text>
         <StatusBadge status={booking.status} />
+        <StatusBadge status="demo" />
       </View>
       <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>{when}</Text>
       {booking.notes ? (
@@ -127,7 +130,7 @@ const loadError = (title, onRetry, error) => (
 
 export default function MeetingRoomsScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const { userState } = useDemo();
+  const userState = useAccountState(); // from the session's customerId — never a separate demo setting
   const justBooked = Boolean(route.params?.bookedId); // set by BookMeetingRoom after a successful booking
   const [justCancelled, setJustCancelled] = useState(false);
 
@@ -164,7 +167,7 @@ export default function MeetingRoomsScreen({ navigation, route }) {
     ));
   };
 
-  const successMessage = justCancelled ? "Booking cancelled." : justBooked ? "Booking confirmed — see you soon." : null;
+  const successMessage = justCancelled ? DEMO_NOTES.bookingCancelled : justBooked ? DEMO_NOTES.bookingSaved : null;
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -175,6 +178,11 @@ export default function MeetingRoomsScreen({ navigation, route }) {
             title="Meeting rooms"
             subtitle="Marble boardrooms and intimate conference suites, reserved in moments."
           />
+
+          {/* Meeting rooms are MOCK (data/meetingRooms.js + mockApi): sample rooms, simulated availability. */}
+          <InfoNote boxed style={{ marginBottom: 16 }}>
+            {DEMO_NOTES.meetingRooms}
+          </InfoNote>
 
           {successMessage ? (
             <Text className="text-sm mb-4" style={{ color: colors.success }}>

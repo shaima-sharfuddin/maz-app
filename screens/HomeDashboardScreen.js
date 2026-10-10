@@ -40,10 +40,10 @@ import { TRUST_STATS, BAHRAIN_ADVANTAGES } from "../data/brand";
 import { formatBHD } from "../data/pricing";
 import { formatDate } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
+import { DEMO_NOTES } from "../data/demoNotes";
 import { useCardStyle } from "../theme/surfaces";
 import { RADIUS, TYPE } from "../theme/theme";
-import { useDemo } from "../demo/DemoContext";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth, useAccountState } from "../auth/AuthContext";
 
 function ServiceSkeleton() {
   return (
@@ -383,7 +383,7 @@ function QuickAction({ icon, label, caption, onPress }) {
 
 export default function HomeDashboardScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const { userState } = useDemo();
+  const userState = useAccountState(); // from the session's customerId — never a separate demo setting
   const { user } = useAuth();
   const profileSaved = route.params?.profileSaved; // set right after onboarding (App.js initialParams)
 
@@ -459,6 +459,8 @@ export default function HomeDashboardScreen({ navigation, route }) {
           request={request}
           onPress={() => navigation.navigate("RequestStatus", { requestId: request.requestId, summary: request.summary })}
         />
+        {/* Office requests are MOCK (services/mockApi.js) — never presented as sent to MAZ. */}
+        <InfoNote style={{ marginBottom: 8 }}>{DEMO_NOTES.requests}</InfoNote>
         {latestRequest.stale ? <StaleDataNote onRetry={reloadRequest} /> : null}
         <TextLink align="left" onPress={() => navigation.navigate("MyRequests")} style={{ marginTop: 4 }}>
           <Text className="text-sm font-medium" style={{ color: colors.text }}>
@@ -515,11 +517,12 @@ export default function HomeDashboardScreen({ navigation, route }) {
     return (
       <View>
         {AUTH_IS_MOCK ? (
-          // Honest about the demo login: it maps to MAZ's demo customer (services/mock/mockCustomerIdentity.js),
-          // so the real MAZ contracts below may not belong to the person using the app.
+          // Honest about the demo login: while auth is mock, the demo tenant sees SAMPLE contracts only
+          // (services/mock/mockTenantContracts.js) — never MAZ's live customer data.
           <FadeIn>
             <InfoNote boxed style={{ marginBottom: 16 }}>
-              Demo account — the contracts shown are a MAZ demo customer&apos;s, not necessarily yours.
+              Demo account — the contracts, bills and payments shown are sample data created in the app, not MAZ
+              records.
             </InfoNote>
           </FadeIn>
         ) : null}
@@ -528,30 +531,32 @@ export default function HomeDashboardScreen({ navigation, route }) {
 
         <FadeIn index={4}>
           <SectionHeading>Quick actions</SectionHeading>
-          <View style={{ flexDirection: "row", gap: 12, marginBottom: 32 }}>
+          <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
             <QuickAction
               icon="calendar-outline"
               label="Meeting rooms"
               caption={
-                activity ? (activity.nextBooking ? `Next: ${formatDate(activity.nextBooking.date)}` : "Book a room") : null
+                activity ? (activity.nextBooking ? `Next: ${formatDate(activity.nextBooking.date)} · demo` : "Book a room") : null
               }
               onPress={() => navigation.navigate("MeetingRooms")}
             />
             <QuickAction
               icon="chatbubbles-outline"
               label="Support"
-              caption={activity ? (activity.openEnquiries > 0 ? `${activity.openEnquiries} open` : "Get help") : null}
+              caption={activity ? (activity.openEnquiries > 0 ? `${activity.openEnquiries} open · demo` : "Get help") : null}
               onPress={() => navigation.navigate("Support")}
             />
             <QuickAction
               icon="shield-checkmark-outline"
               label="Violations"
               caption={
-                activity ? (activity.openViolations > 0 ? `${activity.openViolations} open · demo` : "All clear") : null
+                activity ? (activity.openViolations > 0 ? `${activity.openViolations} open · demo` : "All clear · demo") : null
               }
               onPress={() => navigation.navigate("Violations")}
             />
           </View>
+          {/* The three quick actions open MOCK features (meeting rooms, support, violation notices). */}
+          <InfoNote style={{ marginBottom: 32 }}>{DEMO_NOTES.quickActions}</InfoNote>
         </FadeIn>
 
         {/* Secondary: only a request submitted this session shows here; "Find a new office" is the tenant's

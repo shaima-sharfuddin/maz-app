@@ -1,20 +1,26 @@
 import { get, getAllPages } from "./httpClient";
-import { toUiBill, toUiContract, toUiCustomer } from "./apiMappers";
+import { toUiBill, toUiCodedName, toUiContract, toUiCustomer } from "./apiMappers";
 import { mockProfileEdits, mockSignUpProfile } from "./mockApi";
 import { ApiError } from "./apiError";
-import { requireCurrentCustomerId } from "./customerService";
+import { requireLiveCustomerId } from "./customerService";
 import { getCurrentSession } from "./authService";
 
 // REAL endpoints (read-only). Same names and result shapes as the mock functions they replace,
 // so services/api.js can switch them one at a time and screens don't change.
 
-// The logged-in customer's id comes from services/customerService.js (the session) — never a constant here.
-// Today that id is set by the MOCK identity provider (services/mock/mockCustomerIdentity.js).
+// ⚠️ LIVE CUSTOMER DATA GATE: every customer-specific read here (customer record, contracts, bills / receipts) first
+// calls customerService.requireLiveCustomerId(), which only passes for a session from REAL MAZ authentication. While
+// auth is mock — the demo tenant, a New User, any old or unsafe session — it throws NO_CUSTOMER BEFORE any request,
+// so no live customer data can be loaded through mock authentication. (The demo tenant gets sample data instead:
+// services/mock/mockTenantContracts.js.) Public catalogues (units, violation types, activities) aren't customer data.
 
 // Units rarely change and /units returns the full list (~480) in one response, so it's fetched
 // once per session. A failed load isn't cached, so "Try again" refetches.
 // MAZ has no smaller units request: /units/{id} answers an empty 200 and ?ids= / ?id= / ?page= are ignored
 // (checked 2026-10-09), so contracts' unit names need this list until MAZ includes them in /contracts.
+// Units also carry status ("1" / "3"), std_rent_amt and max_cr (checked 2026-10-10). Their meaning isn't confirmed,
+// so they are NOT used anywhere — in particular std_rent_amt is never shown as a price (prices stay the labelled
+// samples in data/pricing.js). Only id, name and is_incubation are read (apiMappers.toUiContract).
 let unitsPromise = null;
 let unitsByIdPromise = null;
 export function fetchUnits() {
@@ -41,13 +47,53 @@ function loadUnitsById() {
 const loadUnitsByIdOrNone = () => loadUnitsById().catch(() => NO_UNITS);
 const NO_UNITS = new Map();
 
-// id → { id, customer: {...}, owner: {...} } in the CompleteProfile form's field names.
-// Defaults to the logged-in customer.
-export async function fetchCustomer(customerId = requireCurrentCustomerId()) {
+// id → { id, name } — ONLY the id and name (apiMappers.toUiCustomer drops the owners' CPR / passport / contact
+// details the record carries). Only the logged-in LIVE customer's own record (any other id → NOT_FOUND, unrequested). A record that says it belongs to a different
+// customer is refused (NOT_FOUND), so another customer's name can never be shown. An unknown id → MAZ answers 404
+// (with a debug page — never shown: httpClient turns it into a fixed NOT_FOUND message).
+export async function fetchCustomer(customerId) {
+  const liveCustomerId = requireLiveCustomerId();
+  if (customerId != null && String(customerId) !== String(liveCustomerId)) throw new ApiError("NOT_FOUND", "Customer not found.");
+  customerId = liveCustomerId;
   const response = await get(`/customers/${encodeURIComponent(customerId)}`);
-  if (!response?.data) throw new ApiError("NOT_FOUND", "Customer not found.");
-  return toUiCustomer(response.data);
+  if (!response?.data || typeof response.data !== "object") throw new ApiError("NOT_FOUND", "Customer not found.");
+  const customer = toUiCustomer(response.data);
+  if (customer.id != null && customer.id !== String(customerId)) throw new ApiError("NOT_FOUND", "Customer not found.");
+  return { ...customer, id: customer.id ?? String(customerId) };
 }
+
+// Reference catalogues — public lists with no customer data, one response each (no links / meta; ?page is ignored,
+// checked 2026-10-10). Like /units: fetched once per app run and shared by simultaneous callers; a failure or an
+// empty list isn't cached, so the next call (e.g. "Try again") asks MAZ again.
+function cachedCatalogue(path, compare) {
+  let promise = null;
+  return () => {
+    if (!promise) {
+      promise = getAllPages(path)
+        .then((records) => {
+          const byName = new Map();
+          for (const record of records.map(toUiCodedName)) if (record && !byName.has(record.name)) byName.set(record.name, record);
+          if (byName.size === 0) promise = null; // an empty list isn't cached either — a retry asks MAZ again
+          return [...byName.values()].sort(compare);
+        })
+        .catch((error) => {
+          promise = null;
+          throw error;
+        });
+    }
+    return promise;
+  };
+}
+const byCode = (a, b) => (Number(a.code) || Infinity) - (Number(b.code) || Infinity) || a.label.localeCompare(b.label);
+const byLabel = (a, b) => a.label.localeCompare(b.label);
+
+// GET /violations — MAZ's catalogue of violation TYPES ({ name: "#186 …" }), NOT notices issued to a customer
+// (no customer, contract, date, status or fine). → [{ name, code, label }], by code.
+export const fetchViolationTypes = cachedCatalogue("/violations", byCode);
+
+// GET /activities — MAZ's business activities ({ name: "702 Management consultancy activities" }, 165 today, no id)
+// → [{ name, code, label }], alphabetical by label. Used for the New User sign-up's Activity options.
+export const fetchActivities = cachedCatalogue("/activities", byLabel);
 
 // EditProfile's pre-fill → { email, values: { companyName, customerName, email } }. `user` is the session user.
 // In order: edits saved this session (mock updateProfile — no real write yet); what a New User entered at
@@ -81,7 +127,7 @@ const CONTRACTS_CACHE_MS = 60 * 1000;
 let contractsCache = null; // { session, customerId, promise, settledAt }
 
 function loadTenantRawContracts() {
-  const customerId = requireCurrentCustomerId();
+  const customerId = requireLiveCustomerId();
   const session = getCurrentSession();
   const cached = contractsCache;
   const fresh =

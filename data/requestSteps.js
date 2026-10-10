@@ -11,7 +11,9 @@ export const REQUEST_STEPS = [
   },
   {
     key: "emailSent",
-    label: "Email Confirmation Sent",
+    // Simulated stage: no email service exists yet (SERVICE_SOURCES.emailDelivery "none"), so the label must not say
+    // an email was sent. Restore "Email Confirmation Sent" once MAZ really sends it.
+    label: "Email Confirmation (simulated)",
     description: "We've emailed you a confirmation. Our team will review your request next.",
     next: "MAZ will review your request.",
   },

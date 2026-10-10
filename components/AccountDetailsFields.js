@@ -5,13 +5,16 @@ import FormField from "./FormField";
 import SelectField from "./SelectField";
 import StyledInput from "./StyledInput";
 import FieldError from "./FieldError";
-import { ACTIVITIES, BAHRAIN, GCC_NATIONALITIES } from "../data/formOptions";
+import { BAHRAIN, GCC_NATIONALITIES } from "../data/formOptions";
+import InfoNote from "./InfoNote";
+import TextLink from "./TextLink";
+import { Skeleton } from "./Skeleton";
 import { DEFAULT_PHONE_COUNTRY, PHONE_COUNTRY_OPTIONS, findCountry, flagOf } from "../data/countryCodes";
 import { useTheme } from "../theme/ThemeContext";
 
 // The account fields collected at New User sign-up (rules: newUserSignUpSchema in validation/schemas.js):
-// Company Name, Customer Name, Activity (sign-up only — not on EditProfile), Email, Mobile Number (country code + number), Nationality, then CPR Number
-// (Bahrain) or Passport Number (others).
+// Company Name, Customer Name, Activity (sign-up only — not on EditProfile), Email, Mobile Number (country code + number),
+// Remarks (optional, sign-up only), Nationality, then CPR Number (Bahrain) or Passport Number (others).
 // Shared by NewUserSignUp (one group per step) and EditProfile (all at once) so the two never drift.
 
 export const EMPTY_ACCOUNT_DETAILS = {
@@ -24,6 +27,7 @@ export const EMPTY_ACCOUNT_DETAILS = {
   nationality: "",
   cprNumber: "",
   passportNumber: "",
+  remarks: "",
 };
 
 // Only one ID field applies: switching nationality clears the one that no longer does, so a stale
@@ -62,17 +66,40 @@ export function CompanyFields({ control }) {
 }
 
 // Business activity — sign-up only (NOT part of CompanyFields, so EditProfile doesn't show it). One choice from
-// ACTIVITIES, which are SAMPLE options (data/formOptions.js) until MAZ provides its real activity list.
-export function ActivityField({ control }) {
+// `options` (the screen loads them via fetchActivityOptions: MAZ's GET /activities labels — 165, so the sheet gets
+// a search box — or the SAMPLE list if that failed). `loading`: a placeholder until the options arrive.
+// `sample`: MAZ's list couldn't be loaded — say so, and offer `onRetry`.
+export function ActivityField({ control, options, loading = false, sample = false, onRetry }) {
+  const { colors } = useTheme();
+  if (loading) {
+    return (
+      <View style={{ marginBottom: 20 }} accessibilityLabel="Loading activities">
+        <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>Activity</Text>
+        <Skeleton width="100%" height={48} radius={12} />
+      </View>
+    );
+  }
   return (
-    <FormField
-      control={control}
-      name="activity"
-      component={SelectField}
-      label="Activity"
-      options={ACTIVITIES}
-      placeholder="Select business activity"
-    />
+    <>
+      <FormField
+        control={control}
+        name="activity"
+        component={SelectField}
+        label="Activity"
+        options={options}
+        placeholder="Select business activity"
+      />
+      {sample ? (
+        <View style={{ marginTop: -12, marginBottom: 20 }}>
+          <InfoNote>Showing sample activities — MAZ&apos;s activity list couldn&apos;t be loaded.</InfoNote>
+          {onRetry ? (
+            <TextLink align="left" onPress={onRetry}>
+              <Text style={{ color: colors.text, fontSize: 13, fontWeight: "600" }}>Try again</Text>
+            </TextLink>
+          ) : null}
+        </View>
+      ) : null}
+    </>
   );
 }
 
@@ -148,6 +175,24 @@ export function MobileNumberField({ control }) {
       </View>
       <FieldError message={error} />
     </View>
+  );
+}
+
+// Remarks — optional, multiline, sign-up only (sent as the enquiry's `remarks` when enquiries are switched on).
+export function RemarksField({ control }) {
+  return (
+    <FormField
+      control={control}
+      name="remarks"
+      component={StyledInput}
+      label="Remarks (optional)"
+      placeholder="Anything you'd like MAZ to know — e.g. team size or preferred start date"
+      multiline
+      numberOfLines={4}
+      maxLength={500}
+      textAlignVertical="top"
+      style={{ minHeight: 104 }}
+    />
   );
 }
 

@@ -7,7 +7,7 @@ import {
 } from "./mockApi";
 import { fetchContracts } from "./contractService";
 import { summarizePayments, contractsForAccountPayments, PAYMENT_SUMMARY_NOTE } from "./paymentSummary";
-import { getCurrentCustomerId } from "./customerService";
+import { getCurrentCustomerId, customerDataSource } from "./customerService";
 import { getCurrentSession } from "./authService";
 import { describeExpiry, warningStartDate, getExpiryNote } from "./expiryService";
 import { SERVICE_SOURCES } from "./serviceConfig";
@@ -33,7 +33,7 @@ const provider = mockNotifications;
 export const NOTIFICATIONS_ARE_DEMO = SERVICE_SOURCES.notifications !== "real";
 export const EMAIL_DELIVERY_AVAILABLE = SERVICE_SOURCES.emailDelivery === "real";
 export const NOTIFICATIONS_DEMO_NOTE =
-  "Demo notifications — created in the app from your contract data; not sent by MAZ. No emails or push notifications are sent.";
+  "Demo notifications — simulated in this app, not sent by MAZ. No emails or push notifications are sent.";
 
 const morningOf = (isoDate) => `${isoDate}T09:00:00`;
 
@@ -98,24 +98,28 @@ function paymentDueAlert(contracts) {
   ];
 }
 
-const accountNotice = () => ({
+const accountNotice = (live) => ({
   id: "DEMO-ACCOUNT",
   type: "account",
   title: "Demo account",
-  body: "You're signed in with a demo login linked to a MAZ demo customer. The contracts are real MAZ data; these notifications are demo.",
+  body: live
+    ? "These notifications are demo — created in the app from your contract data, not sent by MAZ."
+    : "You're signed in with a demo login. The contracts, bills and payments shown are sample data created in the app — not MAZ records — and these notifications are demo.",
   createdAt: `${toISODate(new Date())}T00:00:00`,
   target: { screen: "Settings", params: undefined },
 });
 
 async function existingUserNotifications() {
-  const contracts = await fetchContracts(); // REAL contracts (read only)
+  const contracts = await fetchContracts(); // the session's contracts: live (read only) or the demo tenant's samples
+  const live = customerDataSource() === "live";
   const alerts = [...expiryAlerts(contracts), ...paymentDueAlert(contracts)];
-  // The email each alert would get — recorded only. None for the DEMO contract (it isn't a real customer contract).
-  alerts.filter((alert) => !alert.demoContract).forEach(requestEmail);
+  // The email each alert would get — recorded only, and only for a live customer's real contracts (never about sample
+  // data or the DEMO contract).
+  if (live) alerts.filter((alert) => !alert.demoContract).forEach(requestEmail);
   const notifications = [
     ...provider.listEvents(),
-    ...alerts.map((n) => ({ ...n, demo: true, basedOnRealData: true })),
-    { ...accountNotice(), demo: true, basedOnRealData: false },
+    ...alerts.map((n) => ({ ...n, demo: true, basedOnRealData: live })),
+    { ...accountNotice(live), demo: true, basedOnRealData: false },
   ];
   return notifications
     .map((n) => ({ ...n, read: provider.isRead(n.id) }))

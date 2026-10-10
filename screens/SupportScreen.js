@@ -14,7 +14,9 @@ import { fetchEnquiries, errorMessage } from "../services/api";
 import { formatTimestamp } from "../utils/formatDate";
 import SectionHeading from "../components/SectionHeading";
 import { useTheme } from "../theme/ThemeContext";
-import { useDemo } from "../demo/DemoContext";
+import { useAccountState } from "../auth/AuthContext";
+import InfoNote from "../components/InfoNote";
+import { DEMO_NOTES } from "../data/demoNotes";
 
 function EnquiryRow({ enquiry, onPress }) {
   const { colors } = useTheme();
@@ -23,7 +25,7 @@ function EnquiryRow({ enquiry, onPress }) {
       onPress={onPress}
       scaleTo={0.98}
       accessibilityRole="button"
-      accessibilityLabel={`${enquiry.subject}, ${enquiry.status}`}
+      accessibilityLabel={`${enquiry.subject}, ${enquiry.status}, demo data`}
       containerStyle={{ marginBottom: 10 }}
       style={{
         flexDirection: "row",
@@ -39,6 +41,7 @@ function EnquiryRow({ enquiry, onPress }) {
         <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
           <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>{enquiry.subject}</Text>
           <StatusBadge status={enquiry.status} />
+          <StatusBadge status="demo" />
         </View>
         <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
           {enquiry.category} · {formatTimestamp(enquiry.createdAt)}
@@ -51,7 +54,7 @@ function EnquiryRow({ enquiry, onPress }) {
 
 export default function SupportScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const { userState } = useDemo();
+  const userState = useAccountState(); // from the session's customerId — never a separate demo setting
   const submitted = route.params?.submitted; // set by NewEnquiry after a successful submit
   const loadEnquiries = useCallback(() => fetchEnquiries(userState), [userState]);
   const { loading, data: enquiries, error, reload } = useAsync(loadEnquiries);
@@ -104,9 +107,14 @@ export default function SupportScreen({ navigation, route }) {
             subtitle="Our client services team is at your disposal for anything you need."
           />
 
+          {/* Support is MOCK (services/mockApi.js): nothing is sent to MAZ, so never claim it was. */}
+          <InfoNote boxed style={{ marginBottom: 16 }}>
+            {DEMO_NOTES.support}
+          </InfoNote>
+
           {submitted ? (
             <Text className="text-sm mb-4" style={{ color: colors.success }}>
-              {"✓"} Enquiry sent — we&apos;ll reply by email and here.
+              {"✓"} {DEMO_NOTES.enquirySaved}
             </Text>
           ) : null}
 

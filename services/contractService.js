@@ -1,14 +1,17 @@
 import { fetchCustomerContracts, fetchContract as fetchContractFromMaz, fetchCustomer } from "./httpApi";
 import { mockTenantActivity } from "./mockApi";
 import { withPaymentStatus } from "./billService";
-import { requireCurrentCustomerId, getCurrentCustomerId } from "./customerService";
-import { listDemoContracts, getDemoContract } from "./mock/mockDemoContracts";
+import { requireCurrentCustomerId, customerDataSource } from "./customerService";
+import { listDemoTenantContracts, getDemoTenantContract } from "./mock/mockTenantContracts";
+import { ApiError } from "./apiError";
 import { summarizePayments, contractsForAccountPayments } from "./paymentSummary";
 import { getExpiryStatus } from "./expiryService";
 import { countOpenViolations } from "./violationService";
 
-// Contracts for the logged-in customer — REAL MAZ data (GET /contracts + GET /units, scoped to the session's
-// customer in services/httpApi.js). Bills get their (provisional) paid status from services/billService.js.
+// Contracts for the logged-in customer, from the session's customer data source (services/customerService.js):
+//   "live" — REAL MAZ data (GET /contracts + GET /units, scoped to the session's customer in services/httpApi.js);
+//   "demo" — the MOCK demo tenant's SAMPLE contracts (services/mock/mockTenantContracts.js) — never MAZ's live data.
+// Bills get their (provisional / demo) paid status from services/billService.js either way.
 
 // Bills get their (provisional / demo) paid status; the contract gets `expiry` (expiryService — confirmed 10-day
 // window, worked out from the real end date, which is left as it is).
@@ -18,20 +21,24 @@ const withBillStatuses = (contract) => ({
   expiry: getExpiryStatus(contract),
 });
 
-// Every contract of the logged-in customer (Contract List): the REAL MAZ contracts, plus — for the MOCK demo
-// account only — the DEMO expiring contract (services/mock/mockDemoContracts.js, demo: true; never from MAZ).
-// The MAZ download is shared / briefly cached in services/httpApi.js. { withUnits: false } doesn't wait for the
-// unit list (unit names null) — for the dashboard's first paint.
+// Every contract of the logged-in customer (Contract List). Live: the MAZ download, shared / briefly cached in
+// services/httpApi.js; { withUnits: false } doesn't wait for the unit list (unit names null) — for the dashboard's
+// first paint. Demo: the sample contracts, in the app (no network request). No customer → NO_CUSTOMER.
 export async function fetchContracts({ withUnits = true } = {}) {
-  const real = await fetchCustomerContracts({ withUnits });
-  return [...real, ...listDemoContracts(getCurrentCustomerId())].map(withBillStatuses);
+  const customerId = requireCurrentCustomerId();
+  if (customerDataSource() === "demo") return listDemoTenantContracts(customerId).map(withBillStatuses);
+  return (await fetchCustomerContracts({ withUnits })).map(withBillStatuses);
 }
 
-// One contract by its number, e.g. "CN-2026-00001" (Contract Details, Payment). The demo contract is answered
-// in the app (no network request); everything else comes from MAZ.
+// One contract by its number, e.g. "CN-2026-00001" (Contract Details, Payment) — from the same source as above.
 export async function fetchContract(contractId) {
-  const demo = getDemoContract(contractId, getCurrentCustomerId());
-  return withBillStatuses(demo ?? (await fetchContractFromMaz(contractId)));
+  const customerId = requireCurrentCustomerId();
+  if (customerDataSource() === "demo") {
+    const demo = getDemoTenantContract(contractId, customerId);
+    if (!demo) throw new ApiError("NOT_FOUND", "Contract not found.");
+    return withBillStatuses(demo);
+  }
+  return withBillStatuses(await fetchContractFromMaz(contractId));
 }
 
 // The dashboard's "Contract expiring soon" alert: ACTIVE contracts with 10 days or fewer left (the confirmed rule —
@@ -52,9 +59,8 @@ export function expiringSoon(contracts) {
 }
 
 // Counts for the dashboard's Contracts card (total / active / expired only). Status comes from MAZ's own contract
-// status enum. Real MAZ contracts only — the DEMO contract is never counted.
-export function summarizeContracts(allContracts) {
-  const contracts = allContracts.filter((contract) => !contract.demo);
+// status enum. Every contract of the session's source counts (the demo tenant's are all sample contracts).
+export function summarizeContracts(contracts) {
   const active = contracts.filter((c) => c.status === "active");
   const expired = contracts.filter((c) => c.status === "expired");
   return {
@@ -109,8 +115,10 @@ export async function fetchDashboardActivity(userState = "tenant") {
 }
 
 // The customer record's name — the dashboard's fallback when the session has no name (REAL GET /customers/{id}).
-// Loaded alongside, never blocking the dashboard.
+// Loaded alongside, never blocking the dashboard. The demo tenant has no MAZ record to read → null (session name).
 export async function fetchTenantName() {
-  const customer = await fetchCustomer(requireCurrentCustomerId());
-  return customer.customer.customerName || null;
+  const customerId = requireCurrentCustomerId();
+  if (customerDataSource() === "demo") return null;
+  const customer = await fetchCustomer(customerId);
+  return customer.name;
 }

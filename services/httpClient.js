@@ -2,7 +2,8 @@ import { ApiError } from "./apiError";
 import { ERROR_MESSAGES } from "./errorMessages";
 
 // Transport for the real MAZ backend (Laravel). Only services/httpApi.js uses this — screens never do.
-// Read-only for now: POST / PUT / DELETE are added once those flows are wired.
+// Reads (get / getAllPages) plus ONE write: post(), used only by the New User enquiry (POST /enquiries), which is
+// switched off unless EXPO_PUBLIC_SEND_ENQUIRIES=true (services/serviceConfig.js). No PUT / PATCH / DELETE.
 
 export const API_BASE_URL = "https://maz.beeinfosoft.com/public/api";
 const API_ORIGIN = API_BASE_URL.match(/^https:\/\/[^/]+/)[0]; // "https://maz.beeinfosoft.com"
@@ -21,6 +22,8 @@ export const MAX_PAGES = 50; // a list longer than this is treated as a broken p
 //   RATE_LIMITED     — 429
 //   SERVER           — 5xx (and any other non-success status)
 //   INVALID_RESPONSE — empty / malformed / unexpected body, or an unsafe pagination link
+//   VALIDATION       — 422 to a POST: MAZ rejected some fields. error.fields lists their names (from Laravel's
+//                      { errors: { field: [...] } }) for debugging; the server's wording is never shown
 const failure = (code) => new ApiError(code, ERROR_MESSAGES[code]);
 
 // Auth hooks, set by services/authService.js. Kept as plugged-in functions so this transport never imports
@@ -79,6 +82,50 @@ export async function get(pathOrUrl) {
     return JSON.parse(text);
   } catch {
     throw failure("INVALID_RESPONSE"); // malformed JSON, an HTML page …
+  }
+}
+
+// POST a JSON body to a path ("/enquiries") → the parsed JSON answer, or null when MAZ answers 2xx with no body
+// (the 2xx status itself is MAZ's confirmation). Unlike get(), a TIMEOUT here is ambiguous: MAZ may still have saved
+// the record, so callers must not resend automatically.
+export async function post(path, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  const token = getAuthToken();
+  let response;
+  let text;
+  try {
+    const headers = { Accept: "application/json", "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    text = await response.text(); // still inside the timeout window
+  } catch (error) {
+    throw failure(error?.name === "AbortError" ? "TIMEOUT" : "NETWORK");
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (response.status === 422) {
+    const error = failure("VALIDATION");
+    try {
+      error.fields = Object.keys(JSON.parse(text)?.errors ?? {});
+    } catch {
+      error.fields = [];
+    }
+    throw error;
+  }
+  if (!response.ok) throw statusFailure(response.status, Boolean(token));
+  if (!text || !text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw failure("INVALID_RESPONSE"); // a 2xx HTML page is not a confirmation
   }
 }
 

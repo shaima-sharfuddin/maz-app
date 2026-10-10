@@ -21,6 +21,8 @@ import { bookMeetingRoom, fetchRoomAvailability } from "../services/api";
 import { DURATION_OPTIONS, BOOKING_WINDOW_DAYS, formatHours } from "../data/meetingRooms";
 import { formatDate, formatTime, toISODate } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
+import InfoNote from "../components/InfoNote";
+import { DEMO_NOTES } from "../data/demoNotes";
 
 const DURATION_SEGMENTS = DURATION_OPTIONS.map((hours) => ({ value: hours, label: formatHours(hours) }));
 
@@ -145,6 +147,11 @@ export default function BookMeetingRoomScreen({ navigation, route }) {
               subtitle="Choose a date, duration and start time."
             />
 
+            {/* Availability is simulated (mockApi roomSlots) and bookings stay in the app. */}
+            <InfoNote boxed style={{ marginBottom: 20 }}>
+              {DEMO_NOTES.bookRoom}
+            </InfoNote>
+
             <FormField
               control={control}
               name="date"
@@ -186,7 +193,7 @@ export default function BookMeetingRoomScreen({ navigation, route }) {
             </Text>
 
             <AnimatedButton
-              label={loading ? "Booking…" : "Confirm booking"}
+              label={loading ? "Booking…" : "Confirm demo booking"}
               onPress={onSubmit}
               disabled={!isValid || availability.loading}
               loading={loading}

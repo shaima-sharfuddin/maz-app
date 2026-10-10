@@ -25,8 +25,8 @@ an earlier TypeScript version — the conversion is complete and current files a
   requestPasswordReset, AUTH_IS_MOCK, current session, onSessionExpired); its provider is services/mock/mockAuth.js
   (wraps mockApi's demo accounts). Customer identity: services/customerService.js (getCurrentCustomerId /
   requireCurrentCustomerId → ApiError NO_CUSTOMER) reads the session; the session's customerId is decided ONLY in
-  services/mock/mockCustomerIdentity.js — demo Existing User logins → customer 1 (real MAZ data, not necessarily the
-  person's — dashboard to be labelled "Demo account"), a New User who signed up this session → null. Going live:
+  services/mock/mockCustomerIdentity.js — demo Existing User logins → customer 1 as the DEMO TENANT, which sees SAMPLE
+  data only (dashboard labelled "Demo account"), a New User who signed up this session → null. Going live:
   add services/mazAuth.js with the same functions (login response / GET /me must supply the customer id), switch the
   provider line in authService, set SERVICE_SOURCES.auth = "real" (services/serviceConfig.js)
 - Sessions saved before customerId existed (no customerId key) are discarded at launch → log in again
@@ -40,9 +40,34 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Mock accounts: a New User sign-up (quickSignUp) starts UNVERIFIED; verifyEmail with the OTP (123456) returns
   its session. Logging in before verifying fails with EMAIL_NOT_VERIFIED ("Verify email" → VerifyAccount);
   afterwards login returns the same name and company. Any other email logs in as the existing tenant "Sara".
-  logOut() never fails (best effort)
-- Right after a New User verifies their email, VerifyAccount sets the demo toggle to "New user" (a new account has
-  no contracts) and calls signIn(session) → the navigator opens straight on the new-user dashboard
+  logOut() never fails (best effort). New User demo accounts are REMEMBERED across app restarts (Phase 2): mockApi
+  exportDemoAccounts / restoreDemoAccounts, saved by AuthContext in SecureStore key maz.demoAccounts (email, name,
+  company, activity, verified, profileComplete — never mobile / nationality / CPR / passport; newest 10), so a New
+  User logging in after a restart stays a New User (customerId null) instead of becoming "Sara" / customer 1. If the
+  saved list can't be read (SecureStore error / malformed), logIn FAILS SAFELY with ACCOUNT_CHECK_FAILED ("Try again"
+  on Login re-reads it) — no identity is guessed; sign-up still works; the stored list isn't overwritten meanwhile
+- Session identity + customer data source (2026-10-10): sessions carry user.identity — "demoTenant" (mock demo tenant,
+  customer 1) or "newUser". customerService.customerDataSource() is the ONLY gate to customer data: "demo" (auth "mock"
+  + demoTenant → SAMPLE contracts / bills / receipts from services/mock/mockTenantContracts.js, no network), "live" ONLY
+  for a session VERIFIED by services/liveAuth.js isVerifiedLiveSession — which answers false for everything until real
+  MAZ auth replaces it (FAIL CLOSED: no config value, email, customer id, identity label, token or hand-built session
+  counts), or null (New User, a New User demo email, old / forged / unknown identity → NO_CUSTOMER). SERVICE_SOURCES is
+  Object.freeze'd (read-only at runtime; it never grants access). httpApi's customer reads (contracts, bills, customer
+  record) call requireLiveCustomerId() FIRST, so live customer-specific requests are unavailable in the app. A restored
+  session with a customer id but no allowed identity (saved before 2026-10-10) is discarded at launch → Login "Your
+  session has expired". Going live: services/mazAuth.js must replace liveAuth with a MAZ-backed check (re-verify a
+  restored session with the server; don't let a verified session be edited). TESTS: tests/register.mjs makes the Node
+  test loader swap services/liveAuth.js for tests/fixtures/fakeLiveAuth.mjs (verifies only the frozen sessions it issued
+  — helpers.loginLiveCustomer) to exercise the live API code; Metro never runs that loader. tests/live-config-boundary
+  .test.mjs re-checks the app's own verifier in a child process WITHOUT the swap (tests/register-app.mjs +
+  fixtures/appBoundaryProbe.mjs) and that no app file imports test code. Also tests/live-data-boundary.test.mjs,
+  demo-session, demo-accounts-storage (helpers.loginDemoTenant for the demo tenant)
+- Demo session boundary (Phase 2): authService.setCurrentSession → services/mock/demoSession.js. When the ACCOUNT
+  changes or signs out, every session-only demo store is cleared (demo payments + payments still processing, renewals,
+  notification events / read state / email outbox, mock enquiries, bookings, notifications) — a profile edit (same
+  account) clears nothing. Office requests are stored PER ACCOUNT (mockApi requestsByAccount), so only the account
+  that submitted them sees them. Real MAZ data is never touched
+- Right after a New User verifies their email, VerifyAccount calls signIn(session) (no customerId → New User) → the navigator opens straight on the new-user dashboard
   ("What are you looking for?"). (The write-only justSignedUp flag was removed in Cleanup 4, 2026-10-08.)
 - Session expiry: httpClient maps a MAZ 401 to ApiError UNAUTHORIZED and calls the handler AuthContext registers
   (onSessionExpired) → signed out, Login shows "Your session has expired". Only a REAL provider's token is sent
@@ -85,7 +110,8 @@ Simplified per the client's demo feedback (2026-10-07):
 1. Welcome — logo, trust stats, two equal buttons: "Get Started" → NewUserSignUp; "Log in" → Login
 2. New User: NewUserSignUp (3 steps — Company: Company Name, Customer Name · Contact: Email, Mobile Number
    (country-code picker for any country + number; stored as countryCode "+971" + phoneNumber "501234567" + phoneCountry
-   ISO — data/countryCodes.js, mobileNumberIssue in validation/schemas.js; mock only, never sent to MAZ) · Identification:
+   ISO — data/countryCodes.js, mobileNumberIssue in validation/schemas.js; kept in the app, and sent to MAZ only as the enquiry's `mobile` when
+   EXPO_PUBLIC_SEND_ENQUIRIES=true — see enquiryService) · Identification:
    Nationality, then CPR Number for Bahrain or Passport Number otherwise — then a Review step) → VerifyAccount
    (6-digit email OTP; demo code 123456) → signed in at once → new-user dashboard (no confirmation screen)
    Existing User: Login → dashboard
@@ -94,10 +120,12 @@ Simplified per the client's demo feedback (2026-10-07):
 4. Request an office (everyone — new users and tenants via "Find a new office"):
    Dashboard services / Browse plans → tap a service → straight to Term & payments (Meeting Rooms → the hourly
    booking instead) → Term & payments (SelectTermScreen: lease length 1–36 months + payment frequency + first-invoice
-   estimate) → ReviewRequest: "Submit request" sends it with the signed-in user's name, email and company (no
+   estimate) → ReviewRequest: "Submit demo request" saves it (mock — never sent to MAZ) with the signed-in user's name, email and company (no
    separate details form) →
    the request then moves through 5 stages, tracked on RequestStatusScreen via StatusStepper:
-     1. Request Submitted → 2. Email Confirmation Sent → 3. Admin Review → 4. Unit Assigned → 5. Invoice Generated
+     1. Request Submitted → 2. Email Confirmation (simulated) → 3. Admin Review → 4. Unit Assigned → 5. Invoice Generated
+     (stage 2's label says "simulated" because no email service exists — restore "Email Confirmation Sent" once MAZ
+     really emails it)
    → Invoice (RequestInvoice) → Payment (e.g. BenefitPay) → Payment Successful (PaymentReceipt) → "View invoice" →
    Invoice → "Download invoice (PDF)" (demo) → active contract appears on the dashboard (contract detail, bills, payments).
    The office admin assigns the actual unit — users request a plan, not a specific unit.
@@ -125,20 +153,23 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   feedback" question. The wording is FINAL (approved 2026-10-09)
 - screens/NewUserSignUpScreen.js ✅ — one form (newUserSignUpSchema) shown a step at a time with StepProgress ("Step 1
   of 3 · Company"): Company (Company Name, Customer Name, Activity — required
-  single-choice SelectField of the SAMPLE ACTIVITIES, ActivityField in AccountDetailsFields; restored by the recruiter
+  single-choice SelectField — MAZ's REAL GET /activities labels via fetchActivityOptions (164 usable today, code kept in
+  the label, searchable), falling back to the SAMPLE ACTIVITIES with a note + Try again; ActivityField in AccountDetailsFields; restored by the recruiter
   2026-10-10, shown on the Review step too) → Contact (Email) → Identification (Nationality
   GCC_NATIONALITIES SelectField, then CPR Number (Bahrain) or Passport Number (others), masked with StyledInput
   `revealable`; useWatch on nationality swaps the field and clears the other one) → Review (DetailCard of the
   entered values, ID masked "•••••1234"; "Submit & verify email" / "Edit details" → step 1). Each step's Continue is
   disabled until that step's fields pass the schema; Back (button, hardware, swipe — usePreventRemove) goes to the
-  previous step. Submit → quickSignUp (unverified account) → VerifyAccount { email }
+  previous step. Submit → quickSignUp (unverified account) → VerifyAccount { email }. The Review step says "Demo
+  registration — your details are kept in this app only. Your account isn't created with MAZ yet." (LOCAL / DEMO —
+  SERVICE_SOURCES.customerRegistration "mock"; POST /customers not wired, see Open questions)
 - screens/VerifyAccountScreen.js ✅ — the New User OTP step (signed-out group): 6-digit OtpInput (auto-submits),
-  resend with 30s cooldown, verifyEmail. A New User's result carries the session → demo toggle "New user" →
+  resend with 30s cooldown, verifyEmail. A New User's result carries the session →
   signIn(session) → new-user dashboard (no "You're verified" state any more); any other account → replaces itself with Login
-  { email, justVerified }. Shows "Demo mode: use code 123456" (MOCK_OTP_CODE)
-- screens/LoginScreen.js ✅ — the "Existing User" path. logIn (authService, MOCK) → sets the dashboard demo state
-  from the account (customerId → "tenant", none → "newUser" — a stale "New user" setting can no longer open the
-  New User dashboard for an Existing User) → signIn(session) (navigator switches automatically). Shows "Demo sign-in —
+  { email, justVerified }. Shows "Demo verification — no email is sent and this isn't an identity check. Use code
+  123456." (MOCK_OTP_CODE) — the demo OTP is NOT a real email / identity verification
+- screens/LoginScreen.js ✅ — the "Existing User" path. logIn (authService, MOCK) → signIn(session) — the
+  dashboard follows the session's customerId (useAccountState: customer → "tenant", none → "newUser") (navigator switches automatically). Shows "Demo sign-in —
   MAZ accounts aren't connected yet…" while AUTH_IS_MOCK, and the session-expired notice;
   Forgot password → requestPasswordReset; "Don't have an account? Sign up" → NewUserSignUp; EMAIL_NOT_VERIFIED
   (signed up but never entered the code) → "Verify email" → VerifyAccount
@@ -160,19 +191,20 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   also updates the mock account so a later login returns the new name / company) → updateUserDetails → back to
   Settings { profileUpdated } ("✓ Profile updated in demo mode — not sent to MAZ"). Screen note: "Demo mode:
   changes are kept in the app for this session and aren't sent to MAZ."
-- screens/HomeDashboardScreen.js ✅ — two states, chosen by the Settings demo toggle (useDemo):
-  • Tenant (default): "Welcome back, {session name}", "Demo account — the contracts shown are a MAZ demo
-    customer's, not necessarily yours" (while AUTH_IS_MOCK), "Contract expiring soon" alert (ExpiringSoonAlert —
+- screens/HomeDashboardScreen.js ✅ — two states, chosen by the session's customerId (useAccountState, auth/AuthContext.js):
+  • Tenant (default): "Welcome back, {session name}", "Demo account — the contracts, bills and payments
+    shown are sample data created in the app, not MAZ records" (while AUTH_IS_MOCK), "Contract expiring soon" alert (ExpiringSoonAlert —
     data.expiringSoon from contractService.expiringSoon: every ACTIVE contract with 10 days or fewer left, incl. the end
     date itself, soonest first; each row "{contract} expires on {date}" + unit · "Expires in N days" / "Expires today"
     + "Renew contract ›" → that contract's ContractDetail; plus getExpiryNote(); hidden when none qualify, never for
-    expired contracts), Contracts card (ONLY Total / Active / Expired from the REAL
-    contracts — no other breakdown, client 2026-10-08; tap → ContractList), Payment card (DetailCard: Total contract amount
+    expired contracts), Contracts card (ONLY Total / Active / Expired from the session's
+    contracts — the demo tenant's are SAMPLE data while auth is mock — no other breakdown, client 2026-10-08; tap → ContractList), Payment card (DetailCard: Total contract amount
     / Amount paid / Balance / Due amount of the ACTIVE contracts only — client 2026-10-08; expired contracts keep their
     own Pay on Contract / Bill Details — CALCULATED from the real installments — "Provisional — not confirmed by MAZ"
     (+ "Includes BHD … paid with demo payments this session"); "Pay now · BHD …" pays the due amount first, else the
     outstanding balance → PaymentReview { scope: { type: "account" } }; nothing outstanding → "No payment due", no button), "Quick actions" tiles (QuickAction: Meeting rooms, Support, Violations — their only entry points; NO
-    Notifications tile, the header bell is the single entry), then the office request card (only once a request
+    Notifications tile, the header bell is the single entry; data captions end "· demo", and DEMO_NOTES.quickActions
+    sits under the tiles), then the office request card (only once a request
     exists) and a secondary (ghost) "Find a new office" → BrowsePlans. Cleanup 2 (2026-10-08): the "Your contracts"
     list was REMOVED — contracts are listed on ContractList via the Contracts card. Data (progressive, performance
     phase 2026-10-09): fetchDashboard(userState, { withUnits: false }) first (counts + Payment — /contracts only),
@@ -184,10 +216,11 @@ Navigation shortcuts (client feedback on the latest build): verification → das
     per service from fetchPlans → SelectTerm { plan } (Meeting Rooms → MeetingRooms); then Why MAZ (trust stats, Bahrain advantages), testimonials placeholder
   • Both states: "Your office request" card (RequestRow; fetchLatestRequest, refreshed on focus) → RequestStatus,
     + "View all requests" → MyRequests; caption + badge show the stage, "Invoice ready · BHD … due by …" (due) or,
-    once paid, "Paid · Contract under review" with a Reviewing badge
+    once paid, "Paid · Contract under review" with a Reviewing badge; DEMO_NOTES.requests under the card
 - screens/SettingsScreen.js ✅ — Account (logged-in user, "Edit profile" once the profile is complete, Log out with
   confirmation), Appearance (System / Light /
-  Dark, persisted), Demo data (dashboard state, error simulation, always start at Welcome) — developer controls,
+  Dark, persisted), Demo data (read-only "Dashboard shows" line — it follows the account; error simulation, always start at
+  Welcome) — developer controls,
   HIDDEN unless the bundler is started with EXPO_PUBLIC_SHOW_DEMO_CONTROLS=true (DEMO_CONTROLS_ENABLED). The temporary 365-day
   expiry demo toggle was REMOVED (client, 2026-10-08) — the 10-day rule is permanent
 - screens/BrowsePlansScreen.js ✅ — "What are you looking for?": a ServiceCard per service → SelectTerm { plan } (Meeting
@@ -199,13 +232,16 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   chosen) + EstimateCard: first installment and deposit as separate lines, lease total (rent), total "First
   invoice". Review request → ReviewRequest { plan, termMonths, paymentFrequency }
 - screens/ReviewRequestScreen.js ✅ — "Review your request": RequestSummaryCard (buildRequestSummary) + "Requesting
-  as" (name / company / activity / email from the session). Submit request → submitRequest with those details
-  (activity = the session's sign-up Activity, null for tenants; remark "") → PUSHES RequestStatus { requestId, summary }; afterwards the button becomes "View request status" so
+  as" (name / company / activity / email from the session), DEMO_NOTES.reviewRequest note (subtitle: "In the live
+  service, MAZ reviews each request…"). "Submit demo request" → submitRequest (MOCK) with those details
+  (activity = the session's sign-up Activity, null for tenants; remark "") → PUSHES RequestStatus { requestId, summary }; afterwards "Demo request saved" and the button becomes "View request status" so
   it can't be sent twice. "Edit" → back to SelectTerm
-- screens/RequestStatusScreen.js ✅ — per-stage title + vertical StatusStepper timeline (date each stage was reached from
-  stageReachedAt, current stage's REQUEST_STEPS.description) + "Next: …" (REQUEST_STEPS.next / AFTER_PAYMENT_NEXT) +
-  summary; loads fetchRequestStatus.
-  Step 4+: "Your office" (assigned unit). Step 5: Invoice card (First installment and Deposit lines, total, "View full
+- screens/RequestStatusScreen.js ✅ — DEMO_NOTES.requestStatus note ("the stages, unit and invoice below are simulated
+  … no emails are sent") + per-stage demo title ("Request saved" / "Request in progress" / "Your sample invoice is
+  ready" / "Demo payment recorded") + vertical StatusStepper timeline over DEMO_STEPS (REQUEST_STEPS labels with
+  DEMO_REQUEST_STAGE_TEXT's description / next — never the live wording; date each stage was reached from
+  stageReachedAt) + "Next: …" (DEMO_AFTER_PAYMENT_NEXT once paid) + summary; loads fetchRequestStatus.
+  Step 4+: "Your office (sample)" ("Sample unit"). Step 5: Invoice card (First installment and Deposit lines, total, "View full
   invoice" → RequestInvoice) + primary "Pay BHD …" → Payment { requestId }. Paid: every stage complete, Payment
   card + "Your contract" card with status Reviewing (CONTRACT_STATUS "b").
   Back → previous step; "Back to dashboard" → popToTop. DEMO ONLY: "Demo mode: move to the next stage" link
@@ -221,7 +257,7 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   Share with the invoice as text. Labelled on screen "Demo PDF generated on your device". Replace with MAZ's official
   invoice PDF once the backend provides one
 - screens/MyRequestsScreen.js ✅ — every submitted request, newest first (fetchRequests, refreshed on focus): RequestRow
-  with request no. + submitted date → RequestStatus; empty → "No requests yet" → BrowsePlans
+  with request no. + submitted date → RequestStatus, under DEMO_NOTES.requests; empty → "No requests yet" → BrowsePlans
 - screens/ContractListScreen.js ✅ — Dashboard Contracts card → "Your contracts": SegmentedControl All / Active / Expired
   (route param `filter` preselects) over the logged-in customer's REAL contracts (fetchContracts, contractService) as
   ContractRows → ContractDetail. Skeleton / per-filter EmptyState / error + Try again
@@ -239,7 +275,9 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   stays unknown (null), so they list installments with a "Paid / Unpaid: Provisional — MAZ confirms payments" note
   (badges show "Paid (demo)" for bills paid with a demo payment this session, + a note saying so) and, when anything is
   unpaid, "Pay due amount · BHD …" (due first) or "Pay outstanding balance · BHD …" → PaymentReview { scope: { type:
-  "contract", contractId } } — never "all paid up" — and no Renew (renewable: false, no renewal API). NOT_FOUND (e.g. a mock notification pointing at a mock contract id) → "no longer available"
+  "contract", contractId } } — never "all paid up". Renew: apiMappers sets renewable: false but NO screen reads it — ContractDetail /
+  RenewContract use only renewalEligibility, so an active real contract inside the 10-day window CAN request a (demo)
+  renewal (which behaviour is wanted is an open decision — audit 2026-10-10). NOT_FOUND (e.g. a mock notification pointing at a mock contract id) → "no longer available"
 - screens/BillViewerScreen.js ✅ — bill summary from fetchBill: status, contract + billing period + due date,
   Charges (PLACEHOLDER single rent line) + total, Payment (when paid), "Pay outstanding balance" when due.
   Real API bills (fetchBill, services/billService.js) show their period label ("RENT INST-1 (Sep 2026 – Nov 2026)"),
@@ -276,19 +314,22 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   was charged"
 - screens/NotificationsScreen.js ✅ — in-app notifications (fetchNotifications, services/notificationService.js): unread rows
   tinted with a dot, tap marks read (best effort) and opens `target` { screen, params }; "Mark all as read". Demo
-  records show "· Demo" after the time, and the list starts with NOTIFICATIONS_DEMO_NOTE ("Demo notifications — created
-  in the app from your contract data; not sent by MAZ. No emails or push notifications are sent."). Icons include
+  records show "· Demo" after the time, and the list starts with NOTIFICATIONS_DEMO_NOTE ("Demo notifications — simulated
+  in this app, not sent by MAZ. No emails or push notifications are sent.") — New User notifications too (demo: true). Icons include
   expiry (time) and account (person). No push yet
-- screens/SupportScreen.js ✅ — "New enquiry" + the tenant's enquiries (StatusBadge open / answered) → EnquiryDetail
-- screens/NewEnquiryScreen.js ✅ — Category, optional Contract, Subject, Message (supportEnquirySchema) →
-  submitEnquiry → resets to [HomeDashboard, Support { submitted }]. `prefill` { category, contractId, subject }
+- screens/SupportScreen.js ✅ — DEMO_NOTES.support note, "New enquiry" + the tenant's MOCK enquiries (StatusBadge open /
+  answered + "Demo data") → EnquiryDetail; after a save "✓ Enquiry saved in demo mode — it hasn't been sent to MAZ."
+- screens/NewEnquiryScreen.js ✅ — DEMO_NOTES.newEnquiry note, Category, optional Contract, Subject, Message
+  (supportEnquirySchema) → "Save demo enquiry" → submitEnquiry (MOCK) → resets to [HomeDashboard, Support { submitted }]. `prefill` { category, contractId, subject }
   param pre-fills it (used by violations)
-- screens/EnquiryDetailScreen.js ✅ — details (DetailCard), your message, MAZ's reply or "Awaiting reply"
-- screens/MeetingRoomsScreen.js ✅ — upcoming bookings (cancel with confirmation → cancelBooking) + room cards
-  → BookMeetingRoom { room }
-- screens/BookMeetingRoomScreen.js ✅ — Date (today … +60 days), Duration 1/2/3 h, SlotPicker of start times from
+- screens/EnquiryDetailScreen.js ✅ — DEMO_NOTES.enquiryDetail note, details (DetailCard; status + "Demo data" badge,
+  "Saved"), your message, the mock reply titled "Sample reply (demo)" or "No reply in demo mode"
+- screens/MeetingRoomsScreen.js ✅ — DEMO_NOTES.meetingRooms note, upcoming MOCK bookings ("Demo data" badge; cancel with
+  confirmation → cancelBooking) + sample room cards → BookMeetingRoom { room }; "Demo booking saved — it hasn't been
+  sent to MAZ." / "Demo booking cancelled."
+- screens/BookMeetingRoomScreen.js ✅ — DEMO_NOTES.bookRoom ("Sample availability …") note, Date (today … +60 days), Duration 1/2/3 h, SlotPicker of start times from
   fetchRoomAvailability (a start is offered only if the whole duration is free; a stale pick is cleared), Notes →
-  bookMeetingRoom → resets to [HomeDashboard, MeetingRooms]. SLOT_TAKEN reloads the grid
+  "Confirm demo booking" → bookMeetingRoom (MOCK) → resets to [HomeDashboard, MeetingRooms]. SLOT_TAKEN reloads the grid
 - screens/RenewContractScreen.js ✅ — renewal REQUEST (never automatic; the real contract is never changed), phase 5:
   Select term (SegmentedControl RENEWAL_TERM_OPTIONS 1/3/6/12 + EstimateCard: current → proposed end date, monthly rent
   × months "at your current monthly rent" + optional Remark, renewalSchema) → "Review request" → review step (contract,
@@ -305,7 +346,12 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   captioned "N open · demo" / "All clear") read-only notices grouped Open / Resolved, open ones show "Due {date}" in
   danger text; empty → "No violations — you're all clear" → ViolationDetail. FULLY MOCK via
   services/violationService.js: every row has a "Demo data" badge and the list starts with a demo note; demo records
-  aren't linked to a real contract
+  aren't linked to a real contract. Below the notices, a "Reference" section links to ViolationTypes (REAL catalogue)
+- screens/ViolationTypesScreen.js ✅ — (2026-10-10) MAZ's REAL catalogue of violation TYPES from GET /violations
+  (fetchViolationTypes, violationService → httpApi): one grouped list, each row a "#code" pill + label (code split
+  from names like "#186 …"; uncoded names shown whole), "N types" heading, a boxed note that it's a reference list —
+  categories only, NOT notices issued to the company, no dates / fines / status. Skeleton, error + Try again, empty +
+  Check again. Read-only rows. Reached from ViolationsScreen's "Reference → Violation types" card (signed-in group)
 - screens/ViolationDetailScreen.js ✅ — (fetchViolation, violationService — MOCK) Source "Demo data" badge, Contract "Not linked
   (demo record)", demo note; details (DetailCard: status, contract, unit, issued, due date when open;
   fine if any, "added to your contract balance"), description, resolution; "Contact support" → NewEnquiry with prefill (category "Violation query")
@@ -353,7 +399,12 @@ Navigation shortcuts (client feedback on the latest build): verification → das
 - components/RequestSummaryCard.js ✅ — Service / Location / Lease length / Payment frequency / Monthly rate, then First
   installment + Deposit as separate lines and the First invoice total (older summaries: Estimated total)
 - data/requestSteps.js — REQUEST_STEPS, the 5 request stages (single source for StatusStepper + API mapping), each
-  with label, description and `next` ("Next: …"); AFTER_PAYMENT_NEXT once the invoice is paid
+  with label, description and `next` ("Next: …"); AFTER_PAYMENT_NEXT once the invoice is paid. description / next
+  describe the LIVE service and aren't shown while requests are mock (RequestStatus uses data/demoNotes.js)
+- data/demoNotes.js — Phase 1 (audit 2026-10-10): the shared wording for MOCK features — DEMO_NOTES (Support, Meeting
+  rooms, office requests, dashboard quick actions), DEMO_REQUEST_STAGE_TEXT (RequestStatus's per-stage description /
+  next for the demo request) and DEMO_AFTER_PAYMENT_NEXT. No wording may claim something was sent, emailed, assigned or
+  answered by MAZ. tests/demo-labels.test.mjs checks the screens use it. Remove an entry when its feature goes live
 - data/pricing.js — MIN_LEASE_MONTHS / MAX_LEASE_MONTHS / DEFAULT_LEASE_MONTHS (1 / 36 / 1) + LEASE_QUICK_PICKS
   (3, 6, 9, 12) for new requests, RENEWAL_TERM_OPTIONS (1/3/6/12),
   PAYMENT_FREQUENCY_OPTIONS (INSTALLMENTS codes, Monthly first), firstInstallmentAmount (one period's months,
@@ -366,7 +417,7 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   (display only — the paid RULE for real bills is in services/billService.js)
 - components/PaymentMethodOption.js ✅ — payment method radio row (moved out of PaymentScreen; also PaymentReview)
 - components/ContractRow.js ✅ — contract row (unit, StatusBadge, contractCaption: number + dates / ended / due / "Expires in
-  N days" from contract.expiry — the confirmed 10-day window). Dashboard + ContractList
+  N days" from contract.expiry — the confirmed 10-day window). ContractList only (the dashboard no longer lists contracts)
 - components/StatusBadge.js ✅ — pill for contract statuses draft / reviewing / active / expired / renewed /
   terminated (renewed = success tone), bills paid / paidDemo ("Paid (demo)") / unpaid, renewal approved (success),
   demo ("Demo data", muted — marks a mock record), and
@@ -389,12 +440,15 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   Shape: { id, contractId, title, issuedOn, dueDate (open only), status "open" | "resolved", description, fine,
   resolvedOn, resolution }
 - data/mockEnquiries.js — MOCK support enquiries (one open, one answered)
-- data/mockNotifications.js — MOCK notifications per demo account type; mock actions (e.g. payment) push new ones
+- data/mockNotifications.js — MOCK notifications per demo account type. Only the `newUser` list is shown (Existing User
+  notifications are built by services/notificationService.js); mockApi's pushNotification (booking, enquiry, request
+  payment) writes to the `tenant` list, which is never displayed
 - data/mockTenant.js — MOCK tenant name + 3 contracts from the wireframe (dates moved to 2026), each with
   startDate / endDate / monthlyRate; `renewal` is added by requestRenewal
 - data/paymentMethods.js — PLACEHOLDER payment options (BenefitPay, card) until the gateway is confirmed
-- demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { userState: "tenant" | "newUser", simulateErrors,
-  startAtWelcome }, persisted in AsyncStorage (maz.demoUserState, maz.demoSimulateErrors, maz.demoStartAtWelcome),
+- demo/DemoContext.js — DEMO ONLY: DemoProvider + useDemo() → { simulateErrors, startAtWelcome }, persisted in
+  AsyncStorage (maz.demoSimulateErrors, maz.demoStartAtWelcome; the old maz.demoUserState is no longer read — the
+  account type is useAccountState() from auth/AuthContext.js since Phase 2),
   toggled in Settings → "Demo data" (only shown when DEMO_CONTROLS_ENABLED — EXPO_PUBLIC_SHOW_DEMO_CONTROLS=true;
   while hidden, simulateErrors and startAtWelcome are forced off and their saved values ignored). simulateErrors
   defaults to OFF. simulateErrors drives setMockFailuresEnabled; startAtWelcome makes
@@ -426,8 +480,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   confirms payments"). When MAZ confirms its paid field / rule, change only provisionalStatus() here. DEMO overlay: a
   bill in mock/demoPaymentLedger.js shows status "paid" + demoPaid + demoPayment (screen only; MAZ data unchanged)
 - services/serviceConfig.js — SERVICE_SOURCES: which Existing User area is "real" / "mock" / "provisional" (auth,
-  customerIdentity, payments, renewals, notifications, violations: mock; emailDelivery: none; customer, contracts,
-  bills, expiryAlerts (confirmed rule on real dates): real; billPaidStatus, paymentSummary: provisional) +
+  customerIdentity, payments, renewals, notifications, violations: mock; emailDelivery: none; customer (id + name only), contracts,
+  bills, violationTypes (GET /violations — the type catalogue), activities (GET /activities, sample fallback), expiryAlerts (confirmed rule on real dates): real; billPaidStatus, paymentSummary: provisional) +
   EXPIRY_WARNING_DAYS = 10 — the CONFIRMED business rule (client, 2026-10-08): an ACTIVE contract shows the expiry /
   renewal alert and can request a renewal only with 10 days or fewer left before its end date, whatever the contract's
   length; expired contracts can't. Update SERVICE_SOURCES whenever a mock is replaced
@@ -444,8 +498,9 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   mockCustomerIdentity.js) and only while SERVICE_SOURCES.auth is "mock" — never with real login. contractService
   merges it into fetchContracts / answers fetchContract for it without a network request, so the normal expiry →
   dashboard "Contract expiring soon" alert → Contract Details → Renew → Review → Submit (demo) → Renewal Status flow
-  applies. Kept OUT of the Contracts card counts (summarizeContracts), the payment figures (contractsForAccountPayments)
-  and the email outbox; labelled "Demo data" badge (ContractRow, ContractDetail), "Demo contract" eyebrow + note on
+  applies. Part of the demo tenant's sample contracts (services/mock/mockTenantContracts.js, with DEMO-CN-0001 active
+  + bills and DEMO-CN-0002 expired), so it IS counted on the Contracts card (no bills → nothing in the payment figures);
+  no email is recorded for it; labelled "Demo data" badge (ContractRow, ContractDetail), "Demo contract" eyebrow + note on
   Contract Details, "· Demo contract" in the dashboard alert, "DEMO contract — not MAZ data" in its notification.
   Never sent to MAZ; real contracts untouched. Remove the file and its use in contractService when no longer needed
 - services/expiryService.js — expiry from the REAL end date (contracts.to_date) with the CONFIRMED 10-day rule:
@@ -476,8 +531,25 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   basedOnRealData on the alerts. No customer → []. recordNotificationEvent(event) for other services. Emails:
   requestEmail() only RECORDS each one in the mock outbox as "not_sent" (EMAIL_DELIVERY_AVAILABLE = false) —
   getEmailOutbox() for checks
-- services/violationService.js — VIOLATIONS_ARE_DEMO, DEMO_DATA_LABEL ("Demo data"), fetchViolations() (no customer → []),
-  fetchViolation(id) (NO_CUSTOMER / NOT_FOUND), countOpenViolations() (dashboard caption via contractService)
+- services/violationService.js — two things, never mixed: NOTICES (MOCK, "Demo data") — VIOLATIONS_ARE_DEMO, DEMO_DATA_LABEL,
+  fetchViolations() (no customer → []), fetchViolation(id) (NO_CUSTOMER / NOT_FOUND), countOpenViolations() (dashboard
+  caption); and TYPES (REAL) — VIOLATION_TYPES_ARE_REAL, fetchViolationTypes() → [{ name, code, label }] by code (public
+  catalogue, no customer needed). Tests: tests/api-integrations.test.mjs
+- services/activityService.js — fetchActivityOptions() → { options: [label], source "maz" | "sample" }: REAL GET
+  /activities (records with no words, e.g. a bare "332", left out), else the SAMPLE ACTIVITIES. Never rejects. The
+  chosen label is app-only (no write endpoint; /activities has no id — customers' activityId don't match its codes)
+- services/enquiryService.js + services/registrationService.js — New User ENQUIRY → POST /enquiries (2026-10-10), the
+  app's ONLY write to MAZ, OFF unless the bundler starts with EXPO_PUBLIC_SEND_ENQUIRIES=true (serviceConfig
+  enquiriesEnabled). NewUserSignUp submits registerNewUser(payload) = mockApi.quickSignUp (demo account, unchanged) then
+  submitSignUpEnquiry → enquiry { status "recorded" (MAZ 2xx only) | "disabled" | "failed" + code / message }; a failure
+  never blocks the account — Review shows "Send enquiry again" / "Continue without sending" (TIMEOUT warns a resend may
+  duplicate); VerifyAccount { enquiry: "recorded" | "failed" } shows a note. Body built by apiMappers.toApiEnquiry: date,
+  company, ContactPerson, mobile ("00" + dial digits + number, the format of the existing records), email, remarks +
+  ENQUIRY_FIXED_FIELDS (status "1", Channel "c", assigned_to "Asad", ServiceType "i", payment_term "1"); *_label fields,
+  nationality, CPR / passport and activity are NOT sent. date = today, or EXPO_PUBLIC_ENQUIRY_TEST_DATE (initial test
+  only). Identical details post once per app run (in-flight shared, success remembered). httpClient.post: 422 →
+  VALIDATION (+ error.fields), 2xx empty body = success, 2xx non-JSON → INVALID_RESPONSE. Remarks: optional multiline
+  field (RemarksField, max 500) on sign-up's Contact step + Review. Tests: tests/enquiries.test.mjs
 - services/httpClient.js — real transport: API_BASE_URL (HTTPS), get() with a 15 s timeout (covers the body read),
   getAllPages() (follows Laravel links.next — at most MAX_PAGES 50, never the same URL twice, only https links on the
   MAZ API host; anything else → INVALID_RESPONSE). Error codes (error handling phase, 2026-10-09): NETWORK, TIMEOUT,
@@ -496,14 +568,17 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   card, My Requests, Renewal Status) — never on screens with Pay / Renew actions (a test enforces it).
   components/ErrorBoundary.js (App.js root): a render error shows "Something went wrong" + Try again (remounts), no
   technical details. Tests: `npm test` (node:test, no dependency; tests/ — fake fetch, synthetic fixtures, never MAZ)
-- services/apiMappers.js — the ONLY place API field names appear: toUiContract, toUiBill, toUiCustomer. null means
+- services/apiMappers.js — the ONLY place API field names appear: toUiContract, toUiBill, toUiCustomer (2026-10-10:
+  { id, name } ONLY — customerIdOf: a top-level id, else owners[].customer_id when all owners agree, else null; the
+  record's owner CPR / passport / mobile / email are deliberately never mapped), toUiCodedName (catalogue records
+  { name } → { name, code, label }: "#186 …" / "702 …" / "46691-1 …"; no code → whole name is the label). null means
   "unknown", never zero. CONTRACT_STATUS_MAP (built from CONTRACT_STATUS) gives each contract status (key, e.g.
   "active"), statusLabel and statusColor (backend colour name); an unlisted code → status null (no badge).
   type = "incubator" | "office" from units.is_incubation — raw data only: the Existing User UI never shows
   "Incubator" or an office / incubator split (client, 2026-10-08). Contracts also carry numberOfMonths, installmentsPerYear +
   paymentFrequency (INSTALLMENTS label), deposit; rent_total is deliberately not mapped. Bill rows carry rent, vat,
   amount and the raw receipt fields receiptDate / receiptAmount / receiptOn with status null — billService sets the
-  status. Customer gender codes → GENDER labels.
+  status.
 - services/httpApi.js — real read-only endpoints with the mock's names/shapes. The customer id comes from
   customerService (the session) — no constant. ⚠️ DEV-ONLY SCOPING: GET /contracts returns every customer's contracts,
   so loadTenantContracts filters by the session's customer on the phone (isolated in that one function; replace with
@@ -517,7 +592,11 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   ?page= are ignored). Exposes fetchCustomerContracts / fetchContract / fetchBill / fetchCustomer / fetchUnits / fetchProfile (no request —
   session / mock values only, never the customer record's identity fields);
   the dashboard is assembled in contractService.
-  Contract ids in the app are the API contract number (name, "CN-2026-00001"); bills are receipts by vch_no
+  Contract ids in the app are the API contract number (name, "CN-2026-00001"); bills are receipts by vch_no.
+  fetchCustomer(id) refuses a record whose owners name a DIFFERENT customer (NOT_FOUND). Catalogues (2026-10-10):
+  fetchViolationTypes / fetchActivities — one public list each (no paging envelope; ?page ignored), cached per app
+  run, shared by simultaneous callers; failures and EMPTY lists aren't cached. Units' status / std_rent_amt / max_cr
+  are NOT used (meaning unconfirmed — std_rent_amt is never shown as a price)
 - utils/formatUnit.js — unitWithLocation(unit, location): "Office 204 · Seef District" or just "INC 009"
 - services/mockApi.js — every mock endpoint (quickSignUp [New User sign-up; stores the full form in memory],
   verifyEmail / resendVerificationCode [VerifyAccount], logIn, logOut,
@@ -550,8 +629,7 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   UAE, Kuwait, Qatar, Oman, Other — country names, unlike NATIONALITIES' demonyms); GENDERS = the GENDER enum's labels; OWNER_TYPES = { value, label } from
   OWNER_TYPE; COMPANIES holds the 4 real values
   from MAZ's admin panel;
-  ACTIVITIES is a PLACEHOLDER (sample options used by New User sign-up's Activity) until the real Activity list
-  comes from the API; SUPPORT_CATEGORIES is a PLACEHOLDER
+  ACTIVITIES is now only the SAMPLE FALLBACK for sign-up's Activity (used when GET /activities fails / is empty); SUPPORT_CATEGORIES is a PLACEHOLDER
 - data/brand.js — TRUST_STATS, WELCOME_TAGLINES (final copy),
   BAHRAIN_ADVANTAGES, SERVICES (each with an Ionicons `icon`) from MAZ's marketing
   site; BROWSE_PLAN_IDS (the 3 services Browse Plans shows, in order); CONTACT { phone, phoneDial, email, hours[] } — MAZ's real contact details, saved for the Support screen
@@ -616,7 +694,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   Chevrons 18 · icons in circles are half the circle (36→18, 40→20, 44→22, 56→28)
 - Status/alert text uses colors.success / colors.danger (+ successSoft / dangerSoft), not brand crimson —
   crimson text is hard to read on the dark background
-- Mock data that differs per account type should read useDemo().userState (demo toggle), never a hardcoded flag
+- Mock data that differs per account type should read useAccountState() (auth/AuthContext.js — from the session's
+  customerId), never a hardcoded flag or a separate setting
 
 ## Forms & API calls — the standard for EVERY screen (existing and future)
 Every screen follows this pattern; don't hand-roll validation, loading flags or try/catch in screens.
@@ -672,7 +751,7 @@ or showing an error/result. Nothing may do nothing when tapped.
 - New contracts were a fixed 9 months — SUPERSEDED by the client (2026-10-07): any lease length 1–36 months.
   Renewals keep 1/3/6/12
 - The tenant chooses a payment frequency (INSTALLMENTS: Monthly / Quarterly / Half-Yearly / Yearly), carried
-  through SelectTerm → SubmitRequest summary → the request's invoice
+  through SelectTerm → ReviewRequest summary → the request's invoice
 - The first invoice = first installment + deposit, always shown as separate lines (deposit is a PLACEHOLDER
   BHD 100 until MAZ gives the real amount)
 - Contract status "e" Renewed is enabled; an approved renewal results in a Renewed contract (the renewal request
@@ -683,7 +762,7 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Welcome offers two equal paths: "New User" (short NewUserSignUp form) and "Existing User" (Login)
 - New User sign-up collects Company Name, Customer Name, Email, Nationality and CPR (Bahrain) / Passport
   (others), then verifies the email with an OTP (VerifyAccount — client confirmed OTP stays), then goes
-  straight to Browse Plans. The old SignUp and CompleteProfile steps are retired (confirmed with the developer,
+  straight to the new-user dashboard ("What are you looking for?"). The old SignUp and CompleteProfile steps are retired (confirmed with the developer,
   2026-10-07): Login's "Sign up" link also goes to NewUserSignUp
 - The request flow skips the details form for everyone: SelectTerm submits with the stored name, email and
   company; RequestStatus and Payment are unchanged
@@ -693,17 +772,28 @@ or showing an error/result. Nothing may do nothing when tapped.
   never the lease / payment-frequency flow
 - Lease length is the tenant's choice: any whole number of months, 1–36 (replaces the fixed 9 months)
 - Activity — RESTORED (recruiter, 2026-10-10; supersedes the client's 2026-10-07 "not for now"): a REQUIRED,
-  single-choice field on New User sign-up's Company step (+ Review step), validated by newUserSignUpSchema (must be one
-  of ACTIVITIES). Kept through quickSignUp → VerifyAccount's session (user.activity, saved with the session; sessions
+  single-choice field on New User sign-up's Company step (+ Review step), validated by newUserSignUpSchema (present and
+  at most 200 characters — the options load at runtime from GET /activities or the SAMPLE fallback, so the dropdown
+  limits the choice). Kept through quickSignUp → VerifyAccount's session (user.activity, saved with the session; sessions
   saved earlier simply have none) → a later mock login → ReviewRequest, which sends it in the office / CR request
   (fetchRequestStatus returns it). MOCK / app-only: never sent to MAZ. Existing Users (tenants) have no activity
   (null) and aren't asked; NOT on EditProfile. Tests: tests/new-user-activity.test.mjs
 
+## Known issues (audit 2026-10-10)
+- Unlabelled mock features: Phase 1 labelled Support, Meeting rooms, office requests / request stages, the dashboard
+  quick actions and New User notifications as demo (shared wording in data/demoNotes.js; tests/demo-labels.test.mjs).
+  Re-check any new mock screen against it
+- FIXED in Phase 2: mock state shared across users (now cleared on sign-out / account change; requests per account)
+  and the dashboard state coming from a demo toggle (now from the session's customerId). Tests:
+  tests/demo-session.test.mjs
+- Money sums aren't rounded: paymentSummary.js and contractService.contractAmounts add floats; amounts with fils could
+  leave a tiny non-zero balance (Phase 3)
+
 ## Open questions (waiting on recruiter)
 - New User flow: OTP, Startup Incubator and Meeting Rooms are answered (see "Client decisions"). Still open:
-  Activity — the REAL list (MAZ links activities to a contract by numeric id: contracts.activity_id is an ARRAY, e.g.
-  [145, 21] — so MAZ may want multiple choice later, which needs a new multi-select component) and an endpoint to fetch
-  it / save the choice; the
+  Activity — the list is now LIVE (GET /activities); still open: how to save the choice (no write endpoint, and
+  /activities has no id — MAZ links activities to a contract by numeric id: contracts.activity_id is an ARRAY, e.g.
+  [145, 21] — so MAZ may want multiple choice later, which needs a new multi-select component); the
   1–36 month range is the app's choice for "any length" — confirm MAZ's real minimum / maximum; the GCC
   nationality list (used by sign-up and EditProfile) uses country names ("Bahrain") while the backend's
   customer nationality format is unknown (CompleteProfile's NATIONALITIES uses demonyms, "Bahraini") — confirm it
@@ -716,7 +806,8 @@ or showing an error/result. Nothing may do nothing when tapped.
   the wireframe's sample BHD 100.000/month for every plan; (b) the real deposit amount (placeholder BHD 100);
   (c) how location is chosen — currently a placeholder "Seef District" (MAZ assigns the unit). All live in
   data/pricing.js and are labelled as samples on screen via RequestSummaryCard's isPlaceholder note.
-- Activity options (ACTIVITIES in data/formOptions.js) are SAMPLE placeholders used by New User sign-up; should come from the real API.
+- Activity options come from GET /activities; ACTIVITIES in data/formOptions.js is only the SAMPLE fallback. Open: the
+  activity id to save with a customer / contract (see above).
 - New User polish (2026-10-07) — backend needed for: (a) service details (location, capacity, size, furnishing,
   amenities — no screen shows plan.details now); (b) "Action required" on a request (a field MAZ sets
   + a way for the customer to respond — the unused ActionRequiredCard UI was removed in Cleanup 4; rebuild it once the field exists); (c) a requests
@@ -744,7 +835,10 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Meeting rooms — ON HOLD (recruiter, 2026-10-05; enums / endpoints later): the real rooms, opening hours, how far ahead / how long bookings can be, the cancellation
   cutoff, and whether bookings are charged, use included hours, or are free for tenants (no price shown yet).
   Availability of other tenants is simulated (data/meetingRooms.js + roomSlots in mockApi).
-- Violations — ON HOLD (recruiter, 2026-10-05): there is NO real /violations API endpoint yet — ViolationsScreen / ViolationDetail are fully mock
+- Violations (updated 2026-10-10): GET /violations EXISTS but is the TYPE catalogue (19 "#code label" names, no
+  customer / date / status / fine) — shown on ViolationTypesScreen. Customers carry violationId[] matching those codes
+  (e.g. [186]) — NOT used: it would need the customer record (no id, sensitive fields) and has no dates / status.
+  Issued NOTICES: still no endpoint — ViolationsScreen / ViolationDetail are fully mock
   (phase 5: via services/violationService.js, labelled "Demo data", not linked to real contracts)
   until the recruiter confirms one exists (contracts carry a violation_id[] array, always empty so far).
   Real violation types are known from the admin panel; still open: how notices link to a contract / customer,
@@ -757,7 +851,8 @@ or showing an error/result. Nothing may do nothing when tapped.
   renewed (currently no — they start a new request).
 - Support — ON HOLD (recruiter, 2026-10-05; ticket enums / endpoints later): real enquiry categories, where enquiries are routed (email / WhatsApp / ticketing), whether tenants
   can reply in-app, and any response-time commitment to show.
-- Real API (https://maz.beeinfosoft.com/public/api; GET units, CRUD contracts + customers — only GETs are wired):
+- Real API (https://maz.beeinfosoft.com/public/api; GET units, CRUD contracts + customers — only GETs are wired, plus POST /enquiries, OFF by
+  default — see below):
   • RESOLVED (2026-10-04): status / type codes — all enums are now in data/enums.js; contract status is live
     (badges, Active / Expired counts). Still open: customer company_id → company name; nationality format; where
     SERVICE_TYPE and ENQUIRY_STATUS appear in API records (none of the 3 endpoints return them — ENQUIRY_STATUS's
@@ -767,12 +862,33 @@ or showing an error/result. Nothing may do nothing when tapped.
   • Owner Type / POST + PUT /customers — PENDING ("will come later", recruiter 2026-10-05): Owner Type is
     collected (required) in CompleteProfile (no longer in EditProfile) as an OwnerTypeEnum code, but GET /customers has no
     owner-type field; the API field name and the POST / PUT /customers fields come later. Until then
-    CompleteProfile's saveProfile and EditProfile's updateProfile are MOCK (EditProfile pre-fills from the real
-    GET for nationality / ID). Which customer fields Company Name and Customer Name map to in POST / PUT /customers
+    CompleteProfile's saveProfile and EditProfile's updateProfile are MOCK (EditProfile's fetchProfile makes NO request and
+    shows no nationality / ID — session and mock values only). Which customer fields Company Name and Customer Name map to in POST / PUT /customers
   is still to be confirmed
+  • POST /enquiries — BUILT, OFF by default (2026-10-10). Route confirmed (plain OPTIONS → Allow: GET,HEAD,POST; GET
+    lists records in the shape we send). UNCONFIRMED — ask MAZ before switching on: required fields / validation rules,
+    the success response (201 + record? id?), the mobile format, whether `date` is sent or set by the server, whether
+    assigned_to takes a name ("Asad") or a staff id, duplicate rules, and approval to create a test record
+  • New User registration → POST /customers — NOT WIRED (2026-10-10; user decision: ask MAZ first, send nothing).
+    Read-only findings: OPTIONS /customers → 204 (its allow-methods only echoes the request — proves nothing);
+    GET /customers/create → 404 "No query results for model [App\Models\Customer]" (a resource route exists, so a
+    store route is likely). Unknown — MAZ must provide: (1) is POST /customers live, and its exact body (flat fields or
+    nested owners[]; required fields; formats for dates, nationality, gender / owner-type codes, company_id,
+    activityId); (2) the validation-error format (422?) and success response — does it return the new customer's id
+    (records have no id today)?; (3) duplicate handling (unique email / CR / CPR? idempotency key?); (4) how a created
+    customer logs in (an auth endpoint linking a login to the customer id); (5) a way to create + delete test records
+    (or a sandbox); (6) lock down GET /customers + turn off debug mode. Until then sign-up stays local
+    (mockApi.quickSignUp, labelled demo on screen); httpClient's only write method is post(), used only by
+    enquiryService for POST /enquiries (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
   • Auth / per-tenant filtering — PENDING ("comes later, not urgent", recruiter 2026-10-05): no auth and no login →
     customer link (the app's mock identity maps demo logins to customer 1 — services/mock/mockCustomerIdentity.js); no server-side filtering (?customer_id= is ignored, so every tenant's
     contracts are downloaded) — needs a per-user endpoint
   • No unit location field; no receipt period dates (only the description text); no payment / renewal endpoints
   • Server debug mode is on (404s return stack traces) — ask MAZ to turn it off
+  • SECURITY (2026-10-10): public GET /customers returns every customer's owners' CPR / passport numbers, mobiles and
+    emails with NO login — MAZ must protect it. The app maps only id + name. Customer records have no top-level id.
+  • Data (2026-10-10): /customers has 2 records (customers 3, 4 — ids only via owners[].customer_id); /contracts has 1,
+    for customer 3. The demo login is customer 1, which no longer exists (/customers/1 → 404), so the tenant dashboard
+    shows NO real contracts (by design — the demo identity was NOT re-pointed). Needs MAZ: which customer the demo
+    login should use, or real auth
   • Required fields / validation error shape for POST /customers (not probed — it would create a real record)

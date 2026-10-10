@@ -1,5 +1,7 @@
 // MOCK — replace with API data. In-app notifications per demo account type (see demo/DemoContext.js).
 // `target` is the screen a tap opens ({ screen, params }), or null for information-only notices.
+// `demo: true` makes NotificationsScreen mark the row "· Demo" and show the demo note (the New User list is shown;
+// the tenant list is no longer displayed — Existing User notifications come from services/notificationService.js).
 // Raw values only — screens format dates.
 
 export const MOCK_NOTIFICATIONS = {
@@ -64,9 +66,10 @@ export const MOCK_NOTIFICATIONS = {
       id: "NTF-2001",
       type: "welcome",
       title: "Welcome to MAZ Business Center",
-      body: "Browse our office suites and submit a request — our team will guide you through every step.",
+      body: "Browse our office suites and try a sample request to see how the process works.",
       createdAt: "2026-09-27T09:00:00",
       read: false,
+      demo: true,
       target: { screen: "BrowsePlans", params: undefined },
     },
   ],

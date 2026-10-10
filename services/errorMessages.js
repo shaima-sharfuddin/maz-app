@@ -10,6 +10,7 @@ export const ERROR_MESSAGES = {
   RATE_LIMITED: "Too many requests were made. Please wait a moment, then try again.",
   INVALID_RESPONSE: "We couldn't process the information from MAZ. Please try again later.",
   BAD_REQUEST: "MAZ couldn't complete this request. Please try again, or contact MAZ if it keeps happening.",
+  VALIDATION: "MAZ couldn't accept some of these details. Check them and try again, or contact MAZ.",
   NOT_FOUND: "We couldn't find what you were looking for.",
   UNAUTHORIZED: "Your session has expired. Please log in again.",
   // A 401 when the app sent no token (auth is still mock): not a session problem, so no sign-out.

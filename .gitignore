@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# raw MAZ API responses saved for reference (real business data — keep out of Git)
+/data/apiSamples/

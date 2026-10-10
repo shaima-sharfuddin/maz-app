@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BAHRAIN, ACTIVITIES } from "../data/formOptions";
+import { BAHRAIN } from "../data/formOptions";
 import { findCountry } from "../data/countryCodes";
 import { MIN_LEASE_MONTHS, MAX_LEASE_MONTHS } from "../data/pricing";
 
@@ -183,17 +183,19 @@ export const newUserSignUpSchema = z
   .object({
     companyName: requiredText("Company Name"),
     customerName: requiredText("Customer Name"),
-    // Business activity (restored at the recruiter's request, 2026-10-10): required, one choice from ACTIVITIES —
-    // SAMPLE options until MAZ provides its activity list. Kept in the app only; never sent to MAZ.
-    activity: requiredSelect("Activity").refine((value) => !value || ACTIVITIES.includes(value), {
-      message: "Select an activity from the list",
-    }),
+    // Business activity (restored at the recruiter's request, 2026-10-10): required, one choice from the dropdown —
+    // MAZ's GET /activities labels, or the SAMPLE list if that fails (services/activityService.js). The options load
+    // at runtime, so the field itself limits the choice to the list; the schema checks it's present and sane.
+    // Kept in the app only; never sent to MAZ.
+    activity: requiredSelect("Activity").max(200, "Select an activity from the list"),
     email,
     phoneCountry: requiredSelect("Country code"), // ISO code; the dial code is derived (data/countryCodes.js)
     phoneNumber: z.string(),
     nationality: requiredSelect("Nationality"),
     cprNumber: z.string(),
     passportNumber: z.string(),
+    // Optional free text for MAZ's team — sent as the enquiry's `remarks` (POST /enquiries, when switched on).
+    remarks: z.string().trim().max(500, "Keep remarks under 500 characters").optional(),
   })
   .superRefine((values, ctx) => {
     const phoneIssue = values.phoneCountry ? mobileNumberIssue(values.phoneCountry, values.phoneNumber) : null;

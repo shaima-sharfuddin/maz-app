@@ -1,6 +1,9 @@
 import { fetchBill as fetchBillFromMaz } from "./httpApi";
 import { SERVICE_SOURCES } from "./serviceConfig";
 import { getDemoPayment } from "./mock/demoPaymentLedger";
+import { requireCurrentCustomerId, customerDataSource } from "./customerService";
+import { getDemoTenantBill } from "./mock/mockTenantContracts";
+import { ApiError } from "./apiError";
 
 // Bills = a contract's installments (MAZ contracts.receipts[]). The amounts, VAT, due dates and descriptions are
 // REAL MAZ data; whether a bill is PAID is not confirmed by MAZ yet, so that one rule lives here, isolated.
@@ -28,7 +31,13 @@ export function withPaymentStatus(bill) {
   return { ...bill, status: provisionalStatus(bill), statusProvisional: PAYMENT_STATUS_IS_PROVISIONAL, demoPaid: false };
 }
 
-// One bill (BillViewer): REAL data from MAZ + the provisional status.
+// One bill (BillViewer) + the provisional status: live → MAZ; the MOCK demo tenant → its sample bill (no request).
 export async function fetchBill(contractId, billNumber) {
+  const customerId = requireCurrentCustomerId();
+  if (customerDataSource() === "demo") {
+    const bill = getDemoTenantBill(contractId, billNumber, customerId);
+    if (!bill) throw new ApiError("NOT_FOUND", "Bill not found.");
+    return withPaymentStatus(bill);
+  }
   return withPaymentStatus(await fetchBillFromMaz(contractId, billNumber));
 }

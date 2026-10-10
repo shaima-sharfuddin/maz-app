@@ -12,6 +12,8 @@ import useAsync from "../hooks/useAsync";
 import { fetchEnquiry, errorMessage } from "../services/api";
 import { formatTimestamp } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
+import InfoNote from "../components/InfoNote";
+import { DEMO_NOTES } from "../data/demoNotes";
 
 function MessageCard({ title, author, date, body }) {
   const { colors } = useTheme();
@@ -73,12 +75,25 @@ export default function EnquiryDetailScreen({ navigation, route }) {
       <View>
         <ScreenTitle eyebrow={`Enquiry ${enquiry.id}`} title={enquiry.subject} />
 
+        {/* Support is MOCK (services/mockApi.js): sample enquiries and replies, never MAZ's. */}
+        <InfoNote boxed style={{ marginBottom: 16 }}>
+          {DEMO_NOTES.enquiryDetail}
+        </InfoNote>
+
         <DetailCard
           rows={[
-            { label: "Status", value: <StatusBadge status={enquiry.status} /> },
+            {
+              label: "Status",
+              value: (
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <StatusBadge status={enquiry.status} />
+                  <StatusBadge status="demo" />
+                </View>
+              ),
+            },
             { label: "Category", value: enquiry.category },
             { label: "Contract", value: enquiry.contractId ?? "Not specified" },
-            { label: "Sent", value: formatTimestamp(enquiry.createdAt) },
+            { label: "Saved", value: formatTimestamp(enquiry.createdAt) },
           ]}
         />
 
@@ -86,7 +101,7 @@ export default function EnquiryDetailScreen({ navigation, route }) {
 
         {enquiry.reply ? (
           <MessageCard
-            title="Reply from MAZ"
+            title={DEMO_NOTES.sampleReplyTitle}
             author={enquiry.reply.from}
             date={enquiry.reply.createdAt}
             body={enquiry.reply.body}
@@ -95,8 +110,8 @@ export default function EnquiryDetailScreen({ navigation, route }) {
           <EmptyState
             dashed
             icon="time-outline"
-            title="Awaiting reply"
-            message="Our client services team will reply by email and here."
+            title={DEMO_NOTES.noReplyTitle}
+            message={DEMO_NOTES.noReplyMessage}
           />
         )}
       </View>

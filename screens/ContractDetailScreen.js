@@ -254,10 +254,10 @@ export default function ContractDetailScreen({ navigation, route }) {
     return (
       <View>
         {contract.demo ? (
-          // ⚠️ The DEMO expiring contract (services/mock/mockDemoContracts.js) — say so plainly.
+          // ⚠️ A demo tenant's SAMPLE contract (services/mock/mockTenantContracts.js) — say so plainly.
           <InfoNote boxed style={{ marginBottom: 16 }}>
-            DEMO contract — created in the app to demonstrate renewal. It isn&apos;t MAZ data, has no bills and is never
-            sent to MAZ.
+            DEMO contract — sample data created in the app for demonstration. It isn&apos;t MAZ data and nothing about it
+            is sent to MAZ.
           </InfoNote>
         ) : null}
 

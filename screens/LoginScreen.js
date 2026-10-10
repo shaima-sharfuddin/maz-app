@@ -14,12 +14,10 @@ import { loginSchema } from "../validation/schemas";
 import { logIn, requestPasswordReset, AUTH_IS_MOCK } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 import { useAuth } from "../auth/AuthContext";
-import { useDemo } from "../demo/DemoContext";
 
 export default function LoginScreen({ navigation, route }) {
   const { colors } = useTheme();
   const { signIn, sessionExpired } = useAuth();
-  const { setUserState } = useDemo();
   const justVerified = route.params?.justVerified;
   const {
     control,
@@ -35,13 +33,12 @@ export default function LoginScreen({ navigation, route }) {
   const [resetSentTo, setResetSentTo] = useState("");
 
   // Saving the session switches the navigator to the signed-in screens (App.js) — no navigate() needed.
-  // The dashboard follows the account, never a leftover demo setting: an account linked to a MAZ customer
-  // (customerId) always opens the Existing User (tenant) dashboard; one without a customer yet (a New User who
-  // signed up in this session) opens the New User dashboard.
+  // The dashboard follows the account (useAccountState, auth/AuthContext.js): an account linked to a MAZ customer
+  // (customerId) opens the Existing User (tenant) dashboard; one without a customer yet (a New User) opens the New
+  // User dashboard. Nothing to set here.
   const onSubmit = handleSubmit(async (values) => {
     const result = await login.submit(values);
     if (!result) return;
-    setUserState(result.user.customerId != null ? "tenant" : "newUser");
     signIn(result);
   });
 

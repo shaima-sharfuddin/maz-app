@@ -13,13 +13,13 @@ import {
   networkDown,
   calls,
   resetCalls,
-  loginExistingUser,
+  loginLiveCustomer,
   rejectionOf,
 } from "./helpers.mjs";
 import { toISODate } from "../utils/formatDate.js";
 
 test("Payment Review: contracts fail → no payment plan, nothing paid, no success notification", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/contracts": status(503) });
   const error = await rejectionOf(api.preparePayment({ type: "account" }));
   assert.equal(error?.code, "SERVER");
@@ -32,7 +32,7 @@ test("Payment Review: contracts fail → no payment plan, nothing paid, no succe
 });
 
 test("Renewal request: the contract read fails → no renewal created, no 'submitted' notification", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/contracts": networkDown() });
   const real = await rejectionOf(api.requestRenewal("CN-TEST-0001", { termMonths: 3 }));
   assert.equal(real?.code, "NETWORK");
@@ -43,9 +43,16 @@ test("Renewal request: the contract read fails → no renewal created, no 'submi
   assert.ok(!notifications.some((n) => /renewal request submitted/i.test(n.title)));
 });
 
-test("no write requests: the MAZ transport has no POST / PUT / PATCH / DELETE", () => {
+// The only write is the New User enquiry (POST /enquiries, off unless EXPO_PUBLIC_SEND_ENQUIRIES=true — enquiries.test.mjs).
+test("writes: the MAZ transport has no PUT / PATCH / DELETE, and only enquiryService calls post()", () => {
   const transport = readFileSync(new URL("../services/httpClient.js", import.meta.url), "utf8");
-  assert.doesNotMatch(transport, /method:\s*["'](POST|PUT|PATCH|DELETE)/i);
+  assert.doesNotMatch(transport, /method:\s*["'](PUT|PATCH|DELETE)/i);
+  for (const file of ["httpApi.js", "contractService.js", "billService.js", "paymentService.js", "renewalService.js", "notificationService.js", "violationService.js", "activityService.js", "registrationService.js", "mockApi.js"]) {
+    const source = readFileSync(new URL(`../services/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /\bpost\s*\(/, `${file} must not POST to MAZ`);
+  }
+  const enquiries = readFileSync(new URL("../services/enquiryService.js", import.meta.url), "utf8");
+  assert.deepEqual(enquiries.match(/\bpost\(\s*"[^"]*"/g), ['post("/enquiries"']);
 });
 
 test("screens with Pay / Renew actions never keep stale data (no keepDataOnError)", () => {
@@ -58,7 +65,7 @@ test("screens with Pay / Renew actions never keep stale data (no keepDataOnError
 // The demo actions themselves never reach MAZ. Their contract reads are done first (they may use the network or the
 // 60 s cache); from then on the network is cut and every request is recorded — the action must make none.
 test("submitPayment makes zero network requests (success and decline)", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({});
   for (const testOutcome of ["succeed", "decline"]) {
     const billNumber = testOutcome === "succeed" ? "CN-TEST-0001-1" : "CN-TEST-0001-2";
@@ -73,7 +80,7 @@ test("submitPayment makes zero network requests (success and decline)", async ()
 });
 
 test("requestRenewal and advanceRenewalDemo make zero network requests", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   const endsSoon = new Date();
   endsSoon.setDate(endsSoon.getDate() + 5); // inside the 10-day renewal window
   const renewable = contract({ id: 909, name: "CN-TEST-RENEW", to_date: toISODate(endsSoon), receipts: [] });

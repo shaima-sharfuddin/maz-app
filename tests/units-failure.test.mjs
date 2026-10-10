@@ -2,11 +2,11 @@
 // units cache starts empty.)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { api, setRoutes, status, resetCalls, callsTo, loginExistingUser } from "./helpers.mjs";
+import { api, setRoutes, status, resetCalls, callsTo, loginLiveCustomer } from "./helpers.mjs";
 import { unitWithLocation } from "../utils/formatUnit.js";
 
 test("units fail → every contract screen still loads, with the neutral unit placeholder", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/units": status(500) });
   resetCalls();
 
@@ -28,7 +28,7 @@ test("units fail → every contract screen still loads, with the neutral unit pl
 });
 
 test("units are retried on a later load once MAZ recovers", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/units": status(503) });
   resetCalls();
   assert.equal((await api.fetchContracts()).find((c) => !c.demo).unit, null);

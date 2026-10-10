@@ -7,6 +7,7 @@ import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import DetailCard from "../components/DetailCard";
 import ErrorBanner from "../components/ErrorBanner";
+import InfoNote from "../components/InfoNote";
 import ScreenTitle from "../components/ScreenTitle";
 import StepProgress from "../components/StepProgress";
 import {
@@ -15,14 +16,16 @@ import {
   CompanyFields,
   EmailField,
   MobileNumberField,
+  RemarksField,
   IdentificationFields,
   useIdentityFields,
 } from "../components/AccountDetailsFields";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
+import useAsync from "../hooks/useAsync";
 import { newUserSignUpSchema, nationalPhoneDigits } from "../validation/schemas";
 import { findCountry } from "../data/countryCodes";
-import { quickSignUp } from "../services/api";
+import { registerNewUser, submitSignUpEnquiry, areEnquiriesLive, fetchActivityOptions } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 
 // The three form steps, then a review step (index 3) before the account is created.
@@ -37,7 +40,7 @@ const STEPS = [
     label: "Contact",
     title: "Your contact details",
     subtitle: "We'll send a verification code to your email, and keep you updated on your request.",
-    fields: ["email", "phoneCountry", "phoneNumber"],
+    fields: ["email", "phoneCountry", "phoneNumber", "remarks"],
   },
   {
     label: "Identification",
@@ -58,6 +61,9 @@ const maskId = (value) => {
 // CompleteProfile, shown a step at a time (Company → Contact → Identification → Review). Bahrainis give
 // a CPR number, everyone else a passport number. On success → VerifyAccount (email OTP), which signs the
 // user in and opens Browse Plans; the details are reused for their office request (no re-entry).
+// Submit = registerNewUser: the demo account (local) + an enquiry to MAZ (POST /enquiries: company, name, mobile, email,
+// remarks) when EXPO_PUBLIC_SEND_ENQUIRIES=true. If the enquiry fails, the account still exists: the Review step then
+// offers "Send enquiry again" or continuing to verification without it.
 export default function NewUserSignUpScreen({ navigation }) {
   const { colors } = useTheme();
   const {
@@ -67,7 +73,13 @@ export default function NewUserSignUpScreen({ navigation }) {
     trigger,
     formState: { isValid },
   } = useZodForm(newUserSignUpSchema, EMPTY_ACCOUNT_DETAILS);
-  const { submit, loading, error } = useSubmit(quickSignUp);
+  const { submit, loading, error } = useSubmit(registerNewUser);
+  const resend = useSubmit(submitSignUpEnquiry);
+  const enquiriesLive = areEnquiriesLive();
+  // Set when the demo account was created but MAZ didn't confirm the enquiry: { email, payload, message, code }.
+  const [unsentEnquiry, setUnsentEnquiry] = useState(null);
+  // Activity options: MAZ's GET /activities, or the labelled samples if it fails (never blocks sign-up).
+  const activityOptions = useAsync(fetchActivityOptions, { keepData: true });
   const [step, setStep] = useState(0);
   const scrollRef = useRef(null);
 
@@ -83,6 +95,7 @@ export default function NewUserSignUpScreen({ navigation }) {
   }, [values, step, isValid]);
 
   const goToStep = (next) => {
+    if (next < REVIEW_STEP) setUnsentEnquiry(null); // edited details are submitted afresh
     setStep(next);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
@@ -95,8 +108,11 @@ export default function NewUserSignUpScreen({ navigation }) {
     if (await trigger(STEPS[step].fields)) goToStep(step + 1);
   };
 
+  // enquiry: "recorded" | "failed" | undefined (switched off) — VerifyAccount says whether MAZ received it.
+  const toVerify = (email, enquiry) => navigation.navigate("VerifyAccount", { email, enquiry });
+
   const onSubmit = handleSubmit(async (formValues) => {
-    const result = await submit({
+    const payload = {
       ...formValues,
       // Mobile: dial code and national number kept separate ({ countryCode: "+971", phoneNumber: "501234567" });
       // phoneCountry (ISO) says which +1 / +44 country it is.
@@ -104,17 +120,33 @@ export default function NewUserSignUpScreen({ navigation }) {
       phoneNumber: nationalPhoneDigits(formValues.phoneCountry, formValues.phoneNumber),
       cprNumber: isBahraini ? formValues.cprNumber : "",
       passportNumber: isBahraini ? "" : formValues.passportNumber,
-    });
-    if (!result) return; // shown by the ErrorBanner below
-    navigation.navigate("VerifyAccount", { email: result.email });
+    };
+    const result = await submit(payload);
+    if (!result) return; // the demo account failed — shown by the ErrorBanner below
+    if (result.enquiry.status === "failed") {
+      setUnsentEnquiry({ email: result.email, payload, message: result.enquiry.message, code: result.enquiry.code });
+      return;
+    }
+    toVerify(result.email, result.enquiry.status === "recorded" ? "recorded" : undefined);
   });
+
+  const onResendEnquiry = async () => {
+    const result = await resend.submit(unsentEnquiry.payload);
+    if (result?.status === "recorded") toVerify(unsentEnquiry.email, "recorded");
+  };
 
   const renderFields = () => {
     if (step === 0) {
       return (
         <>
           <CompanyFields control={control} />
-          <ActivityField control={control} />
+          <ActivityField
+            control={control}
+            options={activityOptions.data?.options ?? []}
+            loading={!activityOptions.data}
+            sample={activityOptions.data?.source === "sample"}
+            onRetry={activityOptions.reload}
+          />
         </>
       );
     }
@@ -123,6 +155,7 @@ export default function NewUserSignUpScreen({ navigation }) {
         <>
           <EmailField control={control} />
           <MobileNumberField control={control} />
+          <RemarksField control={control} />
         </>
       );
     }
@@ -142,22 +175,70 @@ export default function NewUserSignUpScreen({ navigation }) {
             label: "Mobile",
             value: `${findCountry(values.phoneCountry)?.dial ?? ""} ${nationalPhoneDigits(values.phoneCountry, values.phoneNumber)}`,
           },
+          ...(values.remarks?.trim() ? [{ label: "Remarks", value: values.remarks.trim() }] : []),
           { label: "Nationality", value: values.nationality },
           isBahraini
             ? { label: "CPR", value: maskId(values.cprNumber) }
             : { label: "Passport", value: maskId(values.passportNumber) },
         ]}
-        style={{ marginBottom: 32 }}
+        style={{ marginBottom: 16 }}
       />
+      {/* The ACCOUNT is always local (mockApi.quickSignUp): POST /customers isn't wired until MAZ gives its request
+          format (CLAUDE.md open questions). Only when enquiries are switched on is an enquiry sent to MAZ. */}
+      <InfoNote style={{ marginBottom: 24 }}>
+        {enquiriesLive
+          ? "Your company, name, mobile, email and remarks are sent to MAZ as an enquiry. Your account itself is a demo, kept in this app only."
+          : "Demo registration — your details are kept in this app only. Your account isn't created with MAZ yet."}
+      </InfoNote>
+      {unsentEnquiry ? renderUnsentEnquiry() : renderSubmit()}
+      <View style={{ marginTop: 8 }}>
+        <AnimatedButton
+          label="Edit details"
+          variant="ghost"
+          onPress={() => goToStep(0)}
+          disabled={loading || resend.loading}
+        />
+      </View>
+    </>
+  );
+
+  const renderSubmit = () => (
+    <>
       <AnimatedButton
-        label={loading ? "Creating your account…" : "Submit & verify email"}
+        label={loading ? (enquiriesLive ? "Sending your details…" : "Creating your account…") : "Submit & verify email"}
         onPress={onSubmit}
         disabled={!isValid}
         loading={loading}
       />
       <ErrorBanner message={error} onRetry={onSubmit} />
+    </>
+  );
+
+  // The demo account exists, but MAZ didn't confirm the enquiry. A timeout is ambiguous — MAZ may have saved it — so
+  // the user is told before sending again.
+  const renderUnsentEnquiry = () => (
+    <>
+      <ErrorBanner
+        message={
+          unsentEnquiry.code === "TIMEOUT" && !resend.error
+            ? "MAZ took too long to confirm your enquiry. It may still have been received — sending again could create a duplicate."
+            : `Your enquiry wasn't sent to MAZ. ${resend.error || unsentEnquiry.message}`
+        }
+      />
+      <View style={{ marginTop: 16 }}>
+        <AnimatedButton
+          label={resend.loading ? "Sending…" : "Send enquiry again"}
+          onPress={onResendEnquiry}
+          loading={resend.loading}
+        />
+      </View>
       <View style={{ marginTop: 8 }}>
-        <AnimatedButton label="Edit details" variant="ghost" onPress={() => goToStep(0)} disabled={loading} />
+        <AnimatedButton
+          label="Continue without sending"
+          variant="secondary"
+          onPress={() => toVerify(unsentEnquiry.email, "failed")}
+          disabled={resend.loading}
+        />
       </View>
     </>
   );

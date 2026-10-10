@@ -4,7 +4,7 @@
 // null means "unknown" — never "zero" or "none". Screens hide what they can't state truthfully
 // (e.g. no "You're all paid up" when payment status is unknown).
 
-import { CONTRACT_STATUS, GENDER, INSTALLMENTS } from "../data/enums";
+import { CONTRACT_STATUS, INSTALLMENTS } from "../data/enums";
 
 // API contract status code → { status, label, color }. `status` is the key screens and StatusBadge
 // use ("draft" | "reviewing" | "active" | "expired" | "renewed" | "terminated"), from the backend's own
@@ -112,29 +112,62 @@ export function toUiBill(contract, apiReceipt) {
 // API customer → the CompleteProfile form's { customer, owner } field names (renames only).
 // gender codes become the form's labels via GENDER ("m" → "Male"; an unknown code passes through raw).
 // company_id and nationality are passed through raw: how they map to COMPANIES / NATIONALITIES is unconfirmed.
+// MAZ's customer record (GET /customers, /customers/{id} — checked 2026-10-10) has NO top-level id: the customer's id
+// appears only on its owners (owners[].customer_id). The record also carries every owner's CPR / passport number,
+// mobile and email — those are deliberately NOT mapped: the app only needs the customer's id and name, so nothing
+// sensitive is kept in memory or reaches a screen.
+// id: the top-level id if MAZ adds one, else the owners' customer_id when they all agree; null when unknown.
+export function customerIdOf(apiCustomer) {
+  if (apiCustomer?.id != null) return String(apiCustomer.id);
+  const owners = Array.isArray(apiCustomer?.owners) ? apiCustomer.owners : [];
+  const ids = new Set(owners.map((owner) => owner?.customer_id).filter((id) => id != null).map(String));
+  return ids.size === 1 ? [...ids][0] : null;
+}
+
 export function toUiCustomer(apiCustomer) {
+  const name = typeof apiCustomer?.name === "string" ? apiCustomer.name.trim() : "";
+  return { id: customerIdOf(apiCustomer), name: name || null };
+}
+
+// Reference catalogues whose records are just a coded name: violation types ("#186 The commercial registration …")
+// and business activities ("702 Management consultancy activities", "46691-1 Sale/Trading in …"). The code — digits,
+// optionally "-<digits>" — is split off only when the name clearly starts with one and has a label after it; otherwise
+// the whole name is the label (code null, e.g. a record that is just "332"). No other fields exist (no id).
+const LEADING_CODE = /^#?(\d+(?:-\d+)?)\s+(\S.*)$/;
+export function toUiCodedName(apiRecord) {
+  const name = typeof apiRecord?.name === "string" ? apiRecord.name.trim() : "";
+  if (!name) return null;
+  const match = name.match(LEADING_CODE);
+  return { name, code: match ? match[1] : null, label: match ? match[2].trim() : name };
+}
+
+// ---- Requests (app → MAZ) ----
+
+// POST /enquiries — the fixed values every New User enquiry carries (given by the recruiter, 2026-10-10). The codes
+// match the existing enquiry records (GET /enquiries): status "1" = New, Channel "c" = Google, ServiceType
+// "i" = Incubator. status_label / Channel_label / ServiceType_label are response fields and are NOT sent.
+export const ENQUIRY_FIXED_FIELDS = {
+  status: "1",
+  Channel: "c",
+  assigned_to: "Asad",
+  ServiceType: "i",
+  payment_term: "1",
+};
+
+// The New User sign-up → MAZ's enquiry record. signUp: { companyName, customerName, countryCode ("+973"),
+// phoneNumber (national digits, "36123456"), email, remarks }; date: "YYYY-MM-DD". The mobile is written the way the
+// existing records store it — "00" + dial code digits + number ("0097336123456"); that format is copied from GET
+// data, not confirmed by MAZ. Nationality, CPR / passport and activity are deliberately NOT sent.
+export function toApiEnquiry(signUp, { date }) {
+  const dialDigits = String(signUp.countryCode ?? "").replace(/\D/g, "");
+  const national = String(signUp.phoneNumber ?? "").replace(/\D/g, "");
   return {
-    id: apiCustomer.id,
-    customer: {
-      companyId: apiCustomer.company_id ?? null,
-      customerName: apiCustomer.name ?? "",
-      vatNumber: apiCustomer.vatNo ?? "",
-      vatRegistrationDate: apiCustomer.vatRegDate ?? null,
-      crNumber: apiCustomer.crNo ?? "",
-      crRegistrationDate: apiCustomer.crRegDate ?? null,
-      address: apiCustomer.address ?? "",
-    },
-    owner: {
-      ownerName: apiCustomer.ownerName ?? "",
-      ownerType: null, // the form's Owner Type (OwnerTypeEnum) — /customers returns no owner-type field yet
-      ownerMobile: apiCustomer.ownerMobile ?? "",
-      email: apiCustomer.email ?? "",
-      cprNumber: apiCustomer.cprNo ?? "",
-      cprExpiryDate: apiCustomer.cprExpDate ?? null,
-      passportNumber: apiCustomer.passportNo ?? "",
-      passportExpiryDate: apiCustomer.passportExp ?? null,
-      nationality: apiCustomer.nationality ?? null,
-      gender: apiCustomer.gender == null ? null : (GENDER[apiCustomer.gender] ?? apiCustomer.gender),
-    },
+    date,
+    company: String(signUp.companyName ?? "").trim(),
+    ContactPerson: String(signUp.customerName ?? "").trim(),
+    mobile: `00${dialDigits}${national}`,
+    email: String(signUp.email ?? "").trim(),
+    remarks: String(signUp.remarks ?? "").trim(),
+    ...ENQUIRY_FIXED_FIELDS,
   };
 }

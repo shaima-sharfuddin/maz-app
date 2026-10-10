@@ -12,6 +12,8 @@ import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import { fetchRequests, errorMessage } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
+import InfoNote from "../components/InfoNote";
+import { DEMO_NOTES } from "../data/demoNotes";
 
 // Every office request the user has submitted, newest first → RequestStatus. fetchRequests is MOCK (the
 // in-memory request store, cleared on reload) until the real requests endpoint exists — see CLAUDE.md.
@@ -86,6 +88,10 @@ export default function MyRequestsScreen({ navigation }) {
         <View className="flex-1 px-6 pt-8 pb-10">
           <BackButton onPress={() => navigation.goBack()} />
           <ScreenTitle title="My requests" subtitle="Your workspace requests and where each one stands." />
+          {/* Office requests are MOCK (services/mockApi.js submitRequest) — kept in the app, never sent. */}
+          <InfoNote boxed style={{ marginBottom: 16 }}>
+            {DEMO_NOTES.requests}
+          </InfoNote>
           {renderList()}
         </View>
       </ScrollView>

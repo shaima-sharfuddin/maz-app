@@ -2,7 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { logOut as apiLogOut } from "../services/api";
-import { setCurrentSession, onSessionExpired } from "../services/authService";
+import {
+  setCurrentSession,
+  onSessionExpired,
+  onDemoAccountsChange,
+  rememberDemoAccount,
+  setDemoAccountsLoader,
+  loadDemoAccounts,
+} from "../services/authService";
+import { accountStateOf, hasSafeCustomerIdentity } from "../services/customerService";
 import { useDemo } from "../demo/DemoContext";
 
 // Session = { token, user: { email, name, companyName, customerId, activity }, profileComplete }. Stored encrypted with
@@ -13,6 +21,20 @@ const SESSION_KEY = "maz.session";
 // Not sensitive (no account data): "1" once anyone has signed in on this device. Welcome uses it to choose its
 // tagline (returning vs new). Kept across logouts — that's the point.
 const SIGNED_IN_BEFORE_KEY = "maz.hasSignedInBefore";
+// DEMO ONLY (mock auth): the New User demo accounts created on this phone — email, name, company, activity, verified;
+// never the mobile, nationality or CPR / passport — so a New User who logs in after an app restart is still a New User
+// instead of MAZ's demo customer. Encrypted like the session. Remove with the mock auth provider.
+const DEMO_ACCOUNTS_KEY = "maz.demoAccounts";
+
+// How the mock auth layer reads the saved list. A read or parse failure REJECTS: the mock layer then refuses logins
+// ("Try again" on Login re-reads) instead of guessing who an unknown email is (services/mockApi.js loadDemoAccounts).
+setDemoAccountsLoader(async () => {
+  const saved = await SecureStore.getItemAsync(DEMO_ACCOUNTS_KEY);
+  return saved ? JSON.parse(saved) : null;
+});
+function saveDemoAccounts(accounts) {
+  SecureStore.setItemAsync(DEMO_ACCOUNTS_KEY, JSON.stringify(accounts)).catch(() => {});
+}
 
 const AuthContext = createContext(null);
 
@@ -56,17 +78,22 @@ export function AuthProvider({ children }) {
   const { ready: demoReady, startAtWelcome } = useDemo();
   const restored = useRef(false);
 
+  // Saved demo accounts follow every change (sign-up, verification, profile edit).
+  useEffect(() => onDemoAccountsChange(saveDemoAccounts), []);
+
   useEffect(() => {
     if (!demoReady || restored.current) return;
     restored.current = true;
     const loadSignedInBefore = AsyncStorage.getItem(SIGNED_IN_BEFORE_KEY)
       .then((value) => setHasSignedInBefore(value === "1"))
       .catch(() => {});
+    const accountsLoaded = loadDemoAccounts();
     if (startAtWelcome) {
-      Promise.all([persist(null), loadSignedInBefore]).finally(() => setReady(true));
+      Promise.all([persist(null), loadSignedInBefore, accountsLoaded]).finally(() => setReady(true));
       return;
     }
-    const loadSession = SecureStore.getItemAsync(SESSION_KEY)
+    const loadSession = accountsLoaded
+      .then(() => SecureStore.getItemAsync(SESSION_KEY))
       .then((saved) => {
         if (!saved) return;
         const parsed = JSON.parse(saved);
@@ -77,6 +104,17 @@ export function AuthProvider({ children }) {
           persist(null);
           return;
         }
+        // A session with a customer id must carry an identity allowed to have one (services/customerService.js). One
+        // that can't — e.g. saved before identities existed (2026-10-10), when a New User logging in after a restart
+        // could be given the demo customer — is discarded: log in again, and nothing of MAZ's is loaded meanwhile.
+        if (parsed.user.customerId != null && !hasSafeCustomerIdentity(parsed.user)) {
+          persist(null);
+          setSessionExpired(true);
+          return;
+        }
+        // A restored New User keeps being one after logging out and back in (sessions saved before the demo
+        // accounts were remembered).
+        if (parsed.user.customerId == null) rememberDemoAccount(parsed.user);
         setSession(parsed);
         markSignedInBefore();
       })
@@ -94,6 +132,9 @@ export function AuthProvider({ children }) {
           name: user.name,
           companyName: user.companyName ?? null,
           customerId: user.customerId ?? null,
+          // Which kind of account this is ("demoTenant" | "newUser" while auth is mock) — only some identities may
+          // load MAZ customer data (services/customerService.js hasSafeCustomerIdentity).
+          identity: user.identity ?? null,
           // A New User's sign-up Activity (SAMPLE options, app-only — never sent to MAZ); null otherwise, and in
           // sessions saved before it existed.
           activity: user.activity ?? null,
@@ -178,4 +219,11 @@ export function useAuth() {
   const auth = useContext(AuthContext);
   if (!auth) throw new Error("useAuth must be used inside <AuthProvider>");
   return auth;
+}
+
+// "tenant" | "newUser" for the signed-in user — from the session's customerId (services/customerService.js
+// accountStateOf), so the dashboard and every per-account-type mock always match the account. Signed out → "newUser".
+export function useAccountState() {
+  const { user } = useAuth();
+  return accountStateOf(user);
 }

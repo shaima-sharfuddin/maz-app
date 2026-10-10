@@ -15,7 +15,9 @@ import { supportEnquirySchema } from "../validation/schemas";
 import { fetchContracts, submitEnquiry } from "../services/api";
 import { SUPPORT_CATEGORIES } from "../data/formOptions";
 import { useTheme } from "../theme/ThemeContext";
-import { useDemo } from "../demo/DemoContext";
+import { useAccountState } from "../auth/AuthContext";
+import InfoNote from "../components/InfoNote";
+import { DEMO_NOTES } from "../data/demoNotes";
 
 const NO_CONTRACT = "Not about a specific contract";
 const contractLabel = (contract) => `${contract.id} · ${contract.unit}`;
@@ -23,7 +25,7 @@ const contractLabel = (contract) => `${contract.id} · ${contract.unit}`;
 // route.params.prefill ({ category, contractId, subject }) pre-fills the form, e.g. from a violation.
 export default function NewEnquiryScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const { userState } = useDemo();
+  const userState = useAccountState(); // from the session's customerId — never a separate demo setting
   const prefill = route.params?.prefill;
 
   const {
@@ -77,8 +79,13 @@ export default function NewEnquiryScreen({ navigation, route }) {
 
             <ScreenTitle
               title="New enquiry"
-              subtitle="Tell us how we can help. Our client services team will reply by email and in the app."
+              subtitle="Tell us how we can help."
             />
+
+            {/* Support is MOCK (services/mockApi.js submitEnquiry): nothing is sent, so no reply is promised. */}
+            <InfoNote boxed style={{ marginBottom: 20 }}>
+              {DEMO_NOTES.newEnquiry}
+            </InfoNote>
 
             <FormField
               control={control}
@@ -120,7 +127,7 @@ export default function NewEnquiryScreen({ navigation, route }) {
 
             <View className="mt-4">
               <AnimatedButton
-                label={loading ? "Sending…" : "Send enquiry"}
+                label={loading ? "Saving…" : "Save demo enquiry"}
                 onPress={onSubmit}
                 disabled={!isValid}
                 loading={loading}
@@ -129,7 +136,7 @@ export default function NewEnquiryScreen({ navigation, route }) {
             <ErrorBanner message={error} onRetry={onSubmit} />
 
             <Text className="text-sm leading-5 text-center mt-4" style={{ color: colors.textMuted }}>
-              You can follow your enquiry under Support at any time.
+              Your demo enquiry will be listed under Support.
             </Text>
           </View>
         </ScrollView>

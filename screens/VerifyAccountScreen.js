@@ -9,13 +9,13 @@ import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import IconBadge from "../components/IconBadge";
 import TextLink from "../components/TextLink";
+import InfoNote from "../components/InfoNote";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import { verifyAccountSchema } from "../validation/schemas";
 import { verifyEmail, resendVerificationCode, MOCK_OTP_CODE } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 import { useAuth } from "../auth/AuthContext";
-import { useDemo } from "../demo/DemoContext";
 
 const RESEND_COOLDOWN_S = 30;
 
@@ -25,6 +25,8 @@ const RESEND_COOLDOWN_S = 30;
 export default function VerifyAccountScreen({ navigation, route }) {
   const { colors } = useTheme();
   const email = route.params?.email ?? "";
+  // From NewUserSignUp: "recorded" (MAZ confirmed the enquiry) | "failed" (not sent) | undefined (sending switched off).
+  const enquiry = route.params?.enquiry;
   const {
     control,
     handleSubmit,
@@ -33,7 +35,6 @@ export default function VerifyAccountScreen({ navigation, route }) {
   } = useZodForm(verifyAccountSchema, { code: "" });
 
   const { signIn } = useAuth();
-  const { setUserState } = useDemo();
   const verify = useSubmit(verifyEmail);
   const resend = useSubmit(resendVerificationCode);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_S);
@@ -49,8 +50,7 @@ export default function VerifyAccountScreen({ navigation, route }) {
   const onSubmit = handleSubmit(async ({ code }) => {
     const result = await verify.submit({ email, code });
     if (result?.session) {
-      // DEMO: a brand-new account has no contracts, so the dashboard shows the new-user state.
-      setUserState("newUser");
+      // A brand-new account has no MAZ customer (customerId null), so the dashboard shows the new-user state.
       // Switches the navigator to the signed-in screens (App.js) — the dashboard is the first screen.
       signIn(result.session);
     } else if (result) {
@@ -83,6 +83,16 @@ export default function VerifyAccountScreen({ navigation, route }) {
               subtitle={`Enter the 6-digit code we sent to ${email || "your email"}.`}
             />
 
+            {enquiry === "recorded" ? (
+              <InfoNote boxed icon="checkmark-circle-outline" style={{ marginBottom: 20 }}>
+                Your enquiry has been received by MAZ.
+              </InfoNote>
+            ) : enquiry === "failed" ? (
+              <InfoNote boxed style={{ marginBottom: 20 }}>
+                Your enquiry wasn&apos;t sent to MAZ. You can still continue with the demo.
+              </InfoNote>
+            ) : null}
+
             <FormField
               control={control}
               name="code"
@@ -92,9 +102,9 @@ export default function VerifyAccountScreen({ navigation, route }) {
             />
 
             {MOCK_OTP_CODE ? (
-              // DEMO ONLY — no email is actually sent while the backend is mocked.
+              // DEMO ONLY — no email is sent and the code proves nothing about identity while the backend is mocked.
               <Text className="text-xs text-center mb-4" style={{ color: colors.textSubtle }}>
-                Demo mode: use code {MOCK_OTP_CODE}
+                Demo verification — no email is sent and this isn&apos;t an identity check. Use code {MOCK_OTP_CODE}.
               </Text>
             ) : null}
 

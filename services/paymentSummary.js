@@ -10,10 +10,10 @@ import { toISODate } from "../utils/formatDate";
 export const PAYMENT_SUMMARY_NOTE = "Provisional — not confirmed by MAZ";
 
 // The dashboard Payment card and its "Pay now" cover ACTIVE contracts only (client, 2026-10-08). Expired (and other)
-// contracts keep their bills and Pay buttons on their own Contract / Bill Details screens. The DEMO contract
-// (mockDemoContracts — no bills) is never part of the payment figures.
+// contracts keep their bills and Pay buttons on their own Contract / Bill Details screens. (The demo renewal contract,
+// DEMO-RENEWAL-001, has no bills, so it adds nothing to the figures.)
 export function contractsForAccountPayments(contracts) {
-  return contracts.filter((contract) => contract.status === "active" && !contract.demo);
+  return contracts.filter((contract) => contract.status === "active");
 }
 
 const isUnpaid = (bill) => bill.status === "unpaid" || bill.status === "due";

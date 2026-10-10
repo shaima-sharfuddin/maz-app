@@ -1,7 +1,8 @@
 import { toISODate } from "../../utils/formatDate";
 
 // ⚠️ MOCK RENEWAL PROVIDER — DEMO only. MAZ has no renewal API.
-// - Renewal REQUESTS are kept in memory for this app session (gone after a reload / restart).
+// - Renewal REQUESTS are kept in memory for this app session (gone after a reload / restart, and cleared on sign-out
+//   or an account change — clearRenewals, called by services/mock/demoSession.js).
 // - Nothing is sent to MAZ (no network request) and the real MAZ contract is never changed — a renewal is always a
 //   request for MAZ to review, never an automatic renewal.
 // - Stages: "requested" (submitted) → "reviewing" (MAZ review) → "approved" (decision). Only the demo control on
@@ -52,4 +53,9 @@ export function advanceRenewal(contractId) {
   renewal.status = next;
   renewal.updatedOn = toISODate(new Date());
   return copy(renewal);
+}
+
+// Sign-out / account change: the next account starts with no demo renewal requests.
+export function clearRenewals() {
+  renewals.clear();
 }

@@ -66,16 +66,6 @@ function simulate(produce, { canFail = true, instant = false } = {}) {
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const newId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}`;
 
-// Working copy of the tenant's contracts so a mock payment can update balances for the rest of the
-// session (resets on app reload). Screens always receive copies, never the store itself.
-const contracts = clone(MOCK_CONTRACTS);
-// In-memory stand-in for the backend's request store (cleared on app reload), in submission order.
-const submittedRequests = new Map();
-// Notifications per demo account type; actions below push new ones (see pushNotification).
-const notifications = clone(MOCK_NOTIFICATIONS);
-// The tenant's support enquiries, newest first; submitEnquiry adds to it.
-const enquiries = clone(MOCK_ENQUIRIES);
-
 // Local date + time, e.g. "2026-09-27T14:05:00" (same format as the mock data).
 const toISODateTime = (date) =>
   `${toISODate(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`;
@@ -87,30 +77,63 @@ const daysFromToday = (days) => {
   return date;
 };
 
-// The tenant's meeting room bookings. One upcoming booking is seeded relative to today so the demo
-// always has something to show (and cancel); its confirmation notification is seeded alongside.
-const bookings = [
-  {
-    id: "BKG-4001",
-    roomId: "conference-suite",
-    roomName: "Conference Suite",
-    date: toISODate(daysFromToday(3)),
-    start: "10:00",
-    end: "12:00",
-    durationHours: 2,
-    notes: "Quarterly planning",
-    status: "confirmed",
-  },
-];
-notifications.tenant.push({
-  id: "NTF-1006",
-  type: "booking",
-  title: "Meeting room booked",
-  body: `Conference Suite · ${formatDate(bookings[0].date)}, 10:00 AM – 12:00 PM.`,
-  createdAt: toISODateTime(daysFromToday(-1)),
-  read: false,
-  target: { screen: "MeetingRooms", params: undefined },
-});
+// ---- Per-session demo data ---------------------------------------------------
+// Everything below starts again from its seed whenever the signed-in account changes or signs out
+// (resetSessionMockData, called by services/mock/demoSession.js), so one person's demo actions — a new enquiry, a
+// booking, a notification marked read — never show for the next person on the same phone. Screens always receive
+// copies, never the stores themselves.
+let contracts; // working copy of the mock tenant's contracts (payOutstandingBalance updates it)
+let notifications; // per demo account type; actions below push new ones (see pushNotification)
+let enquiries; // the tenant's support enquiries, newest first; submitEnquiry adds to it
+let bookings; // the tenant's meeting room bookings
+
+function seedSessionData() {
+  contracts = clone(MOCK_CONTRACTS);
+  notifications = clone(MOCK_NOTIFICATIONS);
+  enquiries = clone(MOCK_ENQUIRIES);
+  // One upcoming booking is seeded relative to today so the demo always has something to show (and cancel); its
+  // confirmation notification is seeded alongside.
+  bookings = [
+    {
+      id: "BKG-4001",
+      roomId: "conference-suite",
+      roomName: "Conference Suite",
+      date: toISODate(daysFromToday(3)),
+      start: "10:00",
+      end: "12:00",
+      durationHours: 2,
+      notes: "Quarterly planning",
+      status: "confirmed",
+    },
+  ];
+  notifications.tenant.push({
+    id: "NTF-1006",
+    type: "booking",
+    title: "Meeting room booked",
+    body: `Conference Suite · ${formatDate(bookings[0].date)}, 10:00 AM – 12:00 PM.`,
+    createdAt: toISODateTime(daysFromToday(-1)),
+    read: false,
+    target: { screen: "MeetingRooms", params: undefined },
+  });
+}
+seedSessionData();
+
+export function resetSessionMockData() {
+  seedSessionData();
+}
+
+// ---- Per-account demo data ---------------------------------------------------
+// Office requests belong to the demo ACCOUNT that submitted them (its sign-in email), not to the phone: another
+// account never sees them, and the same account sees them again after logging out and back in (until the app
+// reloads — they're in memory). The signed-in account is set by services/mock/demoSession.js on every session change.
+let demoAccount = null; // normalised sign-in email, or null when signed out
+export function setDemoAccount(accountKey) {
+  demoAccount = accountKey ?? null;
+}
+
+const requestsByAccount = new Map(); // account → Map(requestId → request), in submission order
+// The signed-in account's requests (an empty, unsaved Map when signed out — nothing to read or change).
+const accountRequests = () => requestsByAccount.get(demoAccount) ?? new Map();
 
 // Adds a notification to the tenant's list, as the backend would after an action (payment, booking, …).
 function pushNotification({ type, title, body, target = null }) {
@@ -127,12 +150,136 @@ function pushNotification({ type, title, body, target = null }) {
 
 // ---- Auth & profile --------------------------------------------------------
 
-// Accounts created this session (cleared on app reload). Any other email logs in as an existing
-// tenant with a completed profile, so demos can skip sign-up.
-const registeredUsers = new Map(); // email → { fullName, phone, companyName?, verified, profileComplete }
+// New User demo accounts, by email: created this session, or restored at launch (restoreDemoAccounts below). Any other
+// email logs in as an existing tenant with a completed profile, so demos can skip sign-up.
+const registeredUsers = new Map(); // email → { email, fullName, phone, companyName?, activity, verified, profileComplete }
 // New User quick sign-ups, by email: the full form, kept for later reuse (cleared on app reload).
 const quickSignUps = new Map();
 const emailKey = (email) => email.trim().toLowerCase();
+
+// ---- Demo New User accounts, remembered across app restarts ----------------------------------------------------
+// The accounts above live in memory. Without this, a New User who signed up before an app restart would be unknown to
+// logIn — and come back as the demo tenant "Sara" with MAZ's demo customer (services/mock/mockCustomerIdentity.js).
+// auth/AuthContext.js saves this list encrypted (SecureStore) and restores it at launch, before any login.
+// Only the non-sensitive account fields are kept: email, name, company, activity, verified, profileComplete — NEVER the
+// mobile number, nationality or CPR / passport number (those stay in quickSignUps, in memory only).
+export const MAX_REMEMBERED_ACCOUNTS = 10;
+const accountListeners = new Set();
+
+// Whether this app run KNOWS the remembered accounts: "pending" (not read yet) | "ready" | "unavailable" (the phone's
+// storage couldn't be read). Until "ready", nobody can log in: an email that isn't known could be a remembered New
+// User, and treating it as the demo tenant would show a MAZ customer's data to them. logIn re-reads first
+// (ensureDemoAccountsLoaded), so the Login screen's "Try again" recovers once storage works. Sign-up doesn't depend on
+// it (a brand-new account is a New User by definition).
+let demoAccountsState = "pending";
+let demoAccountsLoader = null; // async () → saved list | null — set by auth/AuthContext.js (SecureStore)
+export const demoAccountsStatus = () => demoAccountsState;
+export function setDemoAccountsLoader(loader) {
+  demoAccountsLoader = loader;
+}
+
+// Reads the saved list (if not known yet). Never rejects: the outcome is demoAccountsStatus(). Accounts created in this
+// run before the list could be read are merged in and saved again.
+export async function loadDemoAccounts() {
+  if (demoAccountsState === "ready") return;
+  if (!demoAccountsLoader) {
+    demoAccountsState = "unavailable";
+    return;
+  }
+  try {
+    const saved = await demoAccountsLoader();
+    if (saved != null && !Array.isArray(saved)) throw new Error("Saved demo accounts are malformed");
+    const savedEmails = new Set((saved ?? []).map((account) => (typeof account?.email === "string" ? emailKey(account.email) : null)));
+    const unsaved = [...registeredUsers.keys()].some((key) => !savedEmails.has(key));
+    restoreDemoAccounts(saved ?? []);
+    if (unsaved) demoAccountsChanged();
+  } catch {
+    demoAccountsState = "unavailable";
+  }
+}
+
+export const ACCOUNT_CHECK_FAILED_MESSAGE =
+  "We couldn't check the demo accounts saved on this phone, so you can't log in safely right now. Please try again — or sign up again.";
+
+// For logIn: the remembered accounts must be known before an email can be matched to an identity.
+export async function ensureDemoAccountsLoaded() {
+  await loadDemoAccounts();
+  if (demoAccountsState !== "ready") throw new ApiError("ACCOUNT_CHECK_FAILED", ACCOUNT_CHECK_FAILED_MESSAGE);
+}
+
+// → [{ email, name, companyName, activity, verified, profileComplete }], at most MAX_REMEMBERED_ACCOUNTS (newest kept).
+export function exportDemoAccounts() {
+  return [...registeredUsers.values()].slice(-MAX_REMEMBERED_ACCOUNTS).map((user) => ({
+    email: user.email,
+    name: user.fullName,
+    companyName: user.companyName ?? null,
+    activity: user.activity ?? null,
+    verified: Boolean(user.verified),
+    profileComplete: user.profileComplete !== false,
+  }));
+}
+
+// listener(accounts) runs after every change (sign-up, verification, profile edit). Returns an unsubscribe function.
+export function onDemoAccountsChange(listener) {
+  accountListeners.add(listener);
+  return () => accountListeners.delete(listener);
+}
+
+function demoAccountsChanged() {
+  // Not saved until the stored list has been read — saving now would overwrite it with only this run's accounts.
+  if (demoAccountsState !== "ready") return;
+  const accounts = exportDemoAccounts();
+  accountListeners.forEach((listener) => {
+    try {
+      listener(accounts);
+    } catch {
+      // saving is best effort — never breaks the sign-up itself
+    }
+  });
+}
+
+// The saved list (from exportDemoAccounts) → known accounts again, and the list counts as read ("ready"). Malformed
+// entries are skipped; an account already known in this app run keeps its newer in-memory record.
+export function restoreDemoAccounts(accounts) {
+  if (!Array.isArray(accounts)) return;
+  demoAccountsState = "ready";
+  for (const account of accounts) {
+    if (typeof account?.email !== "string" || !account.email.trim()) continue;
+    const key = emailKey(account.email);
+    if (registeredUsers.has(key)) continue;
+    registeredUsers.set(key, {
+      email: account.email.trim(),
+      fullName: typeof account.name === "string" ? account.name : "",
+      phone: null,
+      companyName: account.companyName ?? null,
+      activity: account.activity ?? null,
+      verified: account.verified === true,
+      profileComplete: account.profileComplete !== false,
+    });
+  }
+}
+
+// A restored New User session (customerId null) whose account isn't known — e.g. saved before this list existed —
+// is added, so logging out and back in keeps it a New User instead of the demo tenant.
+export function rememberDemoAccount(user) {
+  if (!user?.email || registeredUsers.has(emailKey(user.email))) return;
+  registeredUsers.set(emailKey(user.email), {
+    email: user.email.trim(),
+    fullName: user.name ?? "",
+    phone: null,
+    companyName: user.companyName ?? null,
+    activity: user.activity ?? null,
+    verified: true, // it had a signed-in session, so it was verified
+    profileComplete: true,
+  });
+  demoAccountsChanged();
+}
+
+// True for a New User demo account (signed up in this app, now or before a restart) — never a MAZ customer. (Only
+// complete once demoAccountsStatus() is "ready" — logIn checks that first.)
+export function isDemoNewUserAccount(email) {
+  return Boolean(email) && registeredUsers.has(emailKey(email));
+}
 
 // ⚠️ MOCK — the real backend emails a random code. This fixed code is shown on the Verify screen.
 export const MOCK_OTP_CODE = "123456";
@@ -143,7 +290,10 @@ export function verifyEmail(payload) {
   return simulate(() => {
     if (payload.code !== MOCK_OTP_CODE) throw new ApiError("INVALID_CODE", "That code isn't right. Check your email and try again.");
     const user = registeredUsers.get(emailKey(payload.email));
-    if (user) user.verified = true;
+    if (user) {
+      user.verified = true;
+      demoAccountsChanged();
+    }
     const quick = quickSignUps.get(emailKey(payload.email));
     return quick ? { verified: true, session: quickSession(quick) } : { verified: true };
   });
@@ -181,6 +331,8 @@ export function logIn(payload) {
 const quickSession = (record) => ({
   token: newId("TKN"),
   user: {
+    customerId: null, // a New User demo account never has a MAZ customer
+    identity: "newUser",
     email: record.email,
     name: record.customerName,
     companyName: record.companyName,
@@ -191,7 +343,11 @@ const quickSession = (record) => ({
 
 // New User sign-up (the client's short form, replacing the old SignUp + CompleteProfile).
 // payload: { companyName, customerName, activity, email, countryCode, phoneNumber, phoneCountry, nationality,
-// cprNumber | passportNumber } → { email }. activity is one of the SAMPLE ACTIVITIES (kept in memory only). The mobile is kept as the dial code ("+971") + national number.
+// cprNumber | passportNumber, remarks } → { email }. activity is the chosen label (MAZ's GET /activities or the samples). The mobile
+// is kept as the dial code ("+971") + national number.
+// ⚠️ LOCAL / DEMO: kept in memory and NOT sent to MAZ (SERVICE_SOURCES.customerRegistration = "mock"). Going live needs
+// MAZ's POST /customers contract — request fields, required ones, validation + success response (with the new
+// customer id) and duplicate handling — then a real provider behind the same function name.
 // The account starts UNVERIFIED: the app goes on to VerifyAccount (code MOCK_OTP_CODE), whose verifyEmail
 // returns the session. Logging in before verifying fails with EMAIL_NOT_VERIFIED; afterwards it returns the
 // same name and company.
@@ -210,10 +366,13 @@ export function quickSignUp(payload) {
       // Only the ID that applies to the nationality is kept.
       cprNumber: payload.cprNumber?.trim() || null,
       passportNumber: payload.passportNumber?.trim() || null,
+      remarks: payload.remarks?.trim() || null,
       createdAt: toISODateTime(new Date()),
     };
     quickSignUps.set(emailKey(email), record);
+    registeredUsers.delete(emailKey(email)); // re-inserted last, so it's among the accounts remembered
     registeredUsers.set(emailKey(email), {
+      email,
       fullName: record.customerName,
       phone: `${record.countryCode} ${record.phoneNumber}`,
       companyName: record.companyName,
@@ -221,6 +380,7 @@ export function quickSignUp(payload) {
       verified: false,
       profileComplete: true,
     });
+    demoAccountsChanged();
     return { email };
   });
 }
@@ -249,7 +409,10 @@ export function saveProfile(payload) {
       owner: clone(payload?.owner ?? {}),
     });
     const user = payload?.email ? registeredUsers.get(emailKey(payload.email)) : null;
-    if (user) user.profileComplete = true;
+    if (user) {
+      user.profileComplete = true;
+      demoAccountsChanged();
+    }
     return { customerId };
   });
 }
@@ -275,6 +438,7 @@ export function updateProfile(email, values) {
     if (registered) {
       registered.fullName = saved.customerName;
       registered.companyName = saved.companyName;
+      demoAccountsChanged();
     }
     return { email };
   });
@@ -310,11 +474,14 @@ const INVOICE_DUE_DAYS = 7;
 // paymentFrequency is an INSTALLMENTS code ("12" Monthly … "1" Yearly).
 // A request starts at step 1. The real backend moves it through the stages; in the demo,
 // advanceRequestStage does (RequestStatus shows a demo control for it).
+// The request is stored under the signed-in demo account (see setDemoAccount) — never in a store shared by everyone.
 export function submitRequest(payload) {
   return simulate(() => {
+    if (!demoAccount) throw new ApiError("NO_SESSION", "Please log in again to submit your request.");
+    if (!requestsByAccount.has(demoAccount)) requestsByAccount.set(demoAccount, new Map());
     const requestId = newId("REQ");
     const submittedAt = toISODateTime(new Date());
-    submittedRequests.set(requestId, {
+    requestsByAccount.get(demoAccount).set(requestId, {
       requestId,
       payload: clone(payload),
       summary: clone(payload.summary),
@@ -354,10 +521,11 @@ const requestView = (request) => ({
 });
 
 // → { requestId, currentStep (1-based, indexes REQUEST_STEPS), summary, activity, unit, invoice, payment, contract }.
-// An unknown id (e.g. after an app reload cleared the mock store) reports step 1 with no details.
+// An unknown id (e.g. after an app reload cleared the mock store, or another account's request) reports step 1 with
+// no details.
 export function fetchRequestStatus(requestId) {
   return simulate(() => {
-    const request = submittedRequests.get(requestId);
+    const request = accountRequests().get(requestId);
     if (!request) {
       return {
         requestId,
@@ -378,15 +546,15 @@ export function fetchRequestStatus(requestId) {
 // The tenant's most recent request (the dashboard's "Your office request" card), or null.
 export function fetchLatestRequest() {
   return simulate(() => {
-    const latest = [...submittedRequests.values()].pop();
+    const latest = [...accountRequests().values()].pop();
     return latest ? requestView(latest) : null;
   });
 }
 
-// Every request this user has submitted, newest first (My Requests). Same in-memory store as above —
+// Every request the signed-in account has submitted, newest first (My Requests). Same in-memory store as above —
 // cleared on app reload, until the real requests endpoint exists.
 export function fetchRequests() {
-  return simulate(() => [...submittedRequests.values()].reverse().map(requestView));
+  return simulate(() => [...accountRequests().values()].reverse().map(requestView));
 }
 
 // ⚠️ DEMO ONLY — stands in for MAZ's admin moving the request on. Step 4 assigns a unit; step 5
@@ -395,7 +563,7 @@ export function fetchRequests() {
 export function advanceRequestStage(requestId) {
   return simulate(
     () => {
-      const request = submittedRequests.get(requestId);
+      const request = accountRequests().get(requestId);
       if (!request) throw new ApiError("NOT_FOUND", "Request not found.");
       if (request.currentStep >= INVOICE_STEP) throw new ApiError("FINAL_STAGE", "This request is already at its last stage.");
 
@@ -431,7 +599,7 @@ export function advanceRequestStage(requestId) {
 // "You're paying for" card, so one payment screen serves both.
 export function fetchRequestInvoice(requestId) {
   return simulate(() => {
-    const request = submittedRequests.get(requestId);
+    const request = accountRequests().get(requestId);
     if (!request) throw new ApiError("NOT_FOUND", "Request not found.");
     if (!request.invoice) throw new ApiError("NO_INVOICE", "Your invoice hasn't been issued yet.");
     const { invoice } = request;
@@ -462,7 +630,7 @@ export function fetchRequestInvoice(requestId) {
 // creates it — the app can't write to the contracts API yet.
 export function payRequestInvoice(requestId, methodId) {
   return simulate(() => {
-    const request = submittedRequests.get(requestId);
+    const request = accountRequests().get(requestId);
     const method = PAYMENT_METHODS.find((m) => m.id === methodId);
     if (!request) throw new ApiError("NOT_FOUND", "Request not found.");
     if (!method) throw new ApiError("INVALID_METHOD", "Choose a payment method.");

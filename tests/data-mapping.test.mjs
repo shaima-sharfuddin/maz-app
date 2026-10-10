@@ -1,13 +1,13 @@
 // Unsafe API data: invalid amounts, customer-id type mismatches, other customers' contracts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { api, contract, otherCustomersContract, contractsBody, setRoutes, json, loginExistingUser } from "./helpers.mjs";
+import { api, contract, otherCustomersContract, contractsBody, setRoutes, json, loginLiveCustomer } from "./helpers.mjs";
 import { formatBHD } from "../data/pricing.js";
 
 const real = (list) => list.filter((c) => !c.demo);
 
 test("invalid amounts become unknown (null) — never NaN, never 'BHD NaN'", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   const bad = contract({ rent_monthly_amt: "abc", deposit_amt: "1,000", number_of_months: "twelve" });
   bad.receipts[0].sale_amt = "abc";
   bad.receipts[1].vat_amt = "n/a";
@@ -31,7 +31,7 @@ test("invalid amounts become unknown (null) — never NaN, never 'BHD NaN'", asy
 });
 
 test("customer id sent as text (\"1\") still matches the session's customer 1", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/contracts": json(contractsBody([contract({ customer_id: "1" }), otherCustomersContract()])) });
   assert.deepEqual(
     real(await api.fetchContracts()).map((c) => c.id),
@@ -40,7 +40,7 @@ test("customer id sent as text (\"1\") still matches the session's customer 1", 
 });
 
 test("another customer's contracts are never shown — as a number, as text, or with no customer id", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({
     "/contracts": json(
       contractsBody([

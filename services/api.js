@@ -52,7 +52,17 @@ export {
   markNotificationRead,
   markAllNotificationsRead,
 } from "./notificationService";
-export { VIOLATIONS_ARE_DEMO, DEMO_DATA_LABEL, fetchViolations, fetchViolation } from "./violationService";
+export {
+  VIOLATIONS_ARE_DEMO,
+  VIOLATION_TYPES_ARE_REAL,
+  DEMO_DATA_LABEL,
+  fetchViolations,
+  fetchViolation,
+  fetchViolationTypes,
+} from "./violationService";
+export { fetchActivityOptions } from "./activityService";
+export { registerNewUser } from "./registrationService";
+export { submitSignUpEnquiry, areEnquiriesLive } from "./enquiryService";
 /* eslint-enable import/export */
 export { ApiError } from "./apiError";
 // User-facing wording for a failed load / action (shared with the HTTP transport).

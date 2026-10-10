@@ -1,14 +1,14 @@
 // HTTP error classification, safe messages, timeout, invalid responses and pagination guards.
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { api, contract, setRoutes, status, json, networkDown, calls, resetCalls, callsTo, loginExistingUser, rejectionOf } from "./helpers.mjs";
+import { api, contract, setRoutes, status, json, networkDown, calls, resetCalls, callsTo, loginLiveCustomer, rejectionOf } from "./helpers.mjs";
 import * as httpClient from "../services/httpClient.js";
 import { ERROR_MESSAGES } from "../services/errorMessages.js";
 
 const API = "https://maz.beeinfosoft.com/public/api";
 
 async function contractsFailure(route) {
-  await loginExistingUser(); // new session → the contracts cache can't answer
+  await loginLiveCustomer(); // new session → the contracts cache can't answer
   setRoutes({ "/contracts": route });
   return rejectionOf(api.fetchContracts());
 }
@@ -59,7 +59,7 @@ test("network failure → NETWORK", async () => {
 });
 
 test("no answer within 15 s → TIMEOUT (request aborted)", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   let aborted = false;
   setRoutes({
     "/contracts": (_path, init) =>
@@ -102,21 +102,21 @@ for (const [name, body] of Object.entries(invalidBodies)) {
 }
 
 test("a single-record request with an empty body → INVALID_RESPONSE", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/customers": json("") });
   const error = await rejectionOf(api.fetchTenantName());
   assert.equal(error?.code, "INVALID_RESPONSE");
 });
 
 test("a valid empty list is not an error", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/contracts": json('{"data": [], "links": {"next": null}}') });
   const list = await api.fetchContracts();
   assert.equal(list.filter((c) => !c.demo).length, 0);
 });
 
 test("pagination: a repeated page URL stops with INVALID_RESPONSE (no loop)", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   resetCalls();
   setRoutes({ "/contracts": json(JSON.stringify({ data: [], links: { next: `${API}/contracts` } })) });
   const error = await rejectionOf(api.fetchContracts());
@@ -125,7 +125,7 @@ test("pagination: a repeated page URL stops with INVALID_RESPONSE (no loop)", as
 });
 
 test(`pagination: stops after MAX_PAGES (${httpClient.MAX_PAGES}) pages`, async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   resetCalls();
   setRoutes({
     "/contracts": (path) => {
@@ -140,7 +140,7 @@ test(`pagination: stops after MAX_PAGES (${httpClient.MAX_PAGES}) pages`, async 
 
 test("pagination: never follows a link to another host, or to plain http", async () => {
   for (const next of ["https://evil.example.com/api/contracts?page=2", "http://maz.beeinfosoft.com/public/api/contracts?page=2", "javascript:alert(1)"]) {
-    await loginExistingUser();
+    await loginLiveCustomer();
     resetCalls();
     setRoutes({ "/contracts": json(JSON.stringify({ data: [], links: { next } })) });
     const error = await rejectionOf(api.fetchContracts());
@@ -150,7 +150,7 @@ test("pagination: never follows a link to another host, or to plain http", async
 });
 
 test("pagination: a proper second page is followed and merged", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({
     "/contracts?page=2": json(JSON.stringify({ data: [contract({ id: 7, name: "CN-PAGE-2", receipts: [] })], links: { next: null } })),
     "/contracts": json(JSON.stringify({ data: [], links: { next: `${API}/contracts?page=2` } })),

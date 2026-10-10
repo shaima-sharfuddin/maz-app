@@ -14,7 +14,45 @@ import useAsync from "../hooks/useAsync";
 import { fetchViolations, VIOLATIONS_ARE_DEMO, errorMessage } from "../services/api";
 import { formatDate } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
-import { useDemo } from "../demo/DemoContext";
+import { useCardStyle } from "../theme/surfaces";
+import { useAccountState } from "../auth/AuthContext";
+
+// Entry to MAZ's REAL catalogue of violation types (ViolationTypesScreen) — kept apart from the notices above,
+// which are demo data: it's a reference list, not the customer's violations.
+function ViolationTypesLink({ onPress }) {
+  const { colors } = useTheme();
+  const card = useCardStyle();
+  return (
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.98}
+      accessibilityRole="button"
+      accessibilityLabel="Violation types. MAZ's reference list of violation categories"
+      containerStyle={{ marginTop: 8 }}
+      style={[card, { flexDirection: "row", alignItems: "center", padding: 16, gap: 14 }]}
+    >
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: colors.primarySoft,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Ionicons name="list-outline" size={20} color={colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>Violation types</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 2 }}>
+          MAZ&apos;s reference list of violation categories
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textSubtle} />
+    </PressableScale>
+  );
+}
 
 function ViolationRow({ violation, onPress }) {
   const { colors } = useTheme();
@@ -64,7 +102,7 @@ function ViolationRow({ violation, onPress }) {
 
 export default function ViolationsScreen({ navigation }) {
   const { colors } = useTheme();
-  const { userState } = useDemo();
+  const userState = useAccountState(); // from the session's customerId — never a separate demo setting
   const loadViolations = useCallback(() => fetchViolations(userState), [userState]);
   const { loading, data: violations, error, reload } = useAsync(loadViolations);
 
@@ -144,6 +182,8 @@ export default function ViolationsScreen({ navigation }) {
             subtitle="Notices issued on your contracts, and how each was resolved."
           />
           {renderContent()}
+          <SectionHeading style={{ marginTop: 24 }}>Reference</SectionHeading>
+          <ViolationTypesLink onPress={() => navigation.navigate("ViolationTypes")} />
         </View>
       </ScrollView>
     </SafeAreaView>

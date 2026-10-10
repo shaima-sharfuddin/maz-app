@@ -1,5 +1,5 @@
-// New User sign-up: the restored Activity field (recruiter, 2026-10-10). Required, one choice from the SAMPLE
-// ACTIVITIES; kept through OTP verification, the session, a later login and the office / CR request — all mock,
+// New User sign-up: the restored Activity field (recruiter, 2026-10-10). Required, one choice from MAZ's
+// GET /activities labels (or the SAMPLE ACTIVITIES fallback — see api-integrations.test.mjs); kept through OTP verification, the session, a later login and the office / CR request — all mock,
 // in memory, never sent to MAZ. (Screens can't be rendered in these Node tests: the dropdown and moving between
 // steps are checked by hand — see CLAUDE.md.)
 import { test } from "node:test";
@@ -47,8 +47,11 @@ test("Activity is required", () => {
   assert.equal(issues[0].message, "Select activity");
 });
 
-test("only an option from the list is accepted", () => {
-  const issues = activityIssues(form({ activity: "Something made up" }));
+// The options load at runtime (MAZ's GET /activities, or the samples), so the dropdown limits the choice; the
+// schema accepts any present, sane label — e.g. MAZ's coded labels — and rejects an absurd one.
+test("a MAZ activity label (with its leading code) is accepted; an absurdly long value is not", () => {
+  assert.deepEqual(activityIssues(form({ activity: "702 Management consultancy activities" })), []);
+  const issues = activityIssues(form({ activity: "x".repeat(201) }));
   assert.equal(issues.length, 1);
   assert.equal(issues[0].message, "Select an activity from the list");
 });
@@ -78,6 +81,8 @@ test("the office / CR request stores the signed-up user's activity", async () =>
   const { email } = await api.quickSignUp(signUpPayload(form({ activity: ACTIVITIES[0] })));
   const { session } = await api.verifyEmail({ email, code: MOCK_OTP_CODE });
   const { user } = session;
+  // Signed in, as VerifyAccount does (requests belong to the signed-in demo account).
+  auth.setCurrentSession({ token: session.token, user: { ...user, customerId: null } });
 
   // What ReviewRequestScreen sends.
   const { requestId } = await api.submitRequest({

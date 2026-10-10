@@ -1,7 +1,7 @@
 // The 60-second contracts cache under failure: merge, reuse, expiry, failure not cached, retry, session isolation.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { api, auth, setRoutes, status, networkDown, resetCalls, callsTo, loginExistingUser, rejectionOf } from "./helpers.mjs";
+import { api, auth, setRoutes, status, networkDown, resetCalls, callsTo, loginLiveCustomer, rejectionOf } from "./helpers.mjs";
 
 const withClock = async (offsetMs, fn) => {
   const realNow = Date.now;
@@ -14,7 +14,7 @@ const withClock = async (offsetMs, fn) => {
 };
 
 test("simultaneous loads share one /contracts request", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({});
   resetCalls();
   await Promise.all([api.fetchContracts(), api.fetchDashboard("tenant", { withUnits: false }), api.fetchUnreadCount("tenant")]);
@@ -22,7 +22,7 @@ test("simultaneous loads share one /contracts request", async () => {
 });
 
 test("reused within 60 s, downloaded again after", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({});
   resetCalls();
   await api.fetchContracts();
@@ -33,7 +33,7 @@ test("reused within 60 s, downloaded again after", async () => {
 });
 
 test("a failure is not cached — Retry makes exactly one new request and succeeds", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({ "/contracts": status(503) });
   resetCalls();
   assert.equal((await rejectionOf(api.fetchContracts()))?.code, "SERVER");
@@ -44,7 +44,7 @@ test("a failure is not cached — Retry makes exactly one new request and succee
 });
 
 test("offline with fresh cache → served from cache; offline after expiry → a clear NETWORK error", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({});
   await api.fetchContracts();
   setRoutes({ "/contracts": networkDown() });
@@ -56,23 +56,23 @@ test("offline with fresh cache → served from cache; offline after expiry → a
 });
 
 test("logout → no request and no cached data; a new login downloads fresh", async () => {
-  await loginExistingUser();
+  await loginLiveCustomer();
   setRoutes({});
   await api.fetchContracts();
   auth.setCurrentSession(null);
   resetCalls();
   assert.equal((await rejectionOf(api.fetchContracts()))?.code, "NO_CUSTOMER");
   assert.equal(callsTo("/contracts"), 0);
-  await loginExistingUser();
+  await loginLiveCustomer();
   await api.fetchContracts();
   assert.equal(callsTo("/contracts"), 1);
 });
 
 test("a different customer never sees the previous customer's cached contracts", async () => {
-  const session = await loginExistingUser();
+  loginLiveCustomer(1);
   setRoutes({});
   assert.ok((await api.fetchContracts()).some((c) => c.id === "CN-TEST-0001"));
-  auth.setCurrentSession({ ...session, user: { ...session.user, customerId: 2 } });
+  loginLiveCustomer(2); // another verified customer (an edited copy of a verified session is never verified)
   resetCalls();
   const theirs = (await api.fetchContracts()).map((c) => c.id);
   assert.equal(callsTo("/contracts"), 1, "fresh download for the new customer");

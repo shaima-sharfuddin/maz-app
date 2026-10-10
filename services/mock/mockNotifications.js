@@ -10,6 +10,8 @@
 // notification = { id, type, title, body, createdAt (local "YYYY-MM-DDTHH:mm:ss"), target: { screen, params } | null,
 //                  demo, basedOnRealData }
 
+// All three are per signed-in session: clearSessionNotifications (services/mock/demoSession.js) empties them on sign-out
+// or an account change, so one person's events, read state and recorded emails never show for the next.
 const events = []; // newest first
 const readIds = new Set();
 const emailOutbox = [];
@@ -53,3 +55,9 @@ export function recordEmail({ notificationId, to, subject, body }) {
   emailOutbox.push({ notificationId, to, subject, body, status: "not_sent", reason: "No MAZ email service yet" });
 }
 export const getEmailOutbox = () => emailOutbox.map((email) => ({ ...email }));
+
+export function clearSessionNotifications() {
+  events.length = 0;
+  readIds.clear();
+  emailOutbox.length = 0;
+}

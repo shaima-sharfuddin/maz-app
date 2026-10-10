@@ -13,17 +13,12 @@ import { useCardStyle } from "../theme/surfaces";
 import { TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
 import { useDemo, DEMO_CONTROLS_ENABLED } from "../demo/DemoContext";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth, useAccountState } from "../auth/AuthContext";
 
 const APPEARANCE_OPTIONS = [
   { value: "system", label: "System" },
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
-];
-
-const DEMO_OPTIONS = [
-  { value: "tenant", label: "Tenant" },
-  { value: "newUser", label: "New user" },
 ];
 
 const ON_OFF_OPTIONS = [
@@ -39,7 +34,8 @@ function initialsOf(text) {
 
 export default function SettingsScreen({ navigation, route }) {
   const { colors, preference, setPreference, scheme } = useTheme();
-  const { userState, setUserState, simulateErrors, setSimulateErrors, startAtWelcome, setStartAtWelcome } = useDemo();
+  const { simulateErrors, setSimulateErrors, startAtWelcome, setStartAtWelcome } = useDemo();
+  const userState = useAccountState();
   const { user, profileComplete, signOut } = useAuth();
   const profileUpdated = route.params?.profileUpdated; // set by EditProfile after a successful save
   const [loggingOut, setLoggingOut] = useState(false);
@@ -154,14 +150,13 @@ export default function SettingsScreen({ navigation, route }) {
             <>
               <SectionHeading>Demo data</SectionHeading>
               <View style={cardStyle}>
-                <SegmentedControl
-                  label="Dashboard shows"
-                  value={userState}
-                  onChange={setUserState}
-                  options={DEMO_OPTIONS}
-                />
-                <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted, marginTop: -8 }}>
-                  Demo only — switches the mock data used while there&apos;s no backend.
+                {/* Read-only: the dashboard follows the signed-in account (its MAZ customer), so it can never
+                    disagree with the session. Log in with another account to see the other dashboard. */}
+                <Text className="text-sm leading-5 mb-4" style={{ color: colors.textMuted }}>
+                  <Text style={{ color: colors.text, fontWeight: "600" }}>
+                    Dashboard shows: {userState === "tenant" ? "Tenant" : "New user"}
+                  </Text>
+                  {" "}— set by the signed-in account (a MAZ customer gets the tenant dashboard).
                 </Text>
                 <SegmentedControl
                   label="Simulate network errors (15%)"

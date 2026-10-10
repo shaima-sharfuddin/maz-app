@@ -39,6 +39,9 @@ export async function getPaymentResult(paymentId) {
   const payment = pending.get(paymentId);
   if (!payment) throw new ApiError("NOT_FOUND", "Payment not found.");
   await wait(PROCESSING_MS / 2);
+  // Signed out (or another account signed in) while "processing": the session's demo state was cleared, so this
+  // payment must not mark bills "Paid (demo)" for whoever is signed in now.
+  if (pending.get(paymentId) !== payment) throw new ApiError("NOT_FOUND", "Payment not found.");
   pending.delete(paymentId);
 
   if (payment.testOutcome === "decline") {
@@ -66,4 +69,9 @@ export async function getPaymentResult(paymentId) {
       bills: billNumbers,
     },
   };
+}
+
+// Sign-out / account change (services/mock/demoSession.js): forget payments still "processing".
+export function clearPendingPayments() {
+  pending.clear();
 }

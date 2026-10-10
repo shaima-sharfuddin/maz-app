@@ -26,7 +26,7 @@ import { RADIUS, TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
 import InfoNote from "../components/InfoNote";
 import SectionHeading from "../components/SectionHeading";
-import { useDemo } from "../demo/DemoContext";
+import { useAccountState } from "../auth/AuthContext";
 
 const ICONS = {
   bill: "receipt-outline",
@@ -153,7 +153,7 @@ function NotificationRow({ notification, read, onPress, first }) {
 export default function NotificationsScreen({ navigation }) {
   const { colors } = useTheme();
   const card = useCardStyle();
-  const { userState } = useDemo();
+  const userState = useAccountState(); // from the session's customerId — never a separate demo setting
   const loadNotifications = useCallback(() => fetchNotifications(userState), [userState]);
   const { loading, data: notifications, error, reload } = useAsync(loadNotifications);
   const markAll = useSubmit(markAllNotificationsRead);

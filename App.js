@@ -38,6 +38,7 @@ import MeetingRoomsScreen from "./screens/MeetingRoomsScreen";
 import BookMeetingRoomScreen from "./screens/BookMeetingRoomScreen";
 import ViolationsScreen from "./screens/ViolationsScreen";
 import ViolationDetailScreen from "./screens/ViolationDetailScreen";
+import ViolationTypesScreen from "./screens/ViolationTypesScreen";
 import RenewContractScreen from "./screens/RenewContractScreen";
 import RenewalStatusScreen from "./screens/RenewalStatusScreen";
 import BillViewerScreen from "./screens/BillViewerScreen";
@@ -125,6 +126,7 @@ function AppNavigator() {
             <Stack.Screen name="BookMeetingRoom" component={BookMeetingRoomScreen} />
             <Stack.Screen name="Violations" component={ViolationsScreen} />
             <Stack.Screen name="ViolationDetail" component={ViolationDetailScreen} />
+            <Stack.Screen name="ViolationTypes" component={ViolationTypesScreen} />
             <Stack.Screen name="RenewContract" component={RenewContractScreen} />
             <Stack.Screen name="RenewalStatus" component={RenewalStatusScreen} />
             <Stack.Screen name="BillViewer" component={BillViewerScreen} />
