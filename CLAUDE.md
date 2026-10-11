@@ -100,6 +100,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Expo (managed workflow), NativeWind v4 for styling, React Navigation (native-stack)
 - expo-haptics for button feedback, @react-native-community/datetimepicker for dates, expo-print + expo-sharing
   for the (demo) invoice PDF download (utils/invoicePdf.js; both are in Expo Go — a dev build needs a native rebuild)
+- axios is installed with a configured instance in services/axiosClient.js (base URL, 15 s timeout) — UNUSED so far;
+  services/httpClient.js (fetch) is still the only transport in use (auth hooks, error codes, test fakes stub fetch)
 - Screens live in /screens, reusable UI in /components
 - Real backend (Laravel, read-only so far): contracts, customers and units are LIVE via services/httpApi.js;
   everything else is still mock data until the recruiter provides endpoints (see "Real API" below)
@@ -865,11 +867,22 @@ or showing an error/result. Nothing may do nothing when tapped.
     CompleteProfile's saveProfile and EditProfile's updateProfile are MOCK (EditProfile's fetchProfile makes NO request and
     shows no nationality / ID — session and mock values only). Which customer fields Company Name and Customer Name map to in POST / PUT /customers
   is still to be confirmed
+  • POST /enquiries — VERIFIED LIVE (2026-10-10): one clearly-labelled TEST enquiry was sent with the user's approval
+    (company "TEST - MAZ app, please delete", test@example.com) → MAZ answered 2xx with the record, GET /enquiries went
+    2 → 3 records. ASK MAZ TO DELETE IT. payment_term was saved ("1") though the POST response showed null.
   • POST /enquiries — BUILT, OFF by default (2026-10-10). Route confirmed (plain OPTIONS → Allow: GET,HEAD,POST; GET
     lists records in the shape we send). UNCONFIRMED — ask MAZ before switching on: required fields / validation rules,
     the success response (201 + record? id?), the mobile format, whether `date` is sent or set by the server, whether
     assigned_to takes a name ("Asad") or a staff id, duplicate rules, and approval to create a test record
-  • New User registration → POST /customers — NOT WIRED (2026-10-10; user decision: ask MAZ first, send nothing).
+  • New User registration → POST /customers — BUILT, OFF by default (2026-10-10, user decision; supersedes "not wired"):
+    services/customerCreationService.js, switch EXPO_PUBLIC_SEND_CUSTOMERS=true, sent alongside the enquiry by
+    registerNewUser (independent; a failure never blocks sign-up; VerifyAccount says "Your customer record has been created
+    with MAZ" / "wasn't created"). Body = apiMappers.toApiCustomer, COPIED from the 4 existing records (no spec): name +
+    name_ar (= company name — the records suggest name_ar is required), email, CUSTOMER_FIXED_FIELDS (status 1,
+    isIncubation 0, lmraStatus 0, isVatOn 0, company_id 2 — CONFIRM the entity), owners [{ name, mobile "00…", email,
+    country (nationality name), type "o" }]. NOT sent: CPR / passport (GET /customers is public — would publish them),
+    activity, gender. NEVER tested against MAZ (no request sent). The created customer is NOT linked to the login.
+    Tests: tests/customers.test.mjs. Earlier note (kept for the open questions):
     Read-only findings: OPTIONS /customers → 204 (its allow-methods only echoes the request — proves nothing);
     GET /customers/create → 404 "No query results for model [App\Models\Customer]" (a resource route exists, so a
     store route is likely). Unknown — MAZ must provide: (1) is POST /customers live, and its exact body (flat fields or

@@ -298,12 +298,13 @@ test("ViolationTypesScreen: data only via services/api, with loading / error / e
 
 test("sign-up loads Activity options through services/api", () => {
   const screen = source("screens/NewUserSignUpScreen.js");
-  assert.match(screen, /import \{ registerNewUser, submitSignUpEnquiry, areEnquiriesLive, fetchActivityOptions \} from "\.\.\/services\/api"/);
+  assert.match(screen, /import \{[^}]*\bfetchActivityOptions\b[^}]*\} from "\.\.\/services\/api"/);
   assert.doesNotMatch(screen, /fetch\(|httpApi/);
 });
 
-// ---------------------------------------------------------------- customer registration (LOCAL / DEMO)
-// POST /customers is NOT wired (MAZ hasn't given its request format): sign-up stays in the app and says so.
+// ---------------------------------------------------------------- customer registration
+// The login is LOCAL / DEMO. POST /customers exists but is switched off by default (customers.test.mjs): with the
+// default settings sign-up stays in the app and says so.
 
 test("registration is local: sign-up + demo verification make zero network requests", async () => {
   auth.setCurrentSession(null);
@@ -323,14 +324,15 @@ test("registration is local: sign-up + demo verification make zero network reque
     passportNumber: "",
   });
   const { session } = await api.verifyEmail({ email, code: MOCK_OTP_CODE });
-  assert.equal(callsTo(""), 0, "nothing sent to MAZ — no customer is created");
+  assert.equal(callsTo(""), 0, "nothing sent to MAZ by default — no customer is created");
   assert.equal(session.user.customerId ?? null, null, "a demo sign-up gets no MAZ customer id");
 });
 
-// The transport has ONE write — POST /enquiries, switched off by default (write-safety + enquiries tests). No customer
-// is ever created: there is still no PUT / PATCH / DELETE, and nothing posts to /customers.
-test("registration is labelled mock in SERVICE_SOURCES; the MAZ transport never creates a customer", () => {
-  assert.equal(SERVICE_SOURCES.customerRegistration, "mock");
+// The transport has TWO writes, both switched off by default: POST /enquiries and POST /customers (write-safety, enquiries
+// and customers tests). There is still no PUT / PATCH / DELETE; only customerCreationService posts to /customers.
+test("customer creation is a switched-off real POST; nothing else creates a customer", () => {
+  assert.equal(SERVICE_SOURCES.customerRegistration, "real");
+  assert.match(source("services/serviceConfig.js"), /EXPO_PUBLIC_SEND_CUSTOMERS === "true"/);
   assert.doesNotMatch(source("services/httpClient.js"), /method:\s*["'](PUT|PATCH|DELETE)/i);
   assert.doesNotMatch(source("services/enquiryService.js") + source("services/registrationService.js"), /\/customers/);
 });

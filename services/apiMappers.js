@@ -171,3 +171,45 @@ export function toApiEnquiry(signUp, { date }) {
     ...ENQUIRY_FIXED_FIELDS,
   };
 }
+
+// POST /customers — UNCONFIRMED by MAZ (2026-10-10): the body below copies the field names and codes of the existing
+// customer records (GET /customers), not a spec. Fixed values every New User customer carries — all four existing
+// records use status 1, isIncubation 0, lmraStatus 0, isVatOn 0; company_id 2 is the MAZ entity of the most recent
+// records (COMPANIES in data/formOptions.js — CONFIRM with MAZ which entity new app sign-ups belong to).
+export const CUSTOMER_FIXED_FIELDS = {
+  status: 1,
+  isIncubation: 0,
+  lmraStatus: 0,
+  isVatOn: 0,
+  company_id: 2,
+};
+
+// The New User sign-up → MAZ's customer record: the company is the customer, the person signing up its owner
+// (type "o" = Owner, OwnerTypeEnum). Mobile in the stored records' format ("00" + dial code digits + number).
+// country: the sign-up's nationality as a country name, like the records ("India"); "Other" → null.
+// name_ar (Arabic name) isn't collected; the records suggest it's required, so the company name is sent — CONFIRM.
+// ⚠️ NOT sent: CPR / passport numbers. GET /customers is public (no login) and returns every owner's ID numbers, so
+// sending them would publish them. Add them once MAZ protects that endpoint. Also not sent: activity (no MAZ id for
+// it), gender (not collected), remarks (they go with the enquiry).
+export function toApiCustomer(signUp) {
+  const companyName = String(signUp.companyName ?? "").trim();
+  const email = String(signUp.email ?? "").trim();
+  const dialDigits = String(signUp.countryCode ?? "").replace(/\D/g, "");
+  const national = String(signUp.phoneNumber ?? "").replace(/\D/g, "");
+  const nationality = String(signUp.nationality ?? "").trim();
+  return {
+    name: companyName,
+    name_ar: companyName,
+    email,
+    ...CUSTOMER_FIXED_FIELDS,
+    owners: [
+      {
+        name: String(signUp.customerName ?? "").trim(),
+        mobile: dialDigits && national ? `00${dialDigits}${national}` : null,
+        email,
+        country: nationality && nationality !== "Other" ? nationality : null,
+        type: "o",
+      },
+    ],
+  };
+}

@@ -27,6 +27,8 @@ export default function VerifyAccountScreen({ navigation, route }) {
   const email = route.params?.email ?? "";
   // From NewUserSignUp: "recorded" (MAZ confirmed the enquiry) | "failed" (not sent) | undefined (sending switched off).
   const enquiry = route.params?.enquiry;
+  // Same for the customer record (POST /customers).
+  const customer = route.params?.customer;
   const {
     control,
     handleSubmit,
@@ -90,6 +92,15 @@ export default function VerifyAccountScreen({ navigation, route }) {
             ) : enquiry === "failed" ? (
               <InfoNote boxed style={{ marginBottom: 20 }}>
                 Your enquiry wasn&apos;t sent to MAZ. You can still continue with the demo.
+              </InfoNote>
+            ) : null}
+            {customer === "recorded" ? (
+              <InfoNote boxed icon="checkmark-circle-outline" style={{ marginBottom: 20 }}>
+                Your customer record has been created with MAZ.
+              </InfoNote>
+            ) : customer === "failed" ? (
+              <InfoNote boxed style={{ marginBottom: 20 }}>
+                Your customer record wasn&apos;t created with MAZ. You can still continue with the demo.
               </InfoNote>
             ) : null}
 

@@ -43,8 +43,9 @@ test("Renewal request: the contract read fails → no renewal created, no 'submi
   assert.ok(!notifications.some((n) => /renewal request submitted/i.test(n.title)));
 });
 
-// The only write is the New User enquiry (POST /enquiries, off unless EXPO_PUBLIC_SEND_ENQUIRIES=true — enquiries.test.mjs).
-test("writes: the MAZ transport has no PUT / PATCH / DELETE, and only enquiryService calls post()", () => {
+// The only writes: the New User enquiry (POST /enquiries, off unless EXPO_PUBLIC_SEND_ENQUIRIES=true — enquiries.test.mjs)
+// and the New User customer record (POST /customers, off unless EXPO_PUBLIC_SEND_CUSTOMERS=true — customers.test.mjs).
+test("writes: no PUT / PATCH / DELETE; only enquiryService and customerCreationService call post()", () => {
   const transport = readFileSync(new URL("../services/httpClient.js", import.meta.url), "utf8");
   assert.doesNotMatch(transport, /method:\s*["'](PUT|PATCH|DELETE)/i);
   for (const file of ["httpApi.js", "contractService.js", "billService.js", "paymentService.js", "renewalService.js", "notificationService.js", "violationService.js", "activityService.js", "registrationService.js", "mockApi.js"]) {
@@ -53,6 +54,8 @@ test("writes: the MAZ transport has no PUT / PATCH / DELETE, and only enquirySer
   }
   const enquiries = readFileSync(new URL("../services/enquiryService.js", import.meta.url), "utf8");
   assert.deepEqual(enquiries.match(/\bpost\(\s*"[^"]*"/g), ['post("/enquiries"']);
+  const customers = readFileSync(new URL("../services/customerCreationService.js", import.meta.url), "utf8");
+  assert.deepEqual(customers.match(/\bpost\(\s*"[^"]*"/g), ['post("/customers"']);
 });
 
 test("screens with Pay / Renew actions never keep stale data (no keepDataOnError)", () => {

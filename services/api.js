@@ -63,6 +63,7 @@ export {
 export { fetchActivityOptions } from "./activityService";
 export { registerNewUser } from "./registrationService";
 export { submitSignUpEnquiry, areEnquiriesLive } from "./enquiryService";
+export { submitSignUpCustomer, areCustomersLive } from "./customerCreationService";
 /* eslint-enable import/export */
 export { ApiError } from "./apiError";
 // User-facing wording for a failed load / action (shared with the HTTP transport).

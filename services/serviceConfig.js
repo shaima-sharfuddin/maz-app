@@ -13,9 +13,12 @@ import { toISODate } from "../utils/formatDate";
 // customer data needs a session verified by services/liveAuth.js, whatever `auth` says here.
 export const SERVICE_SOURCES = Object.freeze({
   auth: "mock", // no login endpoint yet — services/mock/mockAuth.js
-  // New User sign-up: LOCAL / DEMO (mockApi.quickSignUp — in memory, never sent). POST /customers is NOT wired: MAZ hasn't
-  // given its request body, required fields, validation / success response (incl. the new id) or duplicate rules.
-  customerRegistration: "mock",
+  // New User sign-up: the app LOGIN stays a LOCAL / DEMO account (mockApi.quickSignUp). The MAZ customer RECORD: REAL
+  // POST /customers (services/customerCreationService.js) — but OFF unless the bundler is started with
+  // EXPO_PUBLIC_SEND_CUSTOMERS=true (customersEnabled below). Its body is copied from the existing records, not a MAZ
+  // spec (apiMappers.toApiCustomer). A created customer is NEVER linked to the login (no MAZ auth): the New User stays a
+  // New User with no customer data.
+  customerRegistration: "real",
   // New User ENQUIRY: REAL POST /enquiries (services/enquiryService.js) — but OFF unless the bundler is started with
   // EXPO_PUBLIC_SEND_ENQUIRIES=true (enquiriesEnabled below). The route exists (OPTIONS → Allow: GET,HEAD,POST) but MAZ
   // hasn't confirmed the request body / validation / response, so nothing is written to MAZ by default.
@@ -51,6 +54,12 @@ export const EXPIRY_WARNING_DAYS = 10;
 // New User enquiry to MAZ. Read at call time so tests can flip it.
 export function enquiriesEnabled() {
   return process.env.EXPO_PUBLIC_SEND_ENQUIRIES === "true";
+}
+
+// POST /customers switch: only `EXPO_PUBLIC_SEND_CUSTOMERS=true` sends the New User's customer record to MAZ. Read at call
+// time so tests can flip it.
+export function customersEnabled() {
+  return process.env.EXPO_PUBLIC_SEND_CUSTOMERS === "true";
 }
 
 // The enquiry's `date`: today (local) by default. For the recruiter's initial test only, a fixed date can be given with

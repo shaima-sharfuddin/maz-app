@@ -25,7 +25,7 @@ import useSubmit from "../hooks/useSubmit";
 import useAsync from "../hooks/useAsync";
 import { newUserSignUpSchema, nationalPhoneDigits } from "../validation/schemas";
 import { findCountry } from "../data/countryCodes";
-import { registerNewUser, submitSignUpEnquiry, areEnquiriesLive, fetchActivityOptions } from "../services/api";
+import { registerNewUser, submitSignUpEnquiry, areEnquiriesLive, areCustomersLive, fetchActivityOptions } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 
 // The three form steps, then a review step (index 3) before the account is created.
@@ -76,6 +76,7 @@ export default function NewUserSignUpScreen({ navigation }) {
   const { submit, loading, error } = useSubmit(registerNewUser);
   const resend = useSubmit(submitSignUpEnquiry);
   const enquiriesLive = areEnquiriesLive();
+  const customersLive = areCustomersLive();
   // Set when the demo account was created but MAZ didn't confirm the enquiry: { email, payload, message, code }.
   const [unsentEnquiry, setUnsentEnquiry] = useState(null);
   // Activity options: MAZ's GET /activities, or the labelled samples if it fails (never blocks sign-up).
@@ -108,8 +109,10 @@ export default function NewUserSignUpScreen({ navigation }) {
     if (await trigger(STEPS[step].fields)) goToStep(step + 1);
   };
 
-  // enquiry: "recorded" | "failed" | undefined (switched off) — VerifyAccount says whether MAZ received it.
-  const toVerify = (email, enquiry) => navigation.navigate("VerifyAccount", { email, enquiry });
+  // enquiry / customer: "recorded" | "failed" | undefined (switched off) — VerifyAccount says whether MAZ received each.
+  const toVerify = (email, enquiry, customer) => navigation.navigate("VerifyAccount", { email, enquiry, customer });
+  const customerOutcome = (result) =>
+    result.customer?.status === "recorded" ? "recorded" : result.customer?.status === "failed" ? "failed" : undefined;
 
   const onSubmit = handleSubmit(async (formValues) => {
     const payload = {
@@ -124,15 +127,21 @@ export default function NewUserSignUpScreen({ navigation }) {
     const result = await submit(payload);
     if (!result) return; // the demo account failed — shown by the ErrorBanner below
     if (result.enquiry.status === "failed") {
-      setUnsentEnquiry({ email: result.email, payload, message: result.enquiry.message, code: result.enquiry.code });
+      setUnsentEnquiry({
+        email: result.email,
+        payload,
+        message: result.enquiry.message,
+        code: result.enquiry.code,
+        customer: customerOutcome(result),
+      });
       return;
     }
-    toVerify(result.email, result.enquiry.status === "recorded" ? "recorded" : undefined);
+    toVerify(result.email, result.enquiry.status === "recorded" ? "recorded" : undefined, customerOutcome(result));
   });
 
   const onResendEnquiry = async () => {
     const result = await resend.submit(unsentEnquiry.payload);
-    if (result?.status === "recorded") toVerify(unsentEnquiry.email, "recorded");
+    if (result?.status === "recorded") toVerify(unsentEnquiry.email, "recorded", unsentEnquiry.customer);
   };
 
   const renderFields = () => {
@@ -183,11 +192,18 @@ export default function NewUserSignUpScreen({ navigation }) {
         ]}
         style={{ marginBottom: 16 }}
       />
-      {/* The ACCOUNT is always local (mockApi.quickSignUp): POST /customers isn't wired until MAZ gives its request
-          format (CLAUDE.md open questions). Only when enquiries are switched on is an enquiry sent to MAZ. */}
+      {/* The LOGIN is always local (mockApi.quickSignUp). Only what's switched on is sent to MAZ: the enquiry
+          (EXPO_PUBLIC_SEND_ENQUIRIES) and / or the customer record (EXPO_PUBLIC_SEND_CUSTOMERS — no ID numbers). */}
       <InfoNote style={{ marginBottom: 24 }}>
-        {enquiriesLive
-          ? "Your company, name, mobile, email and remarks are sent to MAZ as an enquiry. Your account itself is a demo, kept in this app only."
+        {enquiriesLive || customersLive
+          ? `${[
+              enquiriesLive ? "Your company, name, mobile, email and remarks are sent to MAZ as an enquiry." : null,
+              customersLive
+                ? "Your company, name, mobile, email and nationality are sent to MAZ to create your customer record (your CPR / passport number isn't sent)."
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" ")} Your login itself is a demo, kept in this app only.`
           : "Demo registration — your details are kept in this app only. Your account isn't created with MAZ yet."}
       </InfoNote>
       {unsentEnquiry ? renderUnsentEnquiry() : renderSubmit()}
@@ -236,7 +252,7 @@ export default function NewUserSignUpScreen({ navigation }) {
         <AnimatedButton
           label="Continue without sending"
           variant="secondary"
-          onPress={() => toVerify(unsentEnquiry.email, "failed")}
+          onPress={() => toVerify(unsentEnquiry.email, "failed", unsentEnquiry.customer)}
           disabled={resend.loading}
         />
       </View>
