@@ -35,7 +35,8 @@ export const SERVICE_SOURCES = Object.freeze({
   //                       (expiryService.js) — the alerts themselves are shown via the MOCK notifications below
   renewals: "mock", // no MAZ renewal API — services/mock/mockRenewals.js (requests in memory, never sent)
   notifications: "mock", // no MAZ notifications API — services/mock/mockNotifications.js (built in the app)
-  emailDelivery: "none", // no MAZ email service — emails are only recorded as "not_sent"
+  emailDelivery: "none", // no MAZ email service for notifications — those emails are only recorded as "not_sent"
+  emailVerification: "real", // New User sign-up code: MAZ emails it (POST /sendotp) and checks it (POST /verifyotp)
   violations: "mock", // customer-specific violation NOTICES: no MAZ endpoint — services/mock/mockViolations.js ("Demo data")
   violationTypes: "real", // GET /violations — MAZ's catalogue of violation TYPES (not notices) — ViolationTypesScreen
   activities: "real", // GET /activities — sign-up Activity options; falls back to the SAMPLE list if it fails / is empty

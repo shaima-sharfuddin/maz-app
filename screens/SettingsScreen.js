@@ -7,13 +7,13 @@ import SegmentedControl from "../components/SegmentedControl";
 import AnimatedButton from "../components/AnimatedButton";
 import HeroPanel from "../components/HeroPanel";
 import SectionHeading from "../components/SectionHeading";
-import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeContext";
 import { useCardStyle } from "../theme/surfaces";
 import { TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
 import { useDemo, DEMO_CONTROLS_ENABLED } from "../demo/DemoContext";
 import { useAuth, useAccountState } from "../auth/AuthContext";
+import { isTabRoot } from "../utils/navigation";
 
 const APPEARANCE_OPTIONS = [
   { value: "system", label: "System" },
@@ -32,12 +32,12 @@ function initialsOf(text) {
   return words.slice(0, 2).map((word) => word[0].toUpperCase()).join("") || "?";
 }
 
-export default function SettingsScreen({ navigation, route }) {
+export default function SettingsScreen({ navigation }) {
   const { colors, preference, setPreference, scheme } = useTheme();
   const { simulateErrors, setSimulateErrors, startAtWelcome, setStartAtWelcome } = useDemo();
   const userState = useAccountState();
-  const { user, profileComplete, signOut } = useAuth();
-  const profileUpdated = route.params?.profileUpdated; // set by EditProfile after a successful save
+  // No "Edit profile" (removed by the client, 2026-10-14): the account card only shows who is signed in + Log out.
+  const { user, signOut } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
 
   // Logging out switches the navigator back to Welcome (App.js), so no navigate() is needed.
@@ -62,21 +62,13 @@ export default function SettingsScreen({ navigation, route }) {
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
-          <BackButton onPress={() => navigation.goBack()} />
+          {isTabRoot(navigation) ? null : <BackButton onPress={() => navigation.goBack()} />}
 
           <ScreenTitle title="Settings" subtitle="Tailor your MAZ experience." />
 
           {user ? (
             <FadeIn>
               <SectionHeading>Account</SectionHeading>
-              {profileUpdated ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                  <Text style={{ flex: 1, color: colors.success, fontSize: 14 }}>
-                    Profile updated in demo mode — not sent to MAZ
-                  </Text>
-                </View>
-              ) : null}
               {/* Profile panel: who's signed in, on the brand navy surface. */}
               <HeroPanel style={{ paddingHorizontal: 20, paddingVertical: 20 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 64 }}>
@@ -107,19 +99,9 @@ export default function SettingsScreen({ navigation, route }) {
                 </View>
               </HeroPanel>
               <View style={{ marginTop: 12, marginBottom: 32 }}>
-                {/* Only once onboarding is done — before that, CompleteProfile is the profile form. */}
-                {profileComplete ? (
-                  <View style={{ marginBottom: 8 }}>
-                    <AnimatedButton
-                      label="Edit profile"
-                      variant="secondary"
-                      onPress={() => navigation.navigate("EditProfile")}
-                    />
-                  </View>
-                ) : null}
                 <AnimatedButton
                   label={loggingOut ? "Logging out…" : "Log out"}
-                  variant="ghost"
+                  variant="secondary"
                   loading={loggingOut}
                   onPress={confirmLogOut}
                 />

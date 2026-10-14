@@ -19,6 +19,7 @@ import SectionHeading from "../components/SectionHeading";
 import PaymentMethodOption from "../components/PaymentMethodOption";
 import DetailCard from "../components/DetailCard";
 import { useTheme } from "../theme/ThemeContext";
+import { homeRoute } from "../utils/navigation";
 
 function PaymentSkeleton() {
   return (
@@ -63,7 +64,7 @@ export default function PaymentScreen({ navigation, route }) {
     navigation.reset({
       index: 2,
       routes: [
-        { name: "HomeDashboard" },
+        homeRoute(),
         isInvoice
           ? { name: "RequestStatus", params: { requestId } }
           : { name: "ContractDetail", params: { contractId } },
@@ -133,7 +134,7 @@ export default function PaymentScreen({ navigation, route }) {
             rows={[
               contract.invoiceNumber ? { label: "Invoice", value: contract.invoiceNumber } : null,
               contract.description ? { label: "Service", value: contract.description } : null,
-              contract.paymentFrequency ? { label: "Payment frequency", value: contract.paymentFrequency } : null,
+              contract.payment ? { label: "Payment", value: contract.payment } : null,
             ].filter(Boolean)}
           />
         ) : null}

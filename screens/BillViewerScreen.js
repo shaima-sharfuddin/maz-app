@@ -23,6 +23,7 @@ import { TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
 import InfoNote from "../components/InfoNote";
 import { useAuth } from "../auth/AuthContext";
+import { goHome } from "../utils/navigation";
 
 // "View bill" from the recruiter wireframe, opened from ContractDetail (or PaymentReceipt's "View invoice") with
 // { contractId, billNumber }. PLACEHOLDER layout: an in-app summary until MAZ confirms the real invoice format
@@ -58,7 +59,7 @@ export default function BillViewerScreen({ navigation, route }) {
           title="This bill is no longer available"
           message="Your current contracts and bills are listed on your dashboard."
         >
-          <AnimatedButton label="Back to dashboard" onPress={() => navigation.popToTop()} />
+          <AnimatedButton label="Back to dashboard" onPress={() => goHome(navigation)} />
         </EmptyState>
       );
     }

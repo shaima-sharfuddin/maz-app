@@ -14,6 +14,10 @@ export const ERROR_MESSAGES = {
   NOT_FOUND: "We couldn't find what you were looking for.",
   UNAUTHORIZED: "Your session has expired. Please log in again.",
   INVALID_CREDENTIALS: "Incorrect email or password.",
+  // Email verification (services/otpService.js).
+  INVALID_CODE: "That code isn't right or has expired. Check your email, or resend a new code.",
+  INVALID_EMAIL: "MAZ couldn't send a code to this email address. Check it and try again.",
+  OTP_NOT_SENT: "We couldn't send your verification code. Please try again.",
   // A 401 when the app sent no token (signed out): not a session problem, so no sign-out.
   NOT_AUTHORIZED: "MAZ didn't allow access to this information. Please try again later.",
 };

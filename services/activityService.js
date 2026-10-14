@@ -11,12 +11,28 @@ import { ACTIVITIES as SAMPLE_ACTIVITIES } from "../data/formOptions";
 // MAZ records with no words — today one is just "332" — are left out: a bare number gives nothing to choose by.
 const hasWords = (name) => /\p{L}/u.test(name);
 
+// The last answer this app run (MAZ's list or the samples) — so sign-up can show the dropdown at once.
+let latest = null;
+
 export async function fetchActivityOptions() {
+  let result = { options: SAMPLE_ACTIVITIES, source: "sample" };
   try {
     const activities = (await fetchActivities()).filter((activity) => hasWords(activity.name));
-    if (activities.length > 0) return { options: activities.map((activity) => activity.name), source: "maz" };
+    if (activities.length > 0) result = { options: activities.map((activity) => activity.name), source: "maz" };
   } catch {
     // fall through to the samples — the field shows a note and a way to retry
   }
-  return { options: SAMPLE_ACTIVITIES, source: "sample" };
+  latest = result;
+  return result;
+}
+
+// Synchronous, for the sign-up screen's FIRST render (no loading state): the last answer if there is one, else the
+// samples marked source "pending" (no "couldn't be loaded" note yet) while fetchActivityOptions runs.
+export function peekActivityOptions() {
+  return latest ?? { options: SAMPLE_ACTIVITIES, source: "pending" };
+}
+
+// Start loading early (WelcomeScreen) so MAZ's list is usually ready before the sign-up form opens. Never rejects.
+export function prefetchActivityOptions() {
+  fetchActivityOptions();
 }

@@ -39,7 +39,7 @@ function invoiceContent({ requestId, invoice, payment, summary, unit }, billTo) 
     details: [
       summary?.plan ? ["Service", summary.plan] : null,
       summary?.term ? ["Lease length", summary.term] : null,
-      summary?.paymentFrequency ? ["Payment frequency", summary.paymentFrequency] : null,
+      summary?.payment ? ["Payment", summary.payment] : null,
       unit ? ["Unit", unitWithLocation(unit.name, unit.location)] : null,
     ].filter(Boolean),
     lines: [

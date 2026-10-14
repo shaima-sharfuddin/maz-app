@@ -7,8 +7,16 @@ export const COMPANIES = ["MAZ COMPANY", "MAZ BUSINESS CENTER INCUBATOR", "MAZ B
 // convert back to the code when profiles are POSTed to /customers.
 export const GENDERS = Object.values(GENDER);
 
-// New User sign-up (client feedback, 2026-10-07): a short GCC-focused list. Bahrain asks for a CPR number,
-// every other choice for a passport number. Country names, unlike NATIONALITIES' demonyms below — the
+// New User sign-up's Gender: { value: code, label } — the form stores MAZ's code ("m" / "f"), as the owner records do.
+export const GENDER_OPTIONS = Object.entries(GENDER).map(([value, label]) => ({ value, label }));
+
+// New User sign-up's ID: the user picks which one they give — any nationality may give either (2026-10-14).
+export const ID_TYPE_OPTIONS = [
+  { value: "cpr", label: "CPR Number" },
+  { value: "passport", label: "Passport Number" },
+];
+
+// New User sign-up (client feedback, 2026-10-07): a short GCC-focused list. Country names, unlike NATIONALITIES' demonyms below — the
 // format the backend expects for nationality is still unconfirmed.
 export const BAHRAIN = "Bahrain";
 export const GCC_NATIONALITIES = [BAHRAIN, "Saudi Arabia", "UAE", "Kuwait", "Qatar", "Oman", "Other"];

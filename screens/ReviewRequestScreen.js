@@ -19,17 +19,17 @@ import { DEMO_NOTES } from "../data/demoNotes";
 
 // SelectTerm → here → RequestStatus: the last look before the request is sent. Submits with the
 // signed-in user's name, email and company (collected at sign-up — no details form, client feedback
-// 2026-10-07), plus a New User's sign-up Activity (null for tenants). "Edit" goes back to SelectTerm.
+// 2026-10-07), plus a New User's sign-up Activities (null for tenants). "Edit" goes back to SelectTerm.
 export default function ReviewRequestScreen({ navigation, route }) {
   const { colors } = useTheme();
   const { user } = useAuth();
-  const { plan, termMonths, paymentFrequency } = route.params ?? {};
+  const { plan, termMonths, cr = null } = route.params ?? {}; // cr: Office Suites only
   const { submit, loading, error } = useSubmit(submitRequest);
   // Set once the request is sent. This screen stays in the stack (Back retraces every step), but the
   // request can't be sent twice — the button opens its status instead.
   const [submitted, setSubmitted] = useState(null); // { requestId, summary }
 
-  if (!plan || !termMonths || !paymentFrequency) {
+  if (!plan || !termMonths) {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <View className="flex-1 px-6 pt-8 pb-10">
@@ -37,7 +37,7 @@ export default function ReviewRequestScreen({ navigation, route }) {
           <EmptyState
             icon="document-text-outline"
             title="Your request is incomplete"
-            message="Choose a lease length and payment frequency first."
+            message="Choose a lease length first."
           >
             <AnimatedButton label="Go back" onPress={() => navigation.goBack()} />
           </EmptyState>
@@ -46,11 +46,11 @@ export default function ReviewRequestScreen({ navigation, route }) {
     );
   }
 
-  const summary = buildRequestSummary(plan.title, termMonths, paymentFrequency);
+  const summary = buildRequestSummary(plan.title, termMonths, cr);
   const customerRows = [
     user?.name ? { label: "Customer", value: user.name } : null,
     user?.companyName ? { label: "Company", value: user.companyName } : null,
-    user?.activity ? { label: "Activity", value: user.activity } : null,
+    user?.activities?.length ? { label: user.activities.length > 1 ? "Activities" : "Activity", value: user.activities.join(", ") } : null,
     user?.email ? { label: "Email", value: user.email } : null,
   ].filter(Boolean);
 
@@ -61,10 +61,10 @@ export default function ReviewRequestScreen({ navigation, route }) {
       fullName: user?.name ?? "",
       email: user?.email ?? "",
       companyName: user?.companyName ?? "",
-      activity: user?.activity ?? null, // New User's sign-up Activity (mock request only); null for tenants
+      activities: user?.activities ?? null, // New User's sign-up Activities (mock request only); null for tenants
       remark: "",
       termMonths,
-      paymentFrequency,
+      cr,
       summary,
     });
     if (!result) return; // shown by the ErrorBanner below

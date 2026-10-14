@@ -39,6 +39,7 @@ import PhotoHero from "../components/PhotoHero";
 import DocumentSheet from "../components/DocumentSheet";
 import AmountHero from "../components/AmountHero";
 import InfoNote from "../components/InfoNote";
+import { goHome } from "../utils/navigation";
 
 function DetailSkeleton() {
   return (
@@ -158,7 +159,7 @@ export default function ContractDetailScreen({ navigation, route }) {
           title="This contract is no longer available"
           message="Your current contracts are listed on your dashboard."
         >
-          <AnimatedButton label="Back to dashboard" onPress={() => navigation.popToTop()} />
+          <AnimatedButton label="Back to dashboard" onPress={() => goHome(navigation)} />
         </EmptyState>
       );
     }

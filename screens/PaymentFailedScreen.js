@@ -8,6 +8,7 @@ import { TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
 import IconBadge from "../components/IconBadge";
 import DocumentSheet from "../components/DocumentSheet";
+import { goHome } from "../utils/navigation";
 
 // Payment Review → (payment declined) → here. { amount, message } from paymentService.submitPayment's failed result.
 // "Try again" goes back to the review (still on the stack) so the tester can change the method / outcome.
@@ -55,7 +56,7 @@ export default function PaymentFailedScreen({ navigation, route }) {
 
           <AnimatedButton label="Try again" onPress={() => navigation.goBack()} />
           <View style={{ marginTop: 8 }}>
-            <AnimatedButton label="Back to dashboard" variant="ghost" onPress={() => navigation.popToTop()} />
+            <AnimatedButton label="Back to dashboard" variant="ghost" onPress={() => goHome(navigation)} />
           </View>
         </View>
       </ScrollView>

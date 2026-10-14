@@ -16,6 +16,7 @@ import { editProfileSchema } from "../validation/schemas";
 import { fetchProfile, updateProfile, errorMessage } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 import { useAuth } from "../auth/AuthContext";
+import { navigateTo } from "../utils/navigation";
 
 function ProfileSkeleton() {
   return [2, 1].map((rows, key) => (
@@ -47,7 +48,7 @@ function EditProfileForm({ email, initialValues, navigation }) {
     if (!result) return; // shown by the ErrorBanner below
     updateUserDetails({ name: values.customerName.trim(), companyName: values.companyName.trim() });
     // Settings is underneath, so this goes back to it (with the success note) rather than pushing a copy.
-    navigation.navigate("Settings", { profileUpdated: true });
+    navigateTo(navigation, "Settings", { profileUpdated: true });
   });
 
   return (

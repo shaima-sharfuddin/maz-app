@@ -28,7 +28,7 @@ export const DEMO_NOTES = {
   sampleUnitLabel: "Sample unit",
 
   // Dashboard quick actions (HomeDashboardScreen)
-  quickActions: "Meeting rooms, Support and Violations show demo data for now.",
+  quickActions: "Support and Violations show demo data for now.",
 };
 
 // RequestStatus's per-stage wording for the DEMO request (shown instead of data/requestSteps.js' description / next,

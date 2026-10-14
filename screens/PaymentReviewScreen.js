@@ -32,6 +32,7 @@ import FadeIn from "../components/FadeIn";
 import HeroPanel from "../components/HeroPanel";
 import AmountHero from "../components/AmountHero";
 import InfoNote from "../components/InfoNote";
+import { homeRoute } from "../utils/navigation";
 
 const TITLES = { due: "Pay due amount", balance: "Pay outstanding balance", bill: "Pay this bill" };
 const PROGRESS_LABELS = { starting: "Starting payment…", processing: "Processing payment…" };
@@ -82,7 +83,7 @@ export default function PaymentReviewScreen({ navigation, route }) {
       plan.contractIds.length === 1 ? [{ name: "ContractDetail", params: { contractId: plan.contractIds[0] } }] : [];
     navigation.reset({
       index: contractRoute.length + 1,
-      routes: [{ name: "HomeDashboard" }, ...contractRoute, { name: "PaymentReceipt", params: { receipt: result.receipt } }],
+      routes: [homeRoute(), ...contractRoute, { name: "PaymentReceipt", params: { receipt: result.receipt } }],
     });
   };
 

@@ -3,43 +3,46 @@ import { View, Text } from "react-native";
 import { useController, useWatch } from "react-hook-form";
 import FormField from "./FormField";
 import SelectField from "./SelectField";
+import SegmentedControl from "./SegmentedControl";
 import StyledInput from "./StyledInput";
 import FieldError from "./FieldError";
-import { BAHRAIN, GCC_NATIONALITIES } from "../data/formOptions";
+import { GCC_NATIONALITIES, GENDER_OPTIONS, ID_TYPE_OPTIONS } from "../data/formOptions";
 import InfoNote from "./InfoNote";
 import TextLink from "./TextLink";
-import { Skeleton } from "./Skeleton";
 import { DEFAULT_PHONE_COUNTRY, PHONE_COUNTRY_OPTIONS, findCountry, flagOf } from "../data/countryCodes";
 import { useTheme } from "../theme/ThemeContext";
 
 // The account fields collected at New User sign-up (rules: newUserSignUpSchema in validation/schemas.js):
-// Company Name, Customer Name, Activity (sign-up only — not on EditProfile), Email, Mobile Number (country code + number),
-// Remarks (optional, sign-up only), Nationality, then CPR Number (Bahrain) or Passport Number (others).
+// Company Name, Customer Name, Activities (sign-up only — not on EditProfile), Email, Mobile Number (country code + number),
+// Remarks (optional, sign-up only), Nationality, an ID — CPR Number or Passport Number, the user's choice whatever
+// their nationality — then Gender.
 // Shared by NewUserSignUp (one group per step) and EditProfile (all at once) so the two never drift.
 
 export const EMPTY_ACCOUNT_DETAILS = {
   companyName: "",
   customerName: "",
-  activity: "",
+  gender: "", // MAZ GENDER code ("m" / "f")
+  activities: [], // one or more activity labels
   email: "",
   phoneCountry: DEFAULT_PHONE_COUNTRY, // ISO code of the dial code; any country can be picked
   phoneNumber: "",
   nationality: "",
+  idType: "", // "cpr" | "passport" — which ID the user gives
   cprNumber: "",
   passportNumber: "",
   remarks: "",
 };
 
-// Only one ID field applies: switching nationality clears the one that no longer does, so a stale
+// Only one ID field applies: switching the ID type clears the one that no longer does, so a stale
 // CPR / passport number is never sent. `control` / `setValue` are react-hook-form's.
 export function useIdentityFields(control, setValue) {
-  const nationality = useWatch({ control, name: "nationality" });
-  const isBahraini = nationality === BAHRAIN;
+  const idType = useWatch({ control, name: "idType" });
+  const isCpr = idType === "cpr";
   useEffect(() => {
-    if (!nationality) return;
-    setValue(isBahraini ? "passportNumber" : "cprNumber", "", { shouldValidate: true });
-  }, [nationality, isBahraini, setValue]);
-  return { nationality, isBahraini };
+    if (!idType) return;
+    setValue(isCpr ? "passportNumber" : "cprNumber", "", { shouldValidate: true });
+  }, [idType, isCpr, setValue]);
+  return { idType, isCpr };
 }
 
 export function CompanyFields({ control }) {
@@ -65,29 +68,27 @@ export function CompanyFields({ control }) {
   );
 }
 
-// Business activity — sign-up only (NOT part of CompanyFields, so EditProfile doesn't show it). One choice from
-// `options` (the screen loads them via fetchActivityOptions: MAZ's GET /activities labels — 165, so the sheet gets
-// a search box — or the SAMPLE list if that failed). `loading`: a placeholder until the options arrive.
+// Gender — sign-up only: MAZ's GENDER codes ("m" Male / "f" Female), stored as the code.
+export function GenderField({ control }) {
+  return <FormField control={control} name="gender" component={SegmentedControl} label="Gender" options={GENDER_OPTIONS} />;
+}
+
+// Business activities — sign-up only (NOT part of CompanyFields, so EditProfile doesn't show it). One or more choices
+// (no limit) from `options` (the screen loads them via fetchActivityOptions: MAZ's GET /activities labels — 165, so the sheet gets
+// a search box — or the SAMPLE list if that failed). The field is shown at once — never a loading placeholder.
 // `sample`: MAZ's list couldn't be loaded — say so, and offer `onRetry`.
-export function ActivityField({ control, options, loading = false, sample = false, onRetry }) {
+export function ActivityField({ control, options, sample = false, onRetry }) {
   const { colors } = useTheme();
-  if (loading) {
-    return (
-      <View style={{ marginBottom: 20 }} accessibilityLabel="Loading activities">
-        <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 8 }}>Activity</Text>
-        <Skeleton width="100%" height={48} radius={12} />
-      </View>
-    );
-  }
   return (
     <>
       <FormField
         control={control}
-        name="activity"
+        name="activities"
         component={SelectField}
-        label="Activity"
+        multiple
+        label="Activities"
         options={options}
-        placeholder="Select business activity"
+        placeholder="Select one or more activities"
       />
       {sample ? (
         <View style={{ marginTop: -12, marginBottom: 20 }}>
@@ -196,7 +197,8 @@ export function RemarksField({ control }) {
   );
 }
 
-export function IdentificationFields({ control, nationality, isBahraini }) {
+// Nationality, then the ID the user chooses to give (CPR or passport — any nationality may give either), then Gender.
+export function IdentificationFields({ control, idType }) {
   return (
     <>
       <FormField
@@ -207,8 +209,9 @@ export function IdentificationFields({ control, nationality, isBahraini }) {
         options={GCC_NATIONALITIES}
         placeholder="Select nationality"
       />
-      {nationality ? (
-        isBahraini ? (
+      <FormField control={control} name="idType" component={SegmentedControl} label="ID type" options={ID_TYPE_OPTIONS} />
+      {idType ? (
+        idType === "cpr" ? (
           <FormField
             key="cprNumber"
             control={control}
@@ -233,6 +236,7 @@ export function IdentificationFields({ control, nationality, isBahraini }) {
           />
         )
       ) : null}
+      <GenderField control={control} />
     </>
   );
 }

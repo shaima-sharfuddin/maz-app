@@ -1,22 +1,23 @@
+import { useEffect } from "react";
 import { View, Text, ScrollView, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
 import TrustStats from "../components/TrustStats";
 import FadeIn from "../components/FadeIn";
 import PhotoHero from "../components/PhotoHero";
-import { TRUST_STATS, WELCOME_TAGLINES } from "../data/brand";
+import { TRUST_STATS, WELCOME_TAGLINE } from "../data/brand";
 import { useTheme } from "../theme/ThemeContext";
-import { useAuth } from "../auth/AuthContext";
 import { TYPE } from "../theme/theme";
+import { prefetchActivityOptions } from "../services/api";
 
 // MAZ's real reception photo dissolving into the page, a tagline, the trust stats (data/brand.js TRUST_STATS) and
 // the two equally weighted paths (client feedback, 2026-10-07): New User → NewUserSignUp, Existing User → Login.
-// The tagline is an approved addition (2026-10-09) that swaps by context: the New User line on a device where nobody
-// has signed in yet, the returning line once someone has. Copy: data/brand.js WELCOME_TAGLINES.
+// Headline "Welcome to your workspace." + a supporting line, the same for everyone (data/brand.js WELCOME_TAGLINE).
 export default function WelcomeScreen({ navigation }) {
+  // Sign-up's Activities dropdown should open with its list ready — start loading it now.
+  useEffect(() => prefetchActivityOptions(), []);
   const { colors } = useTheme();
-  const { hasSignedInBefore } = useAuth();
-  const tagline = hasSignedInBefore ? WELCOME_TAGLINES.returning : WELCOME_TAGLINES.newUser;
+  const tagline = WELCOME_TAGLINE;
   const { height } = useWindowDimensions();
   const heroHeight = Math.round(Math.min(560, Math.max(340, height * 0.56)));
 

@@ -24,11 +24,11 @@ import {
   callsTo,
   loginLiveCustomer,
   rejectionOf,
+  TEST_OTP_CODE,
 } from "./helpers.mjs";
 import { toUiCustomer, customerIdOf, toUiCodedName } from "../services/apiMappers.js";
 import { ACTIVITIES as SAMPLE_ACTIVITIES } from "../data/formOptions.js";
 import { SERVICE_SOURCES } from "../services/serviceConfig.js";
-import { MOCK_OTP_CODE } from "../services/mockApi.js";
 
 // ---- synthetic fixtures ----
 const SENSITIVE = ["SYNTH-CPR-0001", "SYNTH-PP-0001", "+973 0000 0001", "owner@synthetic.test", "SYNTH-CR-1"];
@@ -314,17 +314,20 @@ test("registration is local: sign-up + demo verification make zero network reque
   await api.quickSignUp({
     companyName: "Synthetic Holdings",
     customerName: "Synthetic Person",
-    activity: SAMPLE_ACTIVITIES[0],
+    gender: "f",
+    activities: [SAMPLE_ACTIVITIES[0]],
     email,
     countryCode: "+973",
     phoneCountry: "BH",
     phoneNumber: "36000000",
     nationality: "Bahrain",
+    idType: "cpr",
     cprNumber: "000000000",
     passportNumber: "",
   });
-  const result = await api.verifyEmail({ email, code: MOCK_OTP_CODE });
-  assert.equal(callsTo(""), 0, "nothing sent to MAZ by default — no customer is created");
+  const result = await api.verifyEmail({ email, code: TEST_OTP_CODE });
+  assert.equal(callsTo("/customers"), 0, "nothing sent to MAZ by default — no customer is created");
+  assert.equal(callsTo("/enquiries"), 0);
   assert.deepEqual(result, { verified: true }, "verification gives no session — signing in needs the MAZ login");
 });
 
@@ -337,7 +340,17 @@ test("customer creation is a switched-off real POST; nothing else creates a cust
   assert.doesNotMatch(source("services/enquiryService.js") + source("services/registrationService.js"), /\/customers/);
 });
 
-test("the sign-up Review step and VerifyAccount say registration / verification are demo only", () => {
-  assert.match(source("screens/NewUserSignUpScreen.js"), /Demo registration — your details are kept in this app only/);
-  assert.match(source("screens/VerifyAccountScreen.js"), /Demo verification — no email is sent and this isn&apos;t an identity check/);
+test("sign-up says the account itself stays in the app; VerifyAccount uses the REAL emailed code (no demo code)", () => {
+  assert.match(source("screens/NewUserSignUpScreen.js"), /your account isn't created with MAZ yet/);
+  const verify = source("screens/VerifyAccountScreen.js");
+  assert.match(verify, /code we emailed to/);
+  assert.doesNotMatch(verify, /MOCK_OTP_CODE|Demo verification|123456/);
+});
+
+test("activities: shown at once — peek returns the last answer synchronously (no loading state)", async () => {
+  routes();
+  const live = await api.fetchActivityOptions();
+  const peeked = api.peekActivityOptions();
+  assert.deepEqual(peeked, live);
+  assert.ok(peeked.options.length > 0);
 });

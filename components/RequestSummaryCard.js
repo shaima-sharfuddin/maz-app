@@ -2,24 +2,26 @@ import { View, Text } from "react-native";
 import { useTheme } from "../theme/ThemeContext";
 
 // Recap of an office request (build the summary with buildRequestSummary in data/pricing.js):
-// { plan, location, term, paymentFrequency?, monthlyRate?, firstInstallment?, deposit?, firstInvoiceTotal?,
-//   estimatedPrice, isPlaceholder? }. The first invoice = first installment + deposit, shown as separate
-// lines then the total. Summaries without those fields (older requests) fall back to the estimated total.
+// { plan, cr?, crFee?, location, term, payment, monthlyRate, rentLabel, rent, deposit, firstInvoiceTotal,
+//   estimatedPrice, isPlaceholder? }. Paid in full, upfront: the invoice = the whole lease's rent + deposit (+ the CR
+// fee for a new CR), shown as separate lines then the total.
 // isPlaceholder shows an on-screen note so sample values aren't mistaken for a real quote.
 export default function RequestSummaryCard({ summary, title = "Request summary" }) {
   const { colors } = useTheme();
 
   const rows = [
     { label: "Service", value: summary.plan },
+    summary.cr ? { label: "Commercial registration", value: summary.cr } : null,
     { label: "Location", value: summary.location },
     { label: "Lease length", value: summary.term },
-    summary.paymentFrequency ? { label: "Payment frequency", value: summary.paymentFrequency } : null,
+    summary.payment ? { label: "Payment", value: summary.payment } : null,
     summary.monthlyRate ? { label: "Monthly rate", value: summary.monthlyRate } : null,
     ...(summary.firstInvoiceTotal
       ? [
-          { label: "First installment", value: summary.firstInstallment },
+          { label: summary.rentLabel ?? "Rent", value: summary.rent },
           { label: "Deposit", value: summary.deposit },
-          { label: "First invoice total", value: summary.firstInvoiceTotal, emphasize: true },
+          ...(summary.crFee ? [{ label: "CR registration fee", value: summary.crFee }] : []),
+          { label: "Total payable", value: summary.firstInvoiceTotal, emphasize: true },
         ]
       : [{ label: "Estimated total", value: summary.estimatedPrice, emphasize: true }]),
   ].filter(Boolean);
@@ -74,7 +76,7 @@ export default function RequestSummaryCard({ summary, title = "Request summary" 
             borderTopColor: colors.surfaceBorder,
           }}
         >
-          Sample location, rate and deposit — final details are confirmed by MAZ after your request.
+          {summary.crFee ? "Sample location, rate, deposit and CR fee" : "Sample location, rate and deposit"} — final details are confirmed by MAZ after your request.
         </Text>
       ) : null}
     </View>

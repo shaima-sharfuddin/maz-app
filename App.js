@@ -2,14 +2,17 @@ import "./global.css";
 import { useEffect, useMemo } from "react";
 import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 
 import { ThemeProvider, useTheme } from "./theme/ThemeContext";
 import { DemoProvider, useDemo } from "./demo/DemoContext";
-import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { AuthProvider, useAuth, useAccountState } from "./auth/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
+import TabBar from "./components/TabBar";
+import { MAIN_TABS } from "./utils/navigation";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import NewUserSignUpScreen from "./screens/NewUserSignUpScreen";
 import VerifyAccountScreen from "./screens/VerifyAccountScreen";
@@ -18,7 +21,7 @@ import CompleteProfileScreen from "./screens/CompleteProfileScreen";
 import HomeDashboardScreen from "./screens/HomeDashboardScreen";
 import BrowsePlansScreen from "./screens/BrowsePlansScreen";
 import SettingsScreen from "./screens/SettingsScreen";
-import EditProfileScreen from "./screens/EditProfileScreen";
+import CommercialRegistrationScreen from "./screens/CommercialRegistrationScreen";
 import SelectTermScreen from "./screens/SelectTermScreen";
 import ReviewRequestScreen from "./screens/ReviewRequestScreen";
 import RequestStatusScreen from "./screens/RequestStatusScreen";
@@ -34,8 +37,6 @@ import NotificationsScreen from "./screens/NotificationsScreen";
 import SupportScreen from "./screens/SupportScreen";
 import NewEnquiryScreen from "./screens/NewEnquiryScreen";
 import EnquiryDetailScreen from "./screens/EnquiryDetailScreen";
-import MeetingRoomsScreen from "./screens/MeetingRoomsScreen";
-import BookMeetingRoomScreen from "./screens/BookMeetingRoomScreen";
 import ViolationsScreen from "./screens/ViolationsScreen";
 import ViolationDetailScreen from "./screens/ViolationDetailScreen";
 import ViolationTypesScreen from "./screens/ViolationTypesScreen";
@@ -48,6 +49,51 @@ import BillViewerScreen from "./screens/BillViewerScreen";
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// The signed-in home: the custom bottom tab bar (components/TabBar.js). Tab routes keep the names they had as stack
+// screens (utils/navigation.js TAB_ROUTES); every other signed-in screen is pushed on the stack ABOVE the tabs.
+// New users (no MAZ customer) have no contracts, so they get no Contracts tab.
+function MainTabs({ route }) {
+  const { colors } = useTheme();
+  const isTenant = useAccountState() === "tenant";
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <TabBar {...props} />}
+      backBehavior="history"
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.background } }}
+    >
+      <Tab.Screen
+        name="HomeDashboard"
+        component={HomeDashboardScreen}
+        initialParams={route.params?.homeParams}
+        options={{ title: "Home", tabIcon: "home-outline", tabIconActive: "home" }}
+      />
+      {isTenant ? (
+        <Tab.Screen
+          name="ContractList"
+          component={ContractListScreen}
+          options={{ title: "Contracts", tabIcon: "document-text-outline", tabIconActive: "document-text" }}
+        />
+      ) : null}
+      <Tab.Screen
+        name="MyRequests"
+        component={MyRequestsScreen}
+        options={{ title: "Requests", tabIcon: "clipboard-outline", tabIconActive: "clipboard" }}
+      />
+      <Tab.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: "Alerts", tabIcon: "notifications-outline", tabIconActive: "notifications" }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ title: "Account", tabIcon: "person-circle-outline", tabIconActive: "person-circle" }}
+      />
+    </Tab.Navigator>
+  );
+}
 
 function AppNavigator() {
   const { ready: themeReady, isDark, colors } = useTheme();
@@ -102,36 +148,30 @@ function AppNavigator() {
         ) : (
           <Stack.Group>
             <Stack.Screen
-              name="HomeDashboard"
-              component={HomeDashboardScreen}
-              initialParams={{ profileSaved: justCompletedProfile }}
+              name={MAIN_TABS}
+              component={MainTabs}
+              initialParams={{ homeParams: { profileSaved: justCompletedProfile } }}
             />
             <Stack.Screen name="BrowsePlans" component={BrowsePlansScreen} />
+            <Stack.Screen name="CommercialRegistration" component={CommercialRegistrationScreen} />
             <Stack.Screen name="SelectTerm" component={SelectTermScreen} />
             <Stack.Screen name="ReviewRequest" component={ReviewRequestScreen} />
             <Stack.Screen name="RequestStatus" component={RequestStatusScreen} />
             <Stack.Screen name="RequestInvoice" component={RequestInvoiceScreen} />
-            <Stack.Screen name="MyRequests" component={MyRequestsScreen} />
-            <Stack.Screen name="ContractList" component={ContractListScreen} />
             <Stack.Screen name="ContractDetail" component={ContractDetailScreen} />
             <Stack.Screen name="Payment" component={PaymentScreen} />
             <Stack.Screen name="PaymentReview" component={PaymentReviewScreen} />
             <Stack.Screen name="PaymentReceipt" component={PaymentReceiptScreen} />
             <Stack.Screen name="PaymentFailed" component={PaymentFailedScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
             <Stack.Screen name="Support" component={SupportScreen} />
             <Stack.Screen name="NewEnquiry" component={NewEnquiryScreen} />
             <Stack.Screen name="EnquiryDetail" component={EnquiryDetailScreen} />
-            <Stack.Screen name="MeetingRooms" component={MeetingRoomsScreen} />
-            <Stack.Screen name="BookMeetingRoom" component={BookMeetingRoomScreen} />
             <Stack.Screen name="Violations" component={ViolationsScreen} />
             <Stack.Screen name="ViolationDetail" component={ViolationDetailScreen} />
             <Stack.Screen name="ViolationTypes" component={ViolationTypesScreen} />
             <Stack.Screen name="RenewContract" component={RenewContractScreen} />
             <Stack.Screen name="RenewalStatus" component={RenewalStatusScreen} />
             <Stack.Screen name="BillViewer" component={BillViewerScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

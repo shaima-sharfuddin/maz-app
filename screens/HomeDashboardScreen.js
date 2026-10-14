@@ -26,7 +26,6 @@ import {
   fetchDashboard,
   fetchDashboardActivity,
   fetchTenantName,
-  fetchUnreadCount,
   fetchLatestRequest,
   fetchPlans,
   payNowTarget,
@@ -43,6 +42,8 @@ import { DEMO_NOTES } from "../data/demoNotes";
 import { useCardStyle } from "../theme/surfaces";
 import { RADIUS, TYPE } from "../theme/theme";
 import { useAuth, useAccountState } from "../auth/AuthContext";
+import { openPlan } from "../utils/openPlan";
+import { navigateTo } from "../utils/navigation";
 
 function ServiceSkeleton() {
   return (
@@ -344,7 +345,7 @@ function ContractsCard({ summary, onPress }) {
 }
 
 // Tenant shortcut — three separate elevated tiles side by side: icon, label and a short status caption.
-// Notifications has no tile — the header bell is its single entry point.
+// Notifications has no tile — the Alerts tab is its entry point.
 function QuickAction({ icon, label, caption, onPress }) {
   const { colors } = useTheme();
   const card = useCardStyle();
@@ -409,15 +410,9 @@ export default function HomeDashboardScreen({ navigation, route }) {
   const loadActivity = useCallback(() => fetchDashboardActivity(userState), [userState]);
   const activity = useAsync(loadActivity).data;
 
-  // The bell's unread count has its own loader, refreshed whenever the dashboard regains focus
-  // (e.g. back from Notifications). The last known count stays up while it refreshes.
-  const loadUnread = useCallback(() => fetchUnreadCount(userState), [userState]);
-  const unread = useAsync(loadUnread, { keepData: true, keepDataOnError: true });
-  const unreadCount = unread.error ? null : (unread.data?.count ?? null);
-
   // The latest office request (mock — no requests API yet) is refreshed the same way, so its stage
   // is current when coming back from RequestStatus or Payment.
-  // keepDataOnError (bell + request card): a failed focus refresh keeps the earlier, read-only figures on screen.
+  // keepDataOnError (request card): a failed focus refresh keeps the earlier, read-only figures on screen.
   const latestRequest = useAsync(fetchLatestRequest, { keepData: true, keepDataOnError: true });
 
   // New users: the services they can request ("What are you looking for?"), same source as Browse Plans.
@@ -426,7 +421,6 @@ export default function HomeDashboardScreen({ navigation, route }) {
   const plans = useAsync(loadPlans);
 
   const skipFirstFocus = useRef(true);
-  const reloadUnread = unread.reload;
   const reloadRequest = latestRequest.reload;
   useFocusEffect(
     useCallback(() => {
@@ -434,9 +428,8 @@ export default function HomeDashboardScreen({ navigation, route }) {
         skipFirstFocus.current = false;
         return;
       }
-      reloadUnread();
       reloadRequest();
-    }, [reloadUnread, reloadRequest])
+    }, [reloadRequest])
   );
 
   // "Your office request" section — shown once a request exists (nothing while the first load
@@ -461,7 +454,7 @@ export default function HomeDashboardScreen({ navigation, route }) {
         {/* Office requests are MOCK (services/mockApi.js) — never presented as sent to MAZ. */}
         <InfoNote style={{ marginBottom: 8 }}>{DEMO_NOTES.requests}</InfoNote>
         {latestRequest.stale ? <StaleDataNote onRetry={reloadRequest} /> : null}
-        <TextLink align="left" onPress={() => navigation.navigate("MyRequests")} style={{ marginTop: 4 }}>
+        <TextLink align="left" onPress={() => navigateTo(navigation, "MyRequests")} style={{ marginTop: 4 }}>
           <Text className="text-sm font-medium" style={{ color: colors.text }}>
             View all requests
           </Text>
@@ -494,7 +487,7 @@ export default function HomeDashboardScreen({ navigation, route }) {
         <FadeIn index={1}>
           <ExpiringSoonAlert
             items={data.expiringSoon}
-            onOpen={(item) => navigation.navigate(item.target.screen, item.target.params)}
+            onOpen={(item) => navigateTo(navigation, item.target.screen, item.target.params)}
           />
         </FadeIn>
 
@@ -508,7 +501,7 @@ export default function HomeDashboardScreen({ navigation, route }) {
         ) : null}
 
         <FadeIn index={3}>
-          <ContractsCard summary={summary} onPress={() => navigation.navigate("ContractList")} />
+          <ContractsCard summary={summary} onPress={() => navigateTo(navigation, "ContractList")} />
         </FadeIn>
       </>
     );
@@ -520,14 +513,6 @@ export default function HomeDashboardScreen({ navigation, route }) {
         <FadeIn index={4}>
           <SectionHeading>Quick actions</SectionHeading>
           <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
-            <QuickAction
-              icon="calendar-outline"
-              label="Meeting rooms"
-              caption={
-                activity ? (activity.nextBooking ? `Next: ${formatDate(activity.nextBooking.date)} · demo` : "Book a room") : null
-              }
-              onPress={() => navigation.navigate("MeetingRooms")}
-            />
             <QuickAction
               icon="chatbubbles-outline"
               label="Support"
@@ -543,13 +528,13 @@ export default function HomeDashboardScreen({ navigation, route }) {
               onPress={() => navigation.navigate("Violations")}
             />
           </View>
-          {/* The three quick actions open MOCK features (meeting rooms, support, violation notices). */}
+          {/* The quick actions open MOCK features (support, violation notices). */}
           <InfoNote style={{ marginBottom: 32 }}>{DEMO_NOTES.quickActions}</InfoNote>
         </FadeIn>
 
         {/* Secondary: only a request submitted this session shows here; "Find a new office" is the tenant's
             way into the request flow. Contracts are listed on ContractList (the Contracts card), notifications
-            behind the header bell. */}
+            in the Alerts tab. */}
         <FadeIn index={5}>
           {renderRequestSection()}
 
@@ -563,9 +548,8 @@ export default function HomeDashboardScreen({ navigation, route }) {
     );
   };
 
-  // Services open Term & payments directly; Meeting Rooms (hourly) open the hourly booking.
-  const openService = (plan) =>
-    plan.hourly ? navigation.navigate("MeetingRooms") : navigation.navigate("SelectTerm", { plan });
+  // Services open the lease term (Office Suites: the CR question first) — utils/openPlan.js.
+  const openService = (plan) => openPlan(navigation, plan);
 
   const renderServices = () => {
     if (plans.loading) return [0, 1, 2].map((key) => <ServiceSkeleton key={key} />);
@@ -631,15 +615,6 @@ export default function HomeDashboardScreen({ navigation, route }) {
           </View>
         ))}
       </View>
-
-      <SectionHeading>What our clients say</SectionHeading>
-      {/* PLACEHOLDER — real testimonials need MAZ's permission before they can be used here. */}
-      <EmptyState
-        dashed
-        icon="chatbubbles-outline"
-        title="Client stories coming soon"
-        message="Hear from the founders and directors who call MAZ home."
-      />
     </FadeIn>
   );
 
@@ -648,17 +623,6 @@ export default function HomeDashboardScreen({ navigation, route }) {
   const tenantName = useAsync(loadTenantName).data;
   const name = user?.name || (isTenant ? tenantName : undefined);
 
-  // Header icon buttons: a 40pt bordered circle inside the 44pt tap target.
-  const headerIconStyle = {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.headerGlass,
-    borderWidth: 1,
-    borderColor: colors.surfaceBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  };
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -670,45 +634,9 @@ export default function HomeDashboardScreen({ navigation, route }) {
           minHeight={330}
           contentStyle={{ paddingHorizontal: 24, paddingTop: 16, justifyContent: "space-between" }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <BrandMark width={88} />
-            <View style={{ flexDirection: "row", gap: 4, marginRight: -2 }}>
-              <PressableScale
-                onPress={() => navigation.navigate("Notifications")}
-                accessibilityRole="button"
-                accessibilityLabel={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
-                style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
-              >
-                <View style={headerIconStyle}>
-                  <Ionicons name="notifications-outline" size={20} color={colors.textSecondary} />
-                </View>
-                {unreadCount ? (
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 9,
-                      right: 9,
-                      width: 10,
-                      height: 10,
-                      borderRadius: 5,
-                      backgroundColor: colors.highlight,
-                      borderWidth: 2,
-                      borderColor: colors.sheet,
-                    }}
-                  />
-                ) : null}
-              </PressableScale>
-              <PressableScale
-                onPress={() => navigation.navigate("Settings")}
-                accessibilityRole="button"
-                accessibilityLabel="Settings"
-                style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
-              >
-                <View style={headerIconStyle}>
-                  <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
-                </View>
-              </PressableScale>
-            </View>
+          {/* Notifications and Settings are the Alerts / Account tabs now — the header keeps only the logo. */}
+          <View style={{ flexDirection: "row", alignItems: "center", minHeight: 44 }}>
+            <BrandMark width={88} bare />
           </View>
 
           <View style={{ paddingTop: 96 }}>

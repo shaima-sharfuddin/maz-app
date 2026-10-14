@@ -1,10 +1,9 @@
-import { View, Text, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
 import { useWatch } from "react-hook-form";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
-import SegmentedControl from "../components/SegmentedControl";
 import FormField from "../components/FormField";
 import EstimateCard from "../components/EstimateCard";
 import MonthsStepper from "../components/MonthsStepper";
@@ -15,47 +14,48 @@ import {
   MIN_LEASE_MONTHS,
   MAX_LEASE_MONTHS,
   LEASE_QUICK_PICKS,
-  PAYMENT_FREQUENCY_OPTIONS,
+  PAYMENT_IN_FULL_LABEL,
   PLACEHOLDER_MONTHLY_RATE_BHD,
-  estimateTotal,
+  crLabel,
+  isNewCr,
   firstInvoice,
-  paymentFrequencyLabel,
+  rentLineLabel,
   formatTerm,
   formatBHD,
 } from "../data/pricing";
 import { useTheme } from "../theme/ThemeContext";
 
 // BrowsePlans / dashboard service → here → ReviewRequest → RequestStatus. The tenant chooses the lease length (any whole
-// number of months, 1–36 — client decision, 2026-10-07) and how often they pay; the estimate shows the
-// first invoice (first installment + deposit as separate lines; rate and deposit are PLACEHOLDERS,
-// data/pricing.js). ReviewRequest then submits it with the signed-in user's details — no details form
-// (client feedback, 2026-10-07).
+// number of months, 1–36 — client decision, 2026-10-07). There is no payment frequency: new requests are paid in full,
+// upfront (2026-10-14), so the estimate shows the whole lease's rent + deposit as separate lines (rate and deposit are
+// PLACEHOLDERS, data/pricing.js). ReviewRequest then submits it with the signed-in user's details — no details form
+// (client feedback, 2026-10-07). Office Suites arrive from CommercialRegistration with `cr`
+// ({ option: "existing" | "new", number }): shown as a row, and a new CR adds the (sample) CR registration fee.
 export default function SelectTermScreen({ navigation, route }) {
   const { colors } = useTheme();
   const plan = route.params?.plan;
+  const cr = route.params?.cr ?? null;
+  const newCr = isNewCr(cr);
   const {
     control,
     handleSubmit,
     formState: { isValid },
-  } = useZodForm(selectTermSchema, { termMonths: DEFAULT_LEASE_MONTHS, paymentFrequency: "" });
-  const [termMonths, paymentFrequency] = useWatch({ control, name: ["termMonths", "paymentFrequency"] });
+  } = useZodForm(selectTermSchema, { termMonths: DEFAULT_LEASE_MONTHS });
+  const termMonths = useWatch({ control, name: "termMonths" });
 
-  const invoice = paymentFrequency ? firstInvoice(paymentFrequency, termMonths) : null;
+  const invoice = firstInvoice(termMonths, { newCr });
   const rows = [
+    cr ? { label: "Commercial registration", value: crLabel(cr) } : null,
     { label: "Lease length", value: formatTerm(termMonths) },
-    { label: "Payment frequency", value: paymentFrequencyLabel(paymentFrequency) ?? "Not chosen yet" },
+    { label: "Payment", value: PAYMENT_IN_FULL_LABEL },
     { label: "Monthly rate", value: `${formatBHD(PLACEHOLDER_MONTHLY_RATE_BHD)}/month` },
-    { label: "First installment", value: invoice ? formatBHD(invoice.installment) : "—" },
-    { label: "Deposit", value: invoice ? formatBHD(invoice.deposit) : "—" },
-    { label: "Lease total (rent)", value: formatBHD(estimateTotal(termMonths)) },
-  ];
+    { label: rentLineLabel(termMonths), value: formatBHD(invoice.rent) },
+    { label: "Deposit", value: formatBHD(invoice.deposit) },
+    newCr ? { label: "CR registration fee", value: formatBHD(invoice.crFee) } : null,
+  ].filter(Boolean);
 
   const onReview = handleSubmit((values) => {
-    navigation.navigate("ReviewRequest", {
-      plan,
-      termMonths: values.termMonths,
-      paymentFrequency: values.paymentFrequency,
-    });
+    navigation.navigate("ReviewRequest", { plan, termMonths: values.termMonths, cr });
   });
 
   return (
@@ -66,8 +66,8 @@ export default function SelectTermScreen({ navigation, route }) {
 
           <ScreenTitle
             eyebrow={plan?.title}
-            title="Your term and payments"
-            subtitle="Choose how long you'd like to lease and how often you'd like to pay — the amounts shown are estimates for your request."
+            title="Your lease term"
+            subtitle="Choose how long you'd like to lease. The lease is paid in full, upfront — the amounts shown are estimates for your request."
           />
 
           <FormField
@@ -80,28 +80,19 @@ export default function SelectTermScreen({ navigation, route }) {
             quickPicks={LEASE_QUICK_PICKS}
           />
 
-          <FormField
-            control={control}
-            name="paymentFrequency"
-            component={SegmentedControl}
-            label="Payment frequency *"
-            options={PAYMENT_FREQUENCY_OPTIONS}
-          />
-
           <EstimateCard
             rows={rows}
-            totalLabel="First invoice"
-            total={invoice ? formatBHD(invoice.total) : "—"}
-            note="Your first invoice covers the first installment plus the deposit. Sample rate and deposit — MAZ confirms final pricing after reviewing your request."
+            totalLabel="Total payable"
+            total={formatBHD(invoice.total)}
+            note={
+              newCr
+                ? "You pay the full lease rent upfront, plus the deposit and the CR registration fee. Sample rate, deposit and fee — MAZ confirms final pricing after reviewing your request."
+                : "You pay the full lease rent upfront, plus the deposit. Sample rate and deposit — MAZ confirms final pricing after reviewing your request."
+            }
             style={{ marginTop: 4, marginBottom: 32 }}
           />
 
           <AnimatedButton label="Review request" onPress={onReview} disabled={!isValid} />
-          {!isValid ? (
-            <Text className="text-sm text-center mt-3" style={{ color: colors.textMuted }}>
-              Choose a payment frequency to continue.
-            </Text>
-          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>

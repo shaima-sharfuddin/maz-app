@@ -149,7 +149,7 @@ export function toUiAuthSession(body, { email } = {}) {
       mazUserId: user.id == null ? null : String(user.id),
       companyId: user.company_id == null ? null : String(user.company_id),
       role: user.role ?? null,
-      activity: null,
+      activities: null,
     },
     profileComplete: true,
   };
@@ -198,6 +198,11 @@ export function toApiEnquiry(signUp, { date }) {
   };
 }
 
+// Email verification (services/otpService.js). Field names confirmed 2026-10-14 from MAZ's own validation errors
+// (an empty POST answers 422 "The email field is required." / "The otp field is required.").
+export const toApiSendOtp = (email) => ({ email: String(email ?? "").trim() });
+export const toApiVerifyOtp = (email, code) => ({ email: String(email ?? "").trim(), otp: String(code ?? "").trim() });
+
 // POST /customers — UNCONFIRMED by MAZ (2026-10-10): the body below copies the field names and codes of the existing
 // customer records (GET /customers), not a spec. Fixed values every New User customer carries — all four existing
 // records use status 1, isIncubation 0, lmraStatus 0, isVatOn 0; company_id 2 is the MAZ entity of the most recent
@@ -215,8 +220,8 @@ export const CUSTOMER_FIXED_FIELDS = {
 // country: the sign-up's nationality as a country name, like the records ("India"); "Other" → null.
 // name_ar (Arabic name) isn't collected; the records suggest it's required, so the company name is sent — CONFIRM.
 // ⚠️ NOT sent: CPR / passport numbers. GET /customers is public (no login) and returns every owner's ID numbers, so
-// sending them would publish them. Add them once MAZ protects that endpoint. Also not sent: activity (no MAZ id for
-// it), gender (not collected), remarks (they go with the enquiry).
+// sending them would publish them. Add them once MAZ protects that endpoint. Also not sent: activities (no MAZ id for
+// them), remarks (they go with the enquiry). gender: the GENDER code ("m" / "f"), as the owner records store it.
 export function toApiCustomer(signUp) {
   const companyName = String(signUp.companyName ?? "").trim();
   const email = String(signUp.email ?? "").trim();
@@ -234,6 +239,7 @@ export function toApiCustomer(signUp) {
         mobile: dialDigits && national ? `00${dialDigits}${national}` : null,
         email,
         country: nationality && nationality !== "Other" ? nationality : null,
+        gender: signUp.gender || null,
         type: "o",
       },
     ],

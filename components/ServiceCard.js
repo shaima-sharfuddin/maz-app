@@ -6,8 +6,8 @@ import { useCardStyle } from "../theme/surfaces";
 import { RADIUS, TYPE } from "../theme/theme";
 
 // One service (data/brand.js SERVICES / fetchPlans) as a tappable row: icon tile, name, short description,
-// chevron. Used by the new-user dashboard ("What are you looking for?") and Browse Plans; both open
-// SelectTerm (or MeetingRooms for hourly services). A plan without an icon (e.g. from a future API) gets a
+// chevron. Used by the new-user dashboard ("What are you looking for?") and Browse Plans; both open the request
+// flow via utils/openPlan.js. A plan without an icon (e.g. from a future API) gets a
 // generic one.
 export default function ServiceCard({ plan, onPress, style }) {
   const { colors } = useTheme();

@@ -46,7 +46,7 @@ test("Renewal request: the contract read fails → no renewal created, no 'submi
 // The only writes: the MAZ login / logout (services/mazAuth.js), the New User enquiry (POST /enquiries, off unless
 // EXPO_PUBLIC_SEND_ENQUIRIES=true — enquiries.test.mjs) and the New User customer record (POST /customers, off unless
 // EXPO_PUBLIC_SEND_CUSTOMERS=true — customers.test.mjs).
-test("writes: no PUT / PATCH / DELETE; only mazAuth, enquiryService and customerCreationService call post()", () => {
+test("writes: no PUT / PATCH / DELETE; only mazAuth, otpService, enquiryService and customerCreationService call post()", () => {
   const transport = readFileSync(new URL("../services/http/apiClient.js", import.meta.url), "utf8");
   assert.doesNotMatch(transport, /method:\s*["'](PUT|PATCH|DELETE)/i);
   for (const file of ["httpApi.js", "contractService.js", "billService.js", "paymentService.js", "renewalService.js", "notificationService.js", "violationService.js", "activityService.js", "registrationService.js", "mockApi.js", "authService.js"]) {
@@ -57,4 +57,5 @@ test("writes: no PUT / PATCH / DELETE; only mazAuth, enquiryService and customer
   assert.deepEqual(posts("enquiryService.js"), ['post("/enquiries"']);
   assert.deepEqual(posts("customerCreationService.js"), ['post("/customers"']);
   assert.deepEqual(posts("mazAuth.js"), ['post("/login"', 'post("/logout"']);
+  assert.deepEqual(posts("otpService.js"), ['post("/sendotp"', 'post("/verifyotp"']);
 });

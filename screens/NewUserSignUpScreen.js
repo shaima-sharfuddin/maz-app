@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useWatch } from "react-hook-form";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,10 +22,10 @@ import {
 } from "../components/AccountDetailsFields";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
-import useAsync from "../hooks/useAsync";
 import { newUserSignUpSchema, nationalPhoneDigits } from "../validation/schemas";
 import { findCountry } from "../data/countryCodes";
-import { registerNewUser, submitSignUpEnquiry, areEnquiriesLive, areCustomersLive, fetchActivityOptions } from "../services/api";
+import { GENDER } from "../data/enums";
+import { registerNewUser, submitSignUpEnquiry, areEnquiriesLive, areCustomersLive, fetchActivityOptions, peekActivityOptions } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 
 // The three form steps, then a review step (index 3) before the account is created.
@@ -34,7 +34,7 @@ const STEPS = [
     label: "Company",
     title: "Your company",
     subtitle: "Tell us who the workspace is for.",
-    fields: ["companyName", "customerName", "activity"],
+    fields: ["companyName", "customerName", "activities"],
   },
   {
     label: "Contact",
@@ -45,8 +45,8 @@ const STEPS = [
   {
     label: "Identification",
     title: "Identification",
-    subtitle: "Bahraini nationals give their CPR number; everyone else, their passport number.",
-    fields: ["nationality", "cprNumber", "passportNumber"],
+    subtitle: "Your nationality, an ID — your CPR or passport number, whichever you prefer — and gender.",
+    fields: ["nationality", "idType", "cprNumber", "passportNumber", "gender"],
   },
 ];
 const REVIEW_STEP = STEPS.length;
@@ -58,8 +58,8 @@ const maskId = (value) => {
 };
 
 // Welcome → "New User" (client feedback, 2026-10-07): one short form instead of the old SignUp +
-// CompleteProfile, shown a step at a time (Company → Contact → Identification → Review). Bahrainis give
-// a CPR number, everyone else a passport number. On success → VerifyAccount (email OTP), which signs the
+// CompleteProfile, shown a step at a time (Company → Contact → Identification → Review). Any nationality
+// gives either a CPR or a passport number (their choice). On success → VerifyAccount (email OTP), which signs the
 // user in and opens Browse Plans; the details are reused for their office request (no re-entry).
 // Submit = registerNewUser: the demo account (local) + an enquiry to MAZ (POST /enquiries: company, name, mobile, email,
 // remarks) when EXPO_PUBLIC_SEND_ENQUIRIES=true. If the enquiry fails, the account still exists: the Review step then
@@ -80,15 +80,34 @@ export default function NewUserSignUpScreen({ navigation }) {
   // Set when the demo account was created but MAZ didn't confirm the enquiry: { email, payload, message, code }.
   const [unsentEnquiry, setUnsentEnquiry] = useState(null);
   // Activity options: MAZ's GET /activities, or the labelled samples if it fails (never blocks sign-up).
-  const activityOptions = useAsync(fetchActivityOptions, { keepData: true });
+  // Shown at once with the best list already known (prefetched on Welcome — else the samples), then MAZ's answer.
+  const [activityOptions, setActivityOptions] = useState(peekActivityOptions);
+  const mounted = useRef(true);
+  const loadActivities = useCallback(() => {
+    fetchActivityOptions().then((result) => mounted.current && setActivityOptions(result));
+  }, []);
+  useEffect(() => {
+    mounted.current = true;
+    loadActivities();
+    return () => {
+      mounted.current = false;
+    };
+  }, [loadActivities]);
   const [step, setStep] = useState(0);
   const scrollRef = useRef(null);
 
-  // Only one ID field applies (CPR for Bahrain, passport otherwise); switching nationality clears the other.
-  const { nationality, isBahraini } = useIdentityFields(control, setValue);
+  // Only the chosen ID applies (CPR or passport, any nationality); switching the ID type clears the other.
+  const { idType, isCpr } = useIdentityFields(control, setValue);
 
   // A step's Continue is enabled once that step's own fields pass the (whole-form) schema.
   const values = useWatch({ control });
+
+  // If MAZ's list replaces the samples after the user already picked, keep only the picks that are still offered.
+  const pickedActivities = values.activities;
+  useEffect(() => {
+    const kept = (pickedActivities ?? []).filter((activity) => activityOptions.options.includes(activity));
+    if (kept.length !== (pickedActivities ?? []).length) setValue("activities", kept, { shouldValidate: true });
+  }, [activityOptions, pickedActivities, setValue]);
   const stepValid = useMemo(() => {
     if (step >= REVIEW_STEP) return isValid;
     const issues = newUserSignUpSchema.safeParse(values).error?.issues ?? [];
@@ -110,7 +129,16 @@ export default function NewUserSignUpScreen({ navigation }) {
   };
 
   // enquiry / customer: "recorded" | "failed" | undefined (switched off) — VerifyAccount says whether MAZ received each.
-  const toVerify = (email, enquiry, customer) => navigation.navigate("VerifyAccount", { email, enquiry, customer });
+  // codeSent / codeError: whether MAZ emailed the verification code (POST /sendotp) — VerifyAccount offers Resend if not.
+  const [otpOutcome, setOtpOutcome] = useState(null);
+  const toVerify = (email, enquiry, customer, otp = otpOutcome) =>
+    navigation.navigate("VerifyAccount", {
+      email,
+      enquiry,
+      customer,
+      codeSent: otp?.status !== "failed",
+      codeError: otp?.status === "failed" ? otp.message : undefined,
+    });
   const customerOutcome = (result) =>
     result.customer?.status === "recorded" ? "recorded" : result.customer?.status === "failed" ? "failed" : undefined;
 
@@ -121,11 +149,12 @@ export default function NewUserSignUpScreen({ navigation }) {
       // phoneCountry (ISO) says which +1 / +44 country it is.
       countryCode: findCountry(formValues.phoneCountry)?.dial ?? "",
       phoneNumber: nationalPhoneDigits(formValues.phoneCountry, formValues.phoneNumber),
-      cprNumber: isBahraini ? formValues.cprNumber : "",
-      passportNumber: isBahraini ? "" : formValues.passportNumber,
+      cprNumber: isCpr ? formValues.cprNumber : "",
+      passportNumber: isCpr ? "" : formValues.passportNumber,
     };
     const result = await submit(payload);
     if (!result) return; // the demo account failed — shown by the ErrorBanner below
+    setOtpOutcome(result.otp);
     if (result.enquiry.status === "failed") {
       setUnsentEnquiry({
         email: result.email,
@@ -136,7 +165,7 @@ export default function NewUserSignUpScreen({ navigation }) {
       });
       return;
     }
-    toVerify(result.email, result.enquiry.status === "recorded" ? "recorded" : undefined, customerOutcome(result));
+    toVerify(result.email, result.enquiry.status === "recorded" ? "recorded" : undefined, customerOutcome(result), result.otp);
   });
 
   const onResendEnquiry = async () => {
@@ -151,10 +180,9 @@ export default function NewUserSignUpScreen({ navigation }) {
           <CompanyFields control={control} />
           <ActivityField
             control={control}
-            options={activityOptions.data?.options ?? []}
-            loading={!activityOptions.data}
-            sample={activityOptions.data?.source === "sample"}
-            onRetry={activityOptions.reload}
+            options={activityOptions.options}
+            sample={activityOptions.source === "sample"}
+            onRetry={loadActivities}
           />
         </>
       );
@@ -168,7 +196,7 @@ export default function NewUserSignUpScreen({ navigation }) {
         </>
       );
     }
-    return <IdentificationFields control={control} nationality={nationality} isBahraini={isBahraini} />;
+    return <IdentificationFields control={control} idType={idType} />;
   };
 
   const renderReview = () => (
@@ -178,7 +206,7 @@ export default function NewUserSignUpScreen({ navigation }) {
         rows={[
           { label: "Company", value: values.companyName.trim() },
           { label: "Customer", value: values.customerName.trim() },
-          { label: "Activity", value: values.activity },
+          { label: values.activities.length > 1 ? "Activities" : "Activity", value: values.activities.join("\n") },
           { label: "Email", value: values.email.trim() },
           {
             label: "Mobile",
@@ -186,9 +214,10 @@ export default function NewUserSignUpScreen({ navigation }) {
           },
           ...(values.remarks?.trim() ? [{ label: "Remarks", value: values.remarks.trim() }] : []),
           { label: "Nationality", value: values.nationality },
-          isBahraini
+          isCpr
             ? { label: "CPR", value: maskId(values.cprNumber) }
             : { label: "Passport", value: maskId(values.passportNumber) },
+          { label: "Gender", value: GENDER[values.gender] ?? "" },
         ]}
         style={{ marginBottom: 16 }}
       />
@@ -199,12 +228,12 @@ export default function NewUserSignUpScreen({ navigation }) {
           ? `${[
               enquiriesLive ? "Your company, name, mobile, email and remarks are sent to MAZ as an enquiry." : null,
               customersLive
-                ? "Your company, name, mobile, email and nationality are sent to MAZ to create your customer record (your CPR / passport number isn't sent)."
+                ? "Your company, name, mobile, email, gender and nationality are sent to MAZ to create your customer record (your CPR / passport number isn't sent)."
                 : null,
             ]
               .filter(Boolean)
               .join(" ")} Your login itself is a demo, kept in this app only.`
-          : "Demo registration — your details are kept in this app only. Your account isn't created with MAZ yet."}
+          : "We'll email you a verification code. Your other details are kept in this app only — your account isn't created with MAZ yet."}
       </InfoNote>
       {unsentEnquiry ? renderUnsentEnquiry() : renderSubmit()}
       <View style={{ marginTop: 8 }}>
@@ -221,7 +250,7 @@ export default function NewUserSignUpScreen({ navigation }) {
   const renderSubmit = () => (
     <>
       <AnimatedButton
-        label={loading ? (enquiriesLive ? "Sending your details…" : "Creating your account…") : "Submit & verify email"}
+        label={loading ? "Sending your code…" : "Submit & verify email"}
         onPress={onSubmit}
         disabled={!isValid}
         loading={loading}

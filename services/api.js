@@ -61,8 +61,10 @@ export {
   fetchViolation,
   fetchViolationTypes,
 } from "./violationService";
-export { fetchActivityOptions } from "./activityService";
+export { fetchActivityOptions, peekActivityOptions, prefetchActivityOptions } from "./activityService";
 export { registerNewUser } from "./registrationService";
+// Email verification — REAL (POST /sendotp, /verifyotp).
+export { sendVerificationCode, resendVerificationCode, verifyEmail } from "./otpService";
 export { submitSignUpEnquiry, areEnquiriesLive } from "./enquiryService";
 export { submitSignUpCustomer, areCustomersLive } from "./customerCreationService";
 /* eslint-enable import/export */

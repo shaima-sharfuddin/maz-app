@@ -66,6 +66,14 @@ export const loginBody = ({ customerId = 1, token = "TKN-TEST", username = "live
     user: { id: 7, name, username, role: null, company_id: 1, customer_id: customerId },
   });
 
+// The fake MAZ email verification: POST /sendotp always "sends"; POST /verifyotp accepts TEST_OTP_CODE only and
+// answers a wrong code the way MAZ does (422 { "error": "Invalid OTP" }).
+export const TEST_OTP_CODE = "246810";
+const verifyOtpAnswer = (init) => {
+  const { otp } = JSON.parse(init.body ?? "{}");
+  return otp === TEST_OTP_CODE ? json('{"message":"OTP verified"}')() : json('{"error":"Invalid OTP"}', 422)();
+};
+
 globalThis.fetch = async (url, init = {}) => {
   const path = String(url).replace(API, "");
   calls.push(path);
@@ -79,6 +87,8 @@ globalThis.fetch = async (url, init = {}) => {
   if (path.startsWith("/customers")) return json(customerBody())();
   if (path.startsWith("/login")) return json(loginBody())();
   if (path.startsWith("/logout")) return json('{"message":"Logged out"}')();
+  if (path.startsWith("/sendotp")) return json('{"message":"OTP sent"}')();
+  if (path.startsWith("/verifyotp")) return verifyOtpAnswer(init);
   throw new Error(`Unexpected request in test: ${path}`);
 };
 

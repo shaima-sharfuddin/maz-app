@@ -16,7 +16,7 @@ an earlier TypeScript version — the conversion is complete and current files a
 
 ## Auth & sessions
 - auth/AuthContext.js: AuthProvider + useAuth() → { ready, isSignedIn, user: { email, name, companyName,
-  customerId, activity }, token, profileComplete, justCompletedProfile, sessionExpired, hasSignedInBefore (device flag for
+  customerId, activities }, token, profileComplete, justCompletedProfile, sessionExpired, hasSignedInBefore (device flag for
   Welcome's tagline), signIn(result), completeProfile(name), updateUserDetails({ name, companyName }), signOut() }. customerId = the MAZ
   customer the login belongs to (null = no customer yet, e.g. a New User). Every session change goes through one
   setter that also calls authService.setCurrentSession synchronously, so the data layer sees it before the first
@@ -52,10 +52,16 @@ an earlier TypeScript version — the conversion is complete and current files a
   NewUserSignUp, Login; signed in without profile → CompleteProfile, Settings (no current path creates such an
   account — kept for safety); signed in → dashboard and all tenant screens. Screens never navigate across these groups — they call signIn / completeProfile /
   signOut and the navigator switches. Any new screen must be added to the right group
-- New User sign-up stays a LOCAL demo (quickSignUp + OTP 123456 via verifyEmail → { verified: true }, NO session) and
-  then VerifyAccount replaces itself with Login { email, justVerified } ("Email verified (demo). Log in with the MAZ
-  account details MAZ gives you."). Sign-up does NOT create a MAZ login. The sign-up Activity is therefore no longer on
-  any session (MAZ logins carry activity null) — ReviewRequest sends null until MAZ stores activities
+- New User sign-up: the account stays a LOCAL demo (quickSignUp, NO session), but the EMAIL CODE IS REAL (2026-10-14,
+  services/otpService.js): registerNewUser emails it via POST /sendotp { email }; VerifyAccount checks it via POST
+  /verifyotp { email, otp } → { verified: true }; Resend = /sendotp again. Both public (no token; a 401 signs nobody
+  out). Wrong / expired code → MAZ 422 { "error": "Invalid OTP" } → ApiError INVALID_CODE; a bad email → 422 →
+  INVALID_EMAIL; a 2xx body with status / success false or an `error` counts as a failure. MAZ's SUCCESS body is still
+  unconfirmed (any 2xx = success). The demo code 123456 / MOCK_OTP_CODE is GONE. registerNewUser → otp { status "sent" |
+  "failed" }; a failed send never blocks sign-up — VerifyAccount { codeSent: false, codeError } shows a banner and
+  enables Resend at once. Then VerifyAccount replaces itself with Login { email, justVerified } ("Email verified. Log in
+  with the MAZ account details MAZ gives you."). Sign-up does NOT create a MAZ login. The sign-up Activities are therefore no longer on
+  any session (MAZ logins carry activities null) — ReviewRequest sends null until MAZ stores activities
 - Demo session boundary: authService.setCurrentSession → services/mock/demoSession.js. When the ACCOUNT (sign-in
   email) changes or signs out, every session-only demo store is cleared (demo payments + payments still processing,
   renewals, notification events / read state / email outbox, mock enquiries, bookings, notifications) — a profile edit
@@ -68,6 +74,19 @@ an earlier TypeScript version — the conversion is complete and current files a
   `requests` with method / headers / body); loginLiveCustomer(customerId, { username }) logs in through the real logIn
   against a fake POST /login (customerId null → New User). tests/maz-auth.test.mjs (login request / mapping / errors,
   Bearer on later requests, logout), live-data-boundary, demo-session
+
+## Navigation & tab bar (2026-10-14)
+- Signed in, the root stack's first screen is MainTabs (App.js — @react-navigation/bottom-tabs) with the CUSTOM
+  floating-pill bar components/TabBar.js (active tab = navy pill with icon + label, others icon only; crimson dot on
+  Alerts while fetchUnreadCount > 0; hidden while the Android keyboard is open). Tabs keep their old route names:
+  HomeDashboard (Home) · ContractList (Contracts — tenants only) · MyRequests (Requests) · Notifications (Alerts) ·
+  Settings (Account). Every other signed-in screen is pushed on the stack ABOVE the tabs. Settings is ALSO a stack
+  screen in the !profileComplete group
+- utils/navigation.js: navigateTo(navigation, name, params) (tab routes go through MainTabs — React Navigation 7
+  doesn't navigate into a nested navigator by name; never use the deprecated navigationInChildEnabled), homeRoute()
+  for navigation.reset routes, goHome(navigation) for "Back to dashboard" (popTo MainTabs → Home; NOT popToTop, which
+  would land on the last-open tab), isTabRoot(navigation) — tab screens hide their BackButton. Tests:
+  tests/navigation.test.mjs
 
 ## Theme system (light + dark) — never hardcode colors
 - THE 5-COLOUR PALETTE — permanent rule (premium redesign, client 2026-10-10; REPLACES the 2026-10-09 crimson-primary
@@ -111,14 +130,14 @@ Simplified per the client's demo feedback (2026-10-07):
    ISO — data/countryCodes.js, mobileNumberIssue in validation/schemas.js; kept in the app, and sent to MAZ only as the enquiry's `mobile` when
    EXPO_PUBLIC_SEND_ENQUIRIES=true — see enquiryService) · Identification:
    Nationality, then CPR Number for Bahrain or Passport Number otherwise — then a Review step) → VerifyAccount
-   (6-digit email OTP; demo code 123456) → signed in at once → new-user dashboard (no confirmation screen)
+   (6-digit code REALLY emailed by MAZ — POST /sendotp / /verifyotp) → Login (sign-up creates no MAZ login)
    Existing User: Login → dashboard
 3. Home dashboard (new user state: "What are you looking for?" services + their office request; tenant state:
    contract status, quick actions)
 4. Request an office (everyone — new users and tenants via "Find a new office"):
-   Dashboard services / Browse plans → tap a service → straight to Term & payments (Meeting Rooms → the hourly
-   booking instead) → Term & payments (SelectTermScreen: lease length 1–36 months + payment frequency + first-invoice
-   estimate) → ReviewRequest: "Submit demo request" saves it (mock — never sent to MAZ) with the signed-in user's name, email and company (no
+   Dashboard services / Browse plans → tap a service (utils/openPlan.js) → Term & payments (Office Suites → CommercialRegistration first: "I have a CR" + CR number, or "I need a new CR"
+   + the sample CR registration fee on the first invoice — 2026-10-14) → Lease term (SelectTermScreen: lease length 1–36 months + estimate — paid IN FULL, upfront; no payment
+   frequency since 2026-10-14) → ReviewRequest: "Submit demo request" saves it (mock — never sent to MAZ) with the signed-in user's name, email and company (no
    separate details form) →
    the request then moves through 5 stages, tracked on RequestStatusScreen via StatusStepper:
      1. Request Submitted → 2. Email Confirmation (simulated) → 3. Admin Review → 4. Unit Assigned → 5. Invoice Generated
@@ -129,7 +148,7 @@ Simplified per the client's demo feedback (2026-10-07):
    The office admin assigns the actual unit — users request a plan, not a specific unit.
 5. Ongoing tenant features: Book meeting rooms, track violations/compliance,
    renew/extend contract, notifications, support enquiries
-6. Edit profile and Log out (Settings → Account)
+6. Log out (Account tab → Settings). Edit profile was REMOVED by the client (2026-10-14)
 REMOVED (Cleanup 4, 2026-10-08 — were retired and unregistered): SignUpScreen, SubmitRequestScreen and ServiceDetailScreen
 (a service opens SelectTerm directly; ReviewRequest submits). PaymentReceiptScreen was briefly retired and is RESTORED (client, 2026-10-07: Pay →
 Payment Successful → View invoice → Invoice → Download PDF; no automatic redirect to the dashboard). VerifyAccount's "You're
@@ -144,27 +163,29 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   photo / glass-button variants were tried and rejected. NO BrandMark logo chip on Welcome (the photo shows the real
   wall logo; other screens keep theirs) — a context tagline (headline + supporting line), inline TrustStats
   (TRUST_STATS: 4.9 Google rating, 18+ years, 25+ companies), then two same-size pills: "Get Started" (navy primary)
-  → NewUserSignUp, "Log in" (outlined, variant "secondary" — two navy fills would look identical) → Login. Tagline = data/brand.js WELCOME_TAGLINES: `newUser` ("Where ambitious businesses begin.")
-  on a device where nobody has signed in yet, `returning` ("Welcome back to your workspace.") once someone has
-  (useAuth().hasSignedInBefore — AsyncStorage maz.hasSignedInBefore, kept across logouts). RESOLVED (2026-10-09): the
-  tagline is an explicit, APPROVED addition — it closes the earlier "developer superseded the client's no-tagline
-  feedback" question. The wording is FINAL (approved 2026-10-09)
+  → NewUserSignUp, "Log in" (outlined, variant "secondary" — two navy fills would look identical) → Login. Tagline = data/brand.js WELCOME_TAGLINE (client, 2026-10-14 — replaces the newUser / returning pair):
+  "Welcome to your workspace." + "Request your office in just 2 minutes.", the same for everyone (useAuth().hasSignedInBefore
+  is no longer read by any screen). Welcome also prefetches the sign-up Activities list
 - screens/NewUserSignUpScreen.js ✅ — one form (newUserSignUpSchema) shown a step at a time with StepProgress ("Step 1
-  of 3 · Company"): Company (Company Name, Customer Name, Activity — required
-  single-choice SelectField — MAZ's REAL GET /activities labels via fetchActivityOptions (164 usable today, code kept in
-  the label, searchable), falling back to the SAMPLE ACTIVITIES with a note + Try again; ActivityField in AccountDetailsFields; restored by the recruiter
+  of 3 · Company"): Company (Company Name, Customer Name, Activities — required MULTI-choice SelectField (`multiple`; at least one,
+  no upper limit — 2026-10-14; was single-choice) — MAZ's REAL GET /activities labels via fetchActivityOptions (164 usable today, code kept in
+  the label, searchable), falling back to the SAMPLE ACTIVITIES with a note + Try again; ActivityField in AccountDetailsFields — shown AT ONCE, no
+  loading placeholder (2026-10-14): WelcomeScreen prefetches (prefetchActivityOptions), the form starts from
+  peekActivityOptions() (last answer, else the samples as "pending") and swaps in MAZ's list, dropping picks no longer offered; restored by the recruiter
   2026-10-10, shown on the Review step too) → Contact (Email) → Identification (Nationality
-  GCC_NATIONALITIES SelectField, then CPR Number (Bahrain) or Passport Number (others), masked with StyledInput
-  `revealable`; useWatch on nationality swaps the field and clears the other one) → Review (DetailCard of the
+  GCC_NATIONALITIES SelectField, then "ID type" (ID_TYPE_OPTIONS: CPR Number / Passport Number — the user's choice for
+  ANY nationality, 2026-10-14) and that number, masked with StyledInput `revealable` (useIdentityFields watches idType,
+  swaps the field and clears the other one), then Gender — required SegmentedControl (GenderField, GENDER_OPTIONS:
+  stores MAZ's code "m" / "f")) → Review (DetailCard of the
   entered values, ID masked "•••••1234"; "Submit & verify email" / "Edit details" → step 1). Each step's Continue is
   disabled until that step's fields pass the schema; Back (button, hardware, swipe — usePreventRemove) goes to the
   previous step. Submit → quickSignUp (unverified account) → VerifyAccount { email }. The Review step says "Demo
   registration — your details are kept in this app only. Your account isn't created with MAZ yet." (LOCAL / DEMO —
   SERVICE_SOURCES.customerRegistration "mock"; POST /customers not wired, see Open questions)
-- screens/VerifyAccountScreen.js ✅ — the New User OTP step (signed-out group): 6-digit OtpInput (auto-submits),
-  resend with 30s cooldown, verifyEmail → replaces itself with Login { email, justVerified } (sign-up creates no
-  session or MAZ login — 2026-10-14). Shows "Demo verification — no email is sent and this isn't an identity check. Use code
-  123456." (MOCK_OTP_CODE) — the demo OTP is NOT a real email / identity verification
+- screens/VerifyAccountScreen.js ✅ — the New User OTP step (signed-out group): 6-digit OtpInput (auto-submits), REAL
+  code emailed by MAZ (otpService — see "Auth & sessions"), resend with 30s cooldown (none when the first send failed:
+  codeSent false → error banner), verifyEmail → replaces itself with Login { email, justVerified } (sign-up creates no
+  session or MAZ login). Tests: tests/otp.test.mjs (helpers.mjs fakes /sendotp + /verifyotp; TEST_OTP_CODE)
 - screens/LoginScreen.js ✅ — the ONLY way in: REAL MAZ login (logIn → services/mazAuth.js POST /login) → signIn(session) —
   the dashboard follows the session's customerId (useAccountState: customer → "tenant", none → "newUser") (navigator
   switches automatically). Shows the session-expired notice and the justVerified note; wrong credentials → ErrorBanner
@@ -177,7 +198,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   right after Owner Name) uses OWNER_TYPES from the real OwnerTypeEnum and stores the code ("o", "p" …). First screen for a new account:
   "Not you? Log out" instead of Back. Save → saveProfile → completeProfile() → dashboard. The fields come from
   components/ProfileFormFields.js
-- screens/EditProfileScreen.js ✅ — Settings → Account → "Edit profile" (signed-in group, only once the profile is
+- screens/EditProfileScreen.js — RETIRED (client, 2026-10-14): no "Edit profile" button, unregistered from App.js; the
+  file, editProfileSchema, mock updateProfile and updateUserDetails are kept. Earlier notes: Settings → Account → "Edit profile" (signed-in group, only once the profile is
   complete). Non-sensitive fields only (editProfileSchema; CompanyFields + EmailField from
   components/AccountDetailsFields.js), in two open SectionCards: Company (Company Name, Customer Name), Contact
   (Email — read-only, the verified sign-in address: "Contact MAZ to change it"). PRIVACY (Cleanup 1, 2026-10-08):
@@ -208,30 +230,40 @@ Navigation shortcuts (client feedback on the latest build): verification → das
     fetchDashboard(userState) to fill in unit names (same shared download), fetchDashboardActivity (Quick-action
     captions, no network) and fetchTenantName (customer-record name fallback, never blocks). Only the Payment +
     Contracts sections show a skeleton; Quick actions and "Find a new office" render at once
-  • Header: notifications bell (unread dot from fetchUnreadCount, refreshed on focus) + settings gear
+  • Header: only the MAZ logo, BARE (no white chip — client, 2026-10-14). The bell and gear were removed: the Alerts and
+    Account TABS replace them (see "Navigation & tab bar")
   • New user: "What are you looking for?" (or "Looking for something else?" once a request exists) — ServiceCard
-    per service from fetchPlans → SelectTerm { plan } (Meeting Rooms → MeetingRooms); then Why MAZ (trust stats, Bahrain advantages), testimonials placeholder
+    per service from fetchPlans → SelectTerm { plan } (Meeting Rooms → MeetingRooms); then Why MAZ (trust stats, Bahrain advantages). The "What our clients say" placeholder was REMOVED (client, 2026-10-14)
   • Both states: "Your office request" card (RequestRow; fetchLatestRequest, refreshed on focus) → RequestStatus,
     + "View all requests" → MyRequests; caption + badge show the stage, "Invoice ready · BHD … due by …" (due) or,
     once paid, "Paid · Contract under review" with a Reviewing badge; DEMO_NOTES.requests under the card
-- screens/SettingsScreen.js ✅ — Account (logged-in user, "Edit profile" once the profile is complete, Log out with
+- screens/SettingsScreen.js ✅ — Account (logged-in user, Log out — no Edit profile since 2026-10-14 — with
   confirmation), Appearance (System / Light /
   Dark, persisted), Demo data (read-only "Dashboard shows" line — it follows the account; error simulation, always start at
   Welcome) — developer controls,
   HIDDEN unless the bundler is started with EXPO_PUBLIC_SHOW_DEMO_CONTROLS=true (DEMO_CONTROLS_ENABLED). The temporary 365-day
   expiry demo toggle was REMOVED (client, 2026-10-08) — the 10-day rule is permanent
-- screens/BrowsePlansScreen.js ✅ — "What are you looking for?": a ServiceCard per service → SelectTerm { plan } (Meeting
-  Rooms, `hourly` → MeetingRooms, never the lease flow), trust stats below. Shows exactly 3 services (fetchPlans filters by BROWSE_PLAN_IDS): Office Suites, Meeting Rooms, CR
-  Registration — Startup Incubator hidden (confirmed), not deleted
-- screens/SelectTermScreen.js ✅ — "Your term and payments": Lease length MonthsStepper (any whole number of
-  months 1–36, default 1, quick picks 3 / 6 / 9 / 12) + a required Payment frequency SegmentedControl (Monthly /
-  Quarterly / Half-Yearly / Yearly from INSTALLMENTS; selectTermSchema, no default — "Review request" disabled until
-  chosen) + EstimateCard: first installment and deposit as separate lines, lease total (rent), total "First
-  invoice". Review request → ReviewRequest { plan, termMonths, paymentFrequency }
+- screens/BrowsePlansScreen.js ✅ — "What are you looking for?": a ServiceCard per service → utils/openPlan.js (Office
+  Suites → CommercialRegistration, else SelectTerm), trust stats below. Shows exactly 2 services (fetchPlans filters by
+  BROWSE_PLAN_IDS): Office Suites, CR Registration — Startup Incubator hidden (confirmed) and MEETING ROOMS REMOVED
+  (client, 2026-10-14: off the services list, the dashboard quick action and the navigator; MeetingRooms /
+  BookMeetingRoom screen files and their mocks are kept but unregistered)
+- screens/CommercialRegistrationScreen.js ✅ — (2026-10-14) Office Suites only, before SelectTerm: two ChoiceCards
+  (components/ChoiceCard.js — ChoiceCard + FormField-compatible ChoiceCardGroup) "I have a CR" (→ CR Number, crNumber rule
+  "123456-1") / "I need a new CR" (footer: fee BHD 100 (sample)); crChoiceSchema; Continue → SelectTerm { plan, cr:
+  { option "existing" | "new", number } }. cr flows SelectTerm → ReviewRequest → submitRequest (MOCK): summary rows
+  "Commercial registration" + "CR registration fee"; firstInvoice(…, { newCr }) adds crFee; the request invoice gets a
+  "CR registration fee" line. CR_REGISTRATION_FEE_BHD = 100 in data/pricing.js is a PLACEHOLDER (ask MAZ for the real fee).
+  Tests: tests/cr-choice.test.mjs
+- screens/SelectTermScreen.js ✅ — "Your lease term": Lease length MonthsStepper (any whole number of
+  months 1–36, default 1, quick picks 3 / 6 / 9 / 12; selectTermSchema). NO payment frequency (client, 2026-10-14):
+  new requests are paid IN FULL, upfront (PAYMENT_IN_FULL_LABEL "In full, upfront"). EstimateCard: Payment, Monthly
+  rate, "Rent (N months)" (whole lease), Deposit (+ CR registration fee) as separate lines, total "Total payable".
+  Review request → ReviewRequest { plan, termMonths, cr }
 - screens/ReviewRequestScreen.js ✅ — "Review your request": RequestSummaryCard (buildRequestSummary) + "Requesting
   as" (name / company / activity / email from the session), DEMO_NOTES.reviewRequest note (subtitle: "In the live
   service, MAZ reviews each request…"). "Submit demo request" → submitRequest (MOCK) with those details
-  (activity = the session's sign-up Activity, null for tenants; remark "") → PUSHES RequestStatus { requestId, summary }; afterwards "Demo request saved" and the button becomes "View request status" so
+  (activities = the session's sign-up Activities, null for tenants; remark "") → PUSHES RequestStatus { requestId, summary }; afterwards "Demo request saved" and the button becomes "View request status" so
   it can't be sent twice. "Edit" → back to SelectTerm
 - screens/RequestStatusScreen.js ✅ — DEMO_NOTES.requestStatus note ("the stages, unit and invoice below are simulated
   … no emails are sent") + per-stage demo title ("Request saved" / "Request in progress" / "Your sample invoice is
@@ -370,7 +402,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   (section spacing), so don't add extra top margin to what follows it
 - components/DateField.js ✅ — tappable field; native dialog on Android, inline spinner on iOS
 - components/SelectField.js ✅ — dropdown field opening a bottom-sheet list (search box when > 10 options); options
-  are strings or { value, label } (stores value, shows label — for enum codes)
+  are strings or { value, label } (stores value, shows label — for enum codes). `multiple`: value is an array, rows
+  toggle (checkbox role), the sheet stays open until "Done"; the field shows the picked labels + "N selected"
 - components/SegmentedControl.js ✅ — inline toggle between options (used for Gender)
 - components/MonthsStepper.js ✅ — FormField-compatible whole-month picker: − / + (44pt, disabled at min / max) around
   the value + quick-pick chips; accessible as "adjustable" (SelectTerm's Lease length)
@@ -393,8 +426,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
 - components/StatusStepper.js ✅ — reusable step tracker; props currentStep (1-based) + optional steps (defaults to
   REQUEST_STEPS). Completed = check, current = filled primary (navy), upcoming = muted. orientation "horizontal" (default)
   or "vertical" (RequestStatus timeline: `dates` per step, "In progress" caption + description on the current step)
-- components/RequestSummaryCard.js ✅ — Service / Location / Lease length / Payment frequency / Monthly rate, then First
-  installment + Deposit as separate lines and the First invoice total (older summaries: Estimated total)
+- components/RequestSummaryCard.js ✅ — Service / (Commercial registration) / Location / Lease length / Payment ("In full,
+  upfront") / Monthly rate, then Rent (N months) + Deposit (+ CR registration fee) as separate lines and "Total payable"
 - data/requestSteps.js — REQUEST_STEPS, the 5 request stages (single source for StatusStepper + API mapping), each
   with label, description and `next` ("Next: …"); AFTER_PAYMENT_NEXT once the invoice is paid. description / next
   describe the LIVE service and aren't shown while requests are mock (RequestStatus uses data/demoNotes.js)
@@ -618,9 +651,9 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   OWNER_TYPE; COMPANIES holds the 4 real values
   from MAZ's admin panel;
   ACTIVITIES is now only the SAMPLE FALLBACK for sign-up's Activity (used when GET /activities fails / is empty); SUPPORT_CATEGORIES is a PLACEHOLDER
-- data/brand.js — TRUST_STATS, WELCOME_TAGLINES (final copy),
+- data/brand.js — TRUST_STATS, WELCOME_TAGLINE,
   BAHRAIN_ADVANTAGES, SERVICES (each with an Ionicons `icon`) from MAZ's marketing
-  site; BROWSE_PLAN_IDS (the 3 services Browse Plans shows, in order); CONTACT { phone, phoneDial, email, hours[] } — MAZ's real contact details, saved for the Support screen
+  site; BROWSE_PLAN_IDS (the 2 services Browse Plans shows, in order); CONTACT { phone, phoneDial, email, hours[] } — MAZ's real contact details, saved for the Support screen
   (not displayed yet)
 
 ## Screens NOT built yet
@@ -728,7 +761,8 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Approved trust stats (keep in data/brand.js): 4.9 Google rating, 18+ years of excellence,
   25+ companies supported, 0% corporate tax, 100% foreign ownership
 - Services: Office Suites, CR Registration, Startup Incubator, Meeting Rooms
-- Testimonials: do NOT add stock or copied client quotes — placeholder section only, until MAZ grants permission
+- Testimonials: do NOT add stock or copied client quotes. No testimonials section at all (placeholder removed by the client,
+  2026-10-14) unless MAZ asks for one and grants permission
 - BrowsePlans should reuse components/TrustStats.js and match HomeDashboard's card styling
 
 ## Recruiter decisions (2026-10-05) — implemented
@@ -738,10 +772,10 @@ or showing an error/result. Nothing may do nothing when tapped.
   Outstanding balance / Payment due / Pay stay unknown on real contracts (badges only)
 - New contracts were a fixed 9 months — SUPERSEDED by the client (2026-10-07): any lease length 1–36 months.
   Renewals keep 1/3/6/12
-- The tenant chooses a payment frequency (INSTALLMENTS: Monthly / Quarterly / Half-Yearly / Yearly), carried
-  through SelectTerm → ReviewRequest summary → the request's invoice
-- The first invoice = first installment + deposit, always shown as separate lines (deposit is a PLACEHOLDER
-  BHD 100 until MAZ gives the real amount)
+- SUPERSEDED (client, 2026-10-14): the payment-frequency choice is REMOVED — new office requests are paid in full,
+  upfront. firstInvoice(months, { newCr }) → { rent (whole lease), deposit, crFee, total }; the request invoice's lines:
+  "Rent (N months) — paid in full", Deposit (PLACEHOLDER BHD 100), CR registration fee (new CR only). Existing MAZ
+  contracts still show their REAL installment frequency (ContractDetail)
 - Contract status "e" Renewed is enabled; an approved renewal results in a Renewed contract (the renewal request
   itself is still mock)
 - Once a tenant pays the request invoice, the resulting contract's status is Reviewing (CONTRACT_STATUS "b")
@@ -759,8 +793,9 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Meeting Rooms stay hourly only: picking them on Browse Plans opens the existing hourly booking (unchanged),
   never the lease / payment-frequency flow
 - Lease length is the tenant's choice: any whole number of months, 1–36 (replaces the fixed 9 months)
-- Activity — RESTORED (recruiter, 2026-10-10; supersedes the client's 2026-10-07 "not for now"): a REQUIRED,
-  single-choice field on New User sign-up's Company step (+ Review step), validated by newUserSignUpSchema (present and
+- Activity — RESTORED (recruiter, 2026-10-10; supersedes the client's 2026-10-07 "not for now"); MULTIPLE choice since
+  2026-10-14 (form key `activities`, an array; at least one, no limit — the description below predates it): a REQUIRED,
+  formerly single-choice field on New User sign-up's Company step (+ Review step), validated by newUserSignUpSchema (present and
   at most 200 characters — the options load at runtime from GET /activities or the SAMPLE fallback, so the dropdown
   limits the choice). Kept through quickSignUp → VerifyAccount's session (user.activity, saved with the session; sessions
   saved earlier simply have none) → a later mock login → ReviewRequest, which sends it in the office / CR request
@@ -867,7 +902,7 @@ or showing an error/result. Nothing may do nothing when tapped.
     name_ar (= company name — the records suggest name_ar is required), email, CUSTOMER_FIXED_FIELDS (status 1,
     isIncubation 0, lmraStatus 0, isVatOn 0, company_id 2 — CONFIRM the entity), owners [{ name, mobile "00…", email,
     country (nationality name), type "o" }]. NOT sent: CPR / passport (GET /customers is public — would publish them),
-    activity, gender. NEVER tested against MAZ (no request sent). The created customer is NOT linked to the login.
+    activities. owners[0].gender = the sign-up's GENDER code (2026-10-14). NEVER tested against MAZ (no request sent). The created customer is NOT linked to the login.
     Tests: tests/customers.test.mjs. Earlier note (kept for the open questions):
     Read-only findings: OPTIONS /customers → 204 (its allow-methods only echoes the request — proves nothing);
     GET /customers/create → 404 "No query results for model [App\Models\Customer]" (a resource route exists, so a
@@ -878,7 +913,7 @@ or showing an error/result. Nothing may do nothing when tapped.
     customer logs in (an auth endpoint linking a login to the customer id); (5) a way to create + delete test records
     (or a sandbox); (6) lock down GET /customers + turn off debug mode. Until then sign-up stays local
     (mockApi.quickSignUp, labelled demo on screen); the transport's only write method is post(), used only by
-    mazAuth (POST /login, /logout), enquiryService (POST /enquiries) and customerCreationService (POST /customers) (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
+    mazAuth (POST /login, /logout), otpService (POST /sendotp, /verifyotp), enquiryService (POST /enquiries) and customerCreationService (POST /customers) (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
   • Auth — LIVE (2026-10-14): POST /login + POST /logout (services/mazAuth.js); the login's user.customer_id links it to
     a customer. Still missing: GET /me (re-check a restored token), password reset, token refresh, and a way for a
     sign-up to get a MAZ login. Per-tenant filtering — PENDING: no server-side filtering (?customer_id= is ignored, so every tenant's

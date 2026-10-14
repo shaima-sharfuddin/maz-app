@@ -12,6 +12,7 @@ import useAsync from "../hooks/useAsync";
 import { fetchContracts, errorMessage } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 import FadeIn from "../components/FadeIn";
+import { isTabRoot } from "../utils/navigation";
 
 const FILTERS = [
   { value: "all", label: "All" },
@@ -76,7 +77,7 @@ export default function ContractListScreen({ navigation, route }) {
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
-          <BackButton onPress={() => navigation.goBack()} />
+          {isTabRoot(navigation) ? null : <BackButton onPress={() => navigation.goBack()} />}
           <ScreenTitle title="Your contracts" subtitle="Your contracts with MAZ Business Center." />
           <SegmentedControl value={filter} onChange={setFilter} options={FILTERS} />
           {renderList()}

@@ -7,18 +7,10 @@ export const TRUST_STATS = [
   { value: "25+", label: "Companies supported" },
 ];
 
-// Welcome taglines (approved addition, 2026-10-09), chosen by context: `newUser` on a device where nobody has
-// signed in yet, `returning` once someone has (useAuth().hasSignedInBefore). Each is a headline + supporting line.
-// Final copy (approved 2026-10-09).
-export const WELCOME_TAGLINES = {
-  newUser: {
-    headline: "Where ambitious businesses begin.",
-    line: "A prestigious address in Bahrain, from your first enquiry to your first day.",
-  },
-  returning: {
-    headline: "Welcome back to your workspace.",
-    line: "Your contracts, payments and renewals, ready when you are.",
-  },
+// Welcome headline + supporting line (client, 2026-10-14 — replaces the newUser / returning pair; "back" dropped).
+export const WELCOME_TAGLINE = {
+  headline: "Welcome to your workspace.",
+  line: "Request your office in just 2 minutes.",
 };
 
 export const BAHRAIN_ADVANTAGES = [
@@ -31,12 +23,13 @@ export const BAHRAIN_ADVANTAGES = [
 // existing meeting-room booking), never leased through the term / payment-frequency flow (client, 2026-10-07).
 // Browse Plans shows only these, in this order (client feedback, 2026-10-07): Office, Meeting Room, CR
 // Registration. Startup Incubator is hidden there, not deleted — flagged for confirmation in CLAUDE.md.
-export const BROWSE_PLAN_IDS = ["office-suites", "meeting-rooms", "cr-registration"];
+export const BROWSE_PLAN_IDS = ["office-suites", "cr-registration"]; // Meeting Rooms removed (client, 2026-10-14)
 
 export const SERVICES = [
   {
     id: "office-suites",
     title: "Office Suites",
+    requiresCr: true, // asks "existing CR or new CR?" first (CommercialRegistrationScreen)
     icon: "business-outline",
     description: "Private, fully serviced executive rooms with sea views",
   },

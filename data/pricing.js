@@ -1,8 +1,7 @@
 import { toISODate } from "../utils/formatDate";
-import { INSTALLMENTS } from "./enums";
 
-// Term, payment frequency and price estimates for an office request (SelectTermScreen →
-// SubmitRequestScreen → the request's invoice), plus renewal terms (RenewContractScreen).
+// Term and price estimates for an office request (SelectTermScreen → ReviewRequestScreen → the request's invoice),
+// plus renewal terms (RenewContractScreen).
 
 // Lease length for a new request: any whole number of months in this range (client decision, 2026-10-07 —
 // replaces the recruiter's earlier fixed 9-month term). Quick picks are shortcuts on SelectTerm's stepper.
@@ -15,10 +14,9 @@ export const LEASE_QUICK_PICKS = [3, 6, 9, 12];
 export const RENEWAL_TERM_OPTIONS = [1, 3, 6, 12]; // months
 export const DEFAULT_RENEWAL_TERM_MONTHS = 1;
 
-// How often the tenant pays, from the backend's INSTALLMENTS enum (value = installments per year, as the
-// API stores it in contracts.installment). Listed explicitly so Monthly comes first — iterating the enum
-// object would order the numeric keys Yearly → Monthly.
-export const PAYMENT_FREQUENCY_OPTIONS = ["12", "4", "2", "1"].map((value) => ({ value, label: INSTALLMENTS[value] }));
+// New office requests are paid IN FULL, upfront (2026-10-14 — replaces the Monthly / Quarterly / Half-Yearly / Yearly
+// choice): the first invoice carries the whole lease's rent. Existing MAZ contracts keep their own installments.
+export const PAYMENT_IN_FULL_LABEL = "In full, upfront";
 
 // ⚠️ PLACEHOLDER — the wireframe's sample rate (BHD 100.000 per month) applied to every plan.
 // Replace with real per-plan pricing from the API once available.
@@ -27,6 +25,19 @@ export const PLACEHOLDER_MONTHLY_RATE_BHD = 100;
 // ⚠️ PLACEHOLDER — the security deposit charged on the first invoice. BHD 100 matches the real sample
 // contracts' deposit_amt ("100.00"); replace with the real amount once MAZ confirms it.
 export const PLACEHOLDER_DEPOSIT_BHD = 100;
+
+// ⚠️ PLACEHOLDER — the charge for MAZ registering a NEW commercial registration (Office Suites → "I need a new CR",
+// CommercialRegistrationScreen), added as its own line on the first invoice. Replace once MAZ gives the real fee.
+export const CR_REGISTRATION_FEE_BHD = 100;
+
+// The two answers on CommercialRegistrationScreen. A request's `cr` is { option: "existing" | "new", number }.
+export const CR_OPTIONS = { existing: "existing", new: "new" };
+export const isNewCr = (cr) => cr?.option === CR_OPTIONS.new;
+// "Existing CR · 123456-1" / "New CR registration"; null when the request has no CR answer (other services).
+export function crLabel(cr) {
+  if (!cr?.option) return null;
+  return isNewCr(cr) ? "New CR registration" : `Existing CR · ${cr.number}`;
+}
 
 // ⚠️ PLACEHOLDER — location selection isn't designed yet; MAZ assigns the actual unit.
 export const PLACEHOLDER_LOCATION = "Seef District";
@@ -45,40 +56,34 @@ export function estimateTotal(months, monthlyRate = PLACEHOLDER_MONTHLY_RATE_BHD
   return months * monthlyRate;
 }
 
-// One payment period's rent: the months it covers (12 ÷ installments per year) × the monthly rate,
-// capped at the lease length — e.g. Yearly on a 9-month lease is a single 9-month payment.
-// 9 months: Monthly 100 · Quarterly 300 (as in the real data) · Half-Yearly 600 · Yearly 900.
-export function firstInstallmentAmount(
-  installmentsPerYear,
-  months = DEFAULT_LEASE_MONTHS,
-  monthlyRate = PLACEHOLDER_MONTHLY_RATE_BHD
-) {
-  const periodMonths = Math.min(12 / Number(installmentsPerYear), months);
-  return periodMonths * monthlyRate;
-}
-
-// The first invoice covers the first installment AND the deposit (recruiter decision, 2026-10-05).
-// Kept as separate amounts so every screen can show both lines, not just the total.
-export function firstInvoice(installmentsPerYear, months = DEFAULT_LEASE_MONTHS) {
-  const installment = firstInstallmentAmount(installmentsPerYear, months);
+// The first (and only) invoice: the WHOLE lease's rent (paid in full) AND the deposit — separate amounts so every
+// screen can show each line, not just the total. `newCr`: the tenant asked MAZ to register a new CR → the (sample)
+// CR registration fee is added too. 6 months → rent 600 + deposit 100 (+ CR fee 100).
+export function firstInvoice(months = DEFAULT_LEASE_MONTHS, { newCr = false } = {}) {
+  const rent = estimateTotal(months);
   const deposit = PLACEHOLDER_DEPOSIT_BHD;
-  return { installment, deposit, total: installment + deposit };
+  const crFee = newCr ? CR_REGISTRATION_FEE_BHD : 0;
+  return { rent, deposit, crFee, total: rent + deposit + crFee };
 }
 
-export const paymentFrequencyLabel = (installmentsPerYear) => INSTALLMENTS[installmentsPerYear] ?? null;
+// "Rent (6 months)" — the rent line's label on the estimate, summary and invoice.
+export const rentLineLabel = (months) => `Rent (${formatTerm(months)})`;
 
 // Everything RequestSummaryCard needs. isPlaceholder stays true while the rate, deposit and location
 // are placeholders, so the card labels them as samples on screen.
-export function buildRequestSummary(planTitle, months, paymentFrequency) {
-  const invoice = firstInvoice(paymentFrequency, months);
+// `cr` (Office Suites only): the CommercialRegistration answer — shown as a row, and a new CR adds its fee.
+export function buildRequestSummary(planTitle, months, cr = null) {
+  const invoice = firstInvoice(months, { newCr: isNewCr(cr) });
   return {
     plan: planTitle,
+    cr: crLabel(cr),
+    crFee: invoice.crFee ? formatBHD(invoice.crFee) : null,
     location: PLACEHOLDER_LOCATION,
     term: formatTerm(months),
-    paymentFrequency: paymentFrequencyLabel(paymentFrequency),
+    payment: PAYMENT_IN_FULL_LABEL,
     monthlyRate: `${formatBHD(PLACEHOLDER_MONTHLY_RATE_BHD)}/month`,
-    estimatedPrice: formatBHD(estimateTotal(months)), // whole contract
-    firstInstallment: formatBHD(invoice.installment),
+    rentLabel: rentLineLabel(months),
+    rent: formatBHD(invoice.rent), // the whole lease, paid in full
     deposit: formatBHD(invoice.deposit),
     firstInvoiceTotal: formatBHD(invoice.total),
     isPlaceholder: true,

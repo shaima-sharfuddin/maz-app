@@ -14,6 +14,8 @@ const normalize = (option) => (typeof option === "string" ? { value: option, lab
 // `compact` (e.g. the country-code half of the Mobile Number field): no label above, no bottom margin and no
 // inline error — the parent shows those; `label` still titles the sheet. `formatSelected(value)` replaces the
 // selected option's label in the field itself (e.g. "🇦🇪 +971" for "🇦🇪  United Arab Emirates  +971").
+// `multiple` (e.g. sign-up's Activities): `value` is an array; tapping a row adds / removes it and the sheet stays
+// open until "Done". The field lists the chosen labels in the order they were picked.
 
 // Lists longer than this get a search box.
 const SEARCH_THRESHOLD = 10;
@@ -28,6 +30,7 @@ export default function SelectField({
   placeholder = "Select an option",
   compact = false,
   formatSelected,
+  multiple = false,
 }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
@@ -35,8 +38,16 @@ export default function SelectField({
   const insets = useSafeAreaInsets();
 
   const items = useMemo(() => options.map(normalize), [options]);
-  const selectedItem = items.find((item) => item.value === value);
-  const selectedLabel = selectedItem && formatSelected ? formatSelected(selectedItem.value) : (selectedItem?.label ?? value);
+  const values = multiple ? (Array.isArray(value) ? value : []) : null;
+  const isSelected = (item) => (multiple ? values.includes(item.value) : item.value === value);
+  const selectedItem = multiple ? null : items.find((item) => item.value === value);
+  const labelOf = (v) => items.find((item) => item.value === v)?.label ?? v;
+  const selectedLabel = multiple
+    ? values.map(labelOf).join(", ")
+    : selectedItem && formatSelected
+      ? formatSelected(selectedItem.value)
+      : (selectedItem?.label ?? value);
+  const hasValue = multiple ? values.length > 0 : Boolean(value);
 
   const searchable = items.length > SEARCH_THRESHOLD;
   const filtered = useMemo(() => {
@@ -51,6 +62,10 @@ export default function SelectField({
   };
 
   const select = (item) => {
+    if (multiple) {
+      onChange(values.includes(item.value) ? values.filter((v) => v !== item.value) : [...values, item.value]);
+      return;
+    }
     onChange(item.value);
     close();
   };
@@ -75,9 +90,14 @@ export default function SelectField({
           borderColor: error ? colors.danger : open ? colors.primary : colors.inputBorder,
         }}
       >
-        <Text style={[{ color: value ? colors.text : colors.textSubtle, fontSize: 14 }, compact ? { marginRight: 8 } : { flex: 1 }]}>
-          {selectedLabel || placeholder}
-        </Text>
+        <View style={compact ? { marginRight: 8 } : { flex: 1, marginRight: 8 }}>
+          <Text numberOfLines={multiple ? 2 : undefined} style={{ color: hasValue ? colors.text : colors.textSubtle, fontSize: 14 }}>
+            {selectedLabel || placeholder}
+          </Text>
+          {multiple && values.length > 1 ? (
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{values.length} selected</Text>
+          ) : null}
+        </View>
         <Text style={{ color: colors.textMuted, fontSize: 12 }}>{"▼"}</Text>
       </Pressable>
       {compact ? null : <FieldError message={error} />}
@@ -115,7 +135,11 @@ export default function SelectField({
                 accessibilityRole="button"
                 style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}
               >
-                <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
+                {multiple ? (
+                  <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "600" }}>Done</Text>
+                ) : (
+                  <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
+                )}
               </PressableScale>
             </View>
 
@@ -146,13 +170,13 @@ export default function SelectField({
               keyExtractor={(item) => String(item.value)}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
-                const selected = item.value === value;
+                const selected = isSelected(item);
                 return (
                   <PressableScale
                     onPress={() => select(item)}
                     scaleTo={0.98}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
+                    accessibilityRole={multiple ? "checkbox" : "button"}
+                    accessibilityState={multiple ? { checked: selected } : { selected }}
                     style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 14, minHeight: 48 }}
                   >
                     <Text

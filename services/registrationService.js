@@ -1,13 +1,16 @@
 import { quickSignUp } from "./mockApi";
+import { sendVerificationCode } from "./otpService";
 import { submitSignUpEnquiry } from "./enquiryService";
 import { submitSignUpCustomer } from "./customerCreationService";
 import { errorMessage } from "./errorMessages";
 
-// New User sign-up = the DEMO account (mockApi.quickSignUp — local, unchanged) + the enquiry to MAZ (enquiryService) +
-// the customer record to MAZ (customerCreationService) — each sent only when switched on. The account comes first; an
-// enquiry or customer failure never blocks it.
+// New User sign-up = the DEMO account (mockApi.quickSignUp — local, unchanged) + the REAL verification code emailed by
+// MAZ (otpService, POST /sendotp) + the enquiry to MAZ (enquiryService) + the customer record to MAZ
+// (customerCreationService) — the last two only when switched on. The account comes first; a failed code, enquiry or
+// customer never blocks it (VerifyAccount offers Resend when the code wasn't sent).
 //
-// registerNewUser(payload) → { email, enquiry, customer } where each of enquiry / customer is
+// registerNewUser(payload) → { email, otp, enquiry, customer }. otp: { status: "sent" } | { status: "failed", code,
+// message }. Each of enquiry / customer is
 //   { status: "recorded", … } — MAZ confirmed (2xx)
 //   { status: "disabled" }    — sending is switched off; nothing was requested
 //   { status: "failed", code, message } — not sent / not confirmed
@@ -18,9 +21,10 @@ const settle = (promise) =>
 
 export async function registerNewUser(payload) {
   const account = await quickSignUp(payload);
-  const [enquiry, customer] = await Promise.all([
+  const [otp, enquiry, customer] = await Promise.all([
+    settle(sendVerificationCode(account.email).then(() => ({ status: "sent" }))),
     settle(submitSignUpEnquiry(payload)),
     settle(submitSignUpCustomer(payload)),
   ]);
-  return { ...account, enquiry, customer };
+  return { ...account, otp, enquiry, customer };
 }

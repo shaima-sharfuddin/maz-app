@@ -27,11 +27,10 @@ const submitDemoRequest = () =>
     fullName: "x",
     email: "x",
     companyName: "x",
-    activity: null,
+    activities: null,
     remark: "",
     termMonths: 6,
-    paymentFrequency: "12",
-    summary: buildRequestSummary("Office Suites", 6, "12"),
+    summary: buildRequestSummary("Office Suites", 6),
   });
 
 // Everything one Existing User can leave behind in the demo features of a session.

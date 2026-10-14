@@ -13,6 +13,7 @@ import { useTheme } from "../theme/ThemeContext";
 import { TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
 import PhotoHero from "../components/PhotoHero";
+import { openPlan } from "../utils/openPlan";
 
 function ServiceCardSkeleton() {
   return (
@@ -26,14 +27,14 @@ function ServiceCardSkeleton() {
   );
 }
 
-// The services a customer can request (fetchPlans: Office Suites, Meeting Rooms, CR Registration).
-// Each opens Term & payments (SelectTerm) directly — or, for Meeting Rooms, the hourly booking.
+// The services a customer can request (fetchPlans: Office Suites, CR Registration — Meeting Rooms removed 2026-10-14).
+// Each opens the lease term (SelectTerm) — Office Suites first asks about the CR (CommercialRegistration) —
+// via utils/openPlan.js.
 export default function BrowsePlansScreen({ navigation }) {
   const { colors } = useTheme();
   const { loading, data: plans, error, reload } = useAsync(fetchPlans);
 
-  const openService = (plan) =>
-    plan.hourly ? navigation.navigate("MeetingRooms") : navigation.navigate("SelectTerm", { plan });
+  const openService = (plan) => openPlan(navigation, plan);
 
   const renderPlans = () => {
     if (loading) {

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { BAHRAIN } from "../data/formOptions";
 import { findCountry } from "../data/countryCodes";
 import { MIN_LEASE_MONTHS, MAX_LEASE_MONTHS } from "../data/pricing";
 
@@ -178,20 +177,25 @@ export const bookingSchema = z.object({
 });
 
 // New User sign-up (WelcomeScreen → "New User"). Mobile Number: country code (any country) + a number valid for
-// it (mobileNumberIssue). Bahrain → CPR Number required; any other nationality → Passport Number required. The screen only renders the field that applies and clears the other one.
+// it (mobileNumberIssue). ID: the user picks CPR or Passport (idType) whatever their nationality, and that number is
+// required. The screen only renders the field that applies and clears the other one.
 export const newUserSignUpSchema = z
   .object({
     companyName: requiredText("Company Name"),
     customerName: requiredText("Customer Name"),
-    // Business activity (restored at the recruiter's request, 2026-10-10): required, one choice from the dropdown —
-    // MAZ's GET /activities labels, or the SAMPLE list if that fails (services/activityService.js). The options load
-    // at runtime, so the field itself limits the choice to the list; the schema checks it's present and sane.
-    // Kept in the app only; never sent to MAZ.
-    activity: requiredSelect("Activity").max(200, "Select an activity from the list"),
+    gender: requiredSelect("Gender"), // MAZ GENDER code ("m" / "f")
+    // Business activities (restored at the recruiter's request, 2026-10-10; multiple choice since 2026-10-14):
+    // at least one, no upper limit — MAZ's GET /activities labels, or the SAMPLE list if that fails
+    // (services/activityService.js). The options load at runtime, so the field itself limits the choice to the list;
+    // the schema checks they're present and sane. Kept in the app only; never sent to MAZ.
+    activities: z
+      .array(z.string().min(1, "Select activities from the list").max(200, "Select activities from the list"))
+      .min(1, "Select at least one activity"),
     email,
     phoneCountry: requiredSelect("Country code"), // ISO code; the dial code is derived (data/countryCodes.js)
     phoneNumber: z.string(),
     nationality: requiredSelect("Nationality"),
+    idType: requiredSelect("ID type"), // "cpr" | "passport"
     cprNumber: z.string(),
     passportNumber: z.string(),
     // Optional free text for MAZ's team — sent as the enquiry's `remarks` (POST /enquiries, when switched on).
@@ -200,16 +204,30 @@ export const newUserSignUpSchema = z
   .superRefine((values, ctx) => {
     const phoneIssue = values.phoneCountry ? mobileNumberIssue(values.phoneCountry, values.phoneNumber) : null;
     if (phoneIssue) ctx.addIssue({ code: "custom", path: ["phoneNumber"], message: phoneIssue });
-    if (!values.nationality) return;
-    if (values.nationality === BAHRAIN) {
+    if (values.idType === "cpr") {
       const result = cprNumber.safeParse(values.cprNumber);
       if (!result.success) {
         const message = values.cprNumber.trim() ? result.error.issues[0].message : "CPR Number is required";
         ctx.addIssue({ code: "custom", path: ["cprNumber"], message });
       }
-    } else if (!values.passportNumber.trim()) {
+    } else if (values.idType === "passport" && !values.passportNumber.trim()) {
       ctx.addIssue({ code: "custom", path: ["passportNumber"], message: "Passport Number is required" });
     }
+  });
+
+// CommercialRegistration (Office Suites, before the term): "existing" needs a valid CR number; "new" needs none
+// (MAZ registers it — a fee is added to the first invoice).
+export const crChoiceSchema = z
+  .object({
+    crOption: z.string().min(1, "Choose an option"), // "existing" | "new"
+    crNumber: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    if (values.crOption !== "existing") return;
+    const message = !values.crNumber.trim()
+      ? "CR Number is required"
+      : crNumber.safeParse(values.crNumber).error?.issues[0].message;
+    if (message) ctx.addIssue({ code: "custom", path: ["crNumber"], message });
   });
 
 // EditProfile: only the non-sensitive account fields (the email is shown read-only). Nationality and the
@@ -220,15 +238,14 @@ export const editProfileSchema = z.object({
   email,
 });
 
-// SelectTerm: lease length in whole months (MIN_LEASE_MONTHS–MAX_LEASE_MONTHS) and how often the tenant
-// pays — an INSTALLMENTS code ("12" Monthly, "4" Quarterly, "2" Half-Yearly, "1" Yearly).
+// SelectTerm: lease length in whole months (MIN_LEASE_MONTHS–MAX_LEASE_MONTHS). No payment frequency — new requests
+// are paid in full, upfront (2026-10-14).
 export const selectTermSchema = z.object({
   termMonths: z
     .number()
     .int("Choose a whole number of months")
     .min(MIN_LEASE_MONTHS, `Choose at least ${MIN_LEASE_MONTHS} month`)
     .max(MAX_LEASE_MONTHS, `Choose up to ${MAX_LEASE_MONTHS} months`),
-  paymentFrequency: requiredSelect("Payment frequency"),
 });
 
 export const renewalSchema = z.object({

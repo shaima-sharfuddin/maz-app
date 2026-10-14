@@ -13,13 +13,13 @@ import InfoNote from "../components/InfoNote";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import { verifyAccountSchema } from "../validation/schemas";
-import { verifyEmail, resendVerificationCode, MOCK_OTP_CODE } from "../services/api";
+import { verifyEmail, resendVerificationCode } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 
 const RESEND_COOLDOWN_S = 30;
 
-// Email OTP after New User sign-up (and from Login's "Verify email" for an account that never verified).
-// Afterwards → Login: signing in needs the MAZ account details (services/mazAuth.js); sign-up doesn't create a login.
+// Email OTP after New User sign-up — REAL (2026-10-14): MAZ emails the code (POST /sendotp, sent by registerNewUser on
+// "Submit & verify email"; Resend asks again) and checks it (POST /verifyotp). Afterwards → Login: signing in needs the MAZ account details (services/mazAuth.js); sign-up doesn't create a login.
 export default function VerifyAccountScreen({ navigation, route }) {
   const { colors } = useTheme();
   const email = route.params?.email ?? "";
@@ -27,6 +27,9 @@ export default function VerifyAccountScreen({ navigation, route }) {
   const enquiry = route.params?.enquiry;
   // Same for the customer record (POST /customers).
   const customer = route.params?.customer;
+  // false when MAZ couldn't send the first code (codeError says why): Resend is offered at once.
+  const codeSent = route.params?.codeSent !== false;
+  const codeError = route.params?.codeError;
   const {
     control,
     handleSubmit,
@@ -36,7 +39,7 @@ export default function VerifyAccountScreen({ navigation, route }) {
 
   const verify = useSubmit(verifyEmail);
   const resend = useSubmit(resendVerificationCode);
-  const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_S);
+  const [secondsLeft, setSecondsLeft] = useState(codeSent ? RESEND_COOLDOWN_S : 0);
   const [resentNotice, setResentNotice] = useState(false);
 
   // Resend cooldown countdown.
@@ -76,8 +79,12 @@ export default function VerifyAccountScreen({ navigation, route }) {
             <ScreenTitle
               eyebrow="MAZ Business Center"
               title="Verify your email"
-              subtitle={`Enter the 6-digit code we sent to ${email || "your email"}.`}
+              subtitle={`Enter the 6-digit code we emailed to ${email || "your email"}. It may take a minute to arrive — check your spam folder too.`}
             />
+
+            {!codeSent && !resentNotice ? (
+              <ErrorBanner message={`We couldn't send your code. ${codeError ?? ""} Tap "Resend code" below.`.trim()} />
+            ) : null}
 
             {enquiry === "recorded" ? (
               <InfoNote boxed icon="checkmark-circle-outline" style={{ marginBottom: 20 }}>
@@ -105,13 +112,6 @@ export default function VerifyAccountScreen({ navigation, route }) {
               // Submit automatically once all 6 digits are in.
               onComplete={() => onSubmit()}
             />
-
-            {MOCK_OTP_CODE ? (
-              // DEMO ONLY — no email is sent and the code proves nothing about identity while the backend is mocked.
-              <Text className="text-xs text-center mb-4" style={{ color: colors.textSubtle }}>
-                Demo verification — no email is sent and this isn&apos;t an identity check. Use code {MOCK_OTP_CODE}.
-              </Text>
-            ) : null}
 
             <AnimatedButton
               label={verify.loading ? "Verifying…" : "Verify"}

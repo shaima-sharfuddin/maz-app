@@ -23,6 +23,7 @@ import { formatBHD } from "../data/pricing";
 import { formatDate } from "../utils/formatDate";
 import { unitWithLocation } from "../utils/formatUnit";
 import { useTheme } from "../theme/ThemeContext";
+import { goHome } from "../utils/navigation";
 
 const cardStyle = (colors) => ({
   backgroundColor: colors.surface,
@@ -230,7 +231,7 @@ export default function RequestStatusScreen({ navigation, route }) {
           ) : null}
 
           {/* Back (above) retraces the request steps; this jumps straight to the dashboard. */}
-          <AnimatedButton label="Back to dashboard" variant="ghost" onPress={() => navigation.popToTop()} />
+          <AnimatedButton label="Back to dashboard" variant="ghost" onPress={() => goHome(navigation)} />
 
           {renderDemoControl()}
         </View>

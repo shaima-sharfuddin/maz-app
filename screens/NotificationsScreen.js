@@ -27,6 +27,7 @@ import FadeIn from "../components/FadeIn";
 import InfoNote from "../components/InfoNote";
 import SectionHeading from "../components/SectionHeading";
 import { useAccountState } from "../auth/AuthContext";
+import { navigateTo, isTabRoot } from "../utils/navigation";
 
 const ICONS = {
   bill: "receipt-outline",
@@ -168,7 +169,7 @@ export default function NotificationsScreen({ navigation }) {
       setReadIds((ids) => new Set(ids).add(notification.id));
       markNotificationRead(notification.id).catch(() => {}); // best effort — a missed mark isn't worth an error
     }
-    if (notification.target) navigation.navigate(notification.target.screen, notification.target.params);
+    if (notification.target) navigateTo(navigation, notification.target.screen, notification.target.params);
   };
 
   const onMarkAll = async () => {
@@ -266,7 +267,7 @@ export default function NotificationsScreen({ navigation }) {
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
-          <BackButton onPress={() => navigation.goBack()} />
+          {isTabRoot(navigation) ? null : <BackButton onPress={() => navigation.goBack()} />}
           <ScreenTitle title="Notifications" subtitle="Updates on your contracts, bills and requests." />
           {renderContent()}
         </View>

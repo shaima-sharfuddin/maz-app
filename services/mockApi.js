@@ -8,7 +8,8 @@ import {
   formatBHD,
   formatTerm,
   firstInvoice,
-  paymentFrequencyLabel,
+  isNewCr,
+  rentLineLabel,
   DEFAULT_LEASE_MONTHS,
 } from "../data/pricing";
 import { CONTRACT_STATUS } from "../data/enums";
@@ -106,15 +107,6 @@ function seedSessionData() {
       status: "confirmed",
     },
   ];
-  notifications.tenant.push({
-    id: "NTF-1006",
-    type: "booking",
-    title: "Meeting room booked",
-    body: `Conference Suite · ${formatDate(bookings[0].date)}, 10:00 AM – 12:00 PM.`,
-    createdAt: toISODateTime(daysFromToday(-1)),
-    read: false,
-    target: { screen: "MeetingRooms", params: undefined },
-  });
 }
 seedSessionData();
 
@@ -155,42 +147,30 @@ function pushNotification({ type, title, body, target = null }) {
 const quickSignUps = new Map();
 const emailKey = (email) => email.trim().toLowerCase();
 
-// ⚠️ MOCK — the real backend emails a random code. This fixed code is shown on the Verify screen.
-export const MOCK_OTP_CODE = "123456";
-
-// payload: { email, code } → { verified: true }. Demo only: confirms the sign-up's email; the app then opens Login.
-export function verifyEmail(payload) {
-  return simulate(() => {
-    if (payload.code !== MOCK_OTP_CODE) throw new ApiError("INVALID_CODE", "That code isn't right. Check your email and try again.");
-    return { verified: true };
-  });
-}
-
-// email → { sent: true }
-export function resendVerificationCode(email) {
-  return simulate(() => ({ sent: true, email }));
-}
-
 // New User sign-up (the client's short form, replacing the old SignUp + CompleteProfile).
-// payload: { companyName, customerName, activity, email, countryCode, phoneNumber, phoneCountry, nationality,
-// cprNumber | passportNumber, remarks } → { email }. activity is the chosen label (MAZ's GET /activities or the samples). The mobile
+// payload: { companyName, customerName, gender, activities, email, countryCode, phoneNumber, phoneCountry, nationality,
+// idType, cprNumber | passportNumber, remarks } → { email }. gender is MAZ's code ("m" / "f"); activities are the chosen labels
+// (MAZ's GET /activities or the samples). The mobile
 // is kept as the dial code ("+971") + national number.
 // ⚠️ LOCAL / DEMO: kept in memory and NOT sent to MAZ (SERVICE_SOURCES.customerRegistration = "mock"). Going live needs
 // MAZ's POST /customers contract — request fields, required ones, validation + success response (with the new
 // customer id) and duplicate handling — then a real provider behind the same function name.
-// The app goes on to VerifyAccount (code MOCK_OTP_CODE), then Login — logging in needs a real MAZ account.
+// The app goes on to VerifyAccount (a REAL emailed code — services/otpService.js), then Login — logging in needs a
+// real MAZ account.
 export function quickSignUp(payload) {
   return simulate(() => {
     const email = payload.email.trim();
     const record = {
       companyName: payload.companyName.trim(),
       customerName: payload.customerName.trim(),
-      activity: payload.activity || null,
+      gender: payload.gender || null,
+      activities: payload.activities?.length ? [...payload.activities] : null,
       email,
       countryCode: payload.countryCode,
       phoneNumber: payload.phoneNumber,
       phoneCountry: payload.phoneCountry, // ISO code — +1 / +44 / +7 are shared by several countries
       nationality: payload.nationality,
+      idType: payload.idType || null, // "cpr" | "passport" — the ID the user chose to give
       // Only the ID that applies to the nationality is kept.
       cprNumber: payload.cprNumber?.trim() || null,
       passportNumber: payload.passportNumber?.trim() || null,
@@ -265,8 +245,9 @@ const PLACEHOLDER_ASSIGNED_UNIT = "Office 312";
 const INVOICE_STEP = 5; // "Invoice Generated" in REQUEST_STEPS
 const INVOICE_DUE_DAYS = 7;
 
-// payload: { fullName, email, companyName, activity, remark, termMonths, paymentFrequency, summary } → { requestId }
-// paymentFrequency is an INSTALLMENTS code ("12" Monthly … "1" Yearly).
+// payload: { fullName, email, companyName, activities, remark, termMonths, cr, summary } → { requestId }
+// cr (Office Suites only): { option: "existing" | "new", number } — a new CR adds the CR registration fee to the invoice.
+// Paid in full, upfront: no payment frequency (2026-10-14).
 // A request starts at step 1. The real backend moves it through the stages; in the demo,
 // advanceRequestStage does (RequestStatus shows a demo control for it).
 // The request is stored under the signed-in demo account (see setDemoAccount) — never in a store shared by everyone.
@@ -281,7 +262,7 @@ export function submitRequest(payload) {
       payload: clone(payload),
       summary: clone(payload.summary),
       termMonths: payload.termMonths ?? DEFAULT_LEASE_MONTHS,
-      paymentFrequency: payload.paymentFrequency ?? null,
+      cr: payload.cr ? clone(payload.cr) : null,
       submittedAt,
       currentStep: 1,
       // When each stage was reached (index = step − 1), for the timeline on RequestStatus.
@@ -302,7 +283,7 @@ const requestView = (request) => ({
   submittedAt: request.submittedAt,
   stageReachedAt: [...request.stageReachedAt],
   summary: clone(request.summary),
-  activity: request.payload?.activity ?? null, // a New User's sign-up Activity (SAMPLE option, mock only); null for tenants
+  activities: request.payload?.activities ? [...request.payload.activities] : null, // a New User's sign-up Activities (mock only); null for tenants
   unit: request.unit ? clone(request.unit) : null,
   invoice: request.invoice ? clone(request.invoice) : null,
   payment: request.payment ? clone(request.payment) : null,
@@ -315,7 +296,7 @@ const requestView = (request) => ({
     : null,
 });
 
-// → { requestId, currentStep (1-based, indexes REQUEST_STEPS), summary, activity, unit, invoice, payment, contract }.
+// → { requestId, currentStep (1-based, indexes REQUEST_STEPS), summary, activities, unit, invoice, payment, contract }.
 // An unknown id (e.g. after an app reload cleared the mock store, or another account's request) reports step 1 with
 // no details.
 export function fetchRequestStatus(requestId) {
@@ -353,7 +334,7 @@ export function fetchRequests() {
 }
 
 // ⚠️ DEMO ONLY — stands in for MAZ's admin moving the request on. Step 4 assigns a unit; step 5
-// issues the first invoice = first installment + deposit (separate line items; recruiter decision),
+// issues the invoice = the whole lease's rent (paid in full) + deposit (+ the CR fee for a new CR) as separate line items,
 // due in 7 days. Never fails at random, so the demo control always works.
 export function advanceRequestStage(requestId) {
   return simulate(
@@ -369,13 +350,13 @@ export function advanceRequestStage(requestId) {
       }
       if (request.currentStep === INVOICE_STEP) {
         const issuedOn = new Date();
-        const { installment, deposit, total } = firstInvoice(request.paymentFrequency ?? "12", request.termMonths);
-        const frequency = paymentFrequencyLabel(request.paymentFrequency);
+        const { rent, deposit, crFee, total } = firstInvoice(request.termMonths, { newCr: isNewCr(request.cr) });
         request.invoice = {
           number: `INV-${issuedOn.getFullYear()}-${request.requestId.slice(-4)}`,
           lineItems: [
-            { label: frequency ? `First installment (${frequency})` : "First installment", amount: installment },
+            { label: `${rentLineLabel(request.termMonths)} — paid in full`, amount: rent },
             { label: "Deposit", amount: deposit },
+            ...(crFee ? [{ label: "CR registration fee", amount: crFee }] : []),
           ],
           amount: total,
           issuedOn: toISODate(issuedOn),
@@ -390,7 +371,7 @@ export function advanceRequestStage(requestId) {
 }
 
 // The request's invoice in the shape PaymentScreen reads for a contract
-// ({ outstanding, dueDate, unit, location, bills }) plus invoiceNumber / description / paymentFrequency for its
+// ({ outstanding, dueDate, unit, location, bills }) plus invoiceNumber / description / payment for its
 // "You're paying for" card, so one payment screen serves both.
 export function fetchRequestInvoice(requestId) {
   return simulate(() => {
@@ -402,12 +383,12 @@ export function fetchRequestInvoice(requestId) {
       requestId,
       invoiceNumber: invoice.number,
       description: invoice.description, // "Office Suites · 12 months"
-      paymentFrequency: request.summary?.paymentFrequency ?? null,
+      payment: request.summary?.payment ?? null, // "In full, upfront"
       outstanding: request.payment ? 0 : invoice.amount,
       dueDate: request.payment ? null : invoice.dueDate,
       unit: request.unit?.name ?? null,
       location: request.unit?.location ?? null,
-      // One row per invoice line (installment, deposit), so PaymentScreen lists them separately.
+      // One row per invoice line (rent, deposit, CR fee), so PaymentScreen lists them separately.
       // `number` is the row's bold title (unique per line), `periodLabel` its caption.
       bills: invoice.lineItems.map((item) => ({
         number: item.label,
@@ -664,7 +645,7 @@ export function bookMeetingRoom(payload) {
       type: "booking",
       title: "Meeting room booked",
       body: `${room.name} · ${formatDate(booking.date)}, ${formatTime(booking.start)} – ${formatTime(end)}.`,
-      target: { screen: "MeetingRooms", params: undefined },
+      target: null, // Meeting Rooms was removed (2026-10-14) — nothing to open
     });
     return clone(booking);
   });
@@ -688,7 +669,7 @@ export function cancelBooking(bookingId) {
       type: "booking",
       title: "Booking cancelled",
       body: `${booking.roomName} · ${formatDate(booking.date)}, ${formatTime(booking.start)} – ${formatTime(booking.end)}.`,
-      target: { screen: "MeetingRooms", params: undefined },
+      target: null, // Meeting Rooms was removed (2026-10-14) — nothing to open
     });
     return { bookingId, status: "cancelled" };
   });

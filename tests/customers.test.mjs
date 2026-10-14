@@ -4,20 +4,21 @@
 // carries CPR / passport numbers (GET /customers is public). A created customer is never linked to the login.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { api, auth, setRoutes, status, json, resetCalls, callsTo } from "./helpers.mjs";
+import { api, auth, setRoutes, status, json, resetCalls, callsTo, TEST_OTP_CODE } from "./helpers.mjs";
 import { toApiCustomer, CUSTOMER_FIXED_FIELDS } from "../services/apiMappers.js";
-import { MOCK_OTP_CODE } from "../services/mockApi.js";
 import { customerDataSource } from "../services/customerService.js";
 
 const signUp = (overrides = {}) => ({
   companyName: "  Test Holdings ",
   customerName: " Test Person ",
-  activity: "702 Management consultancy activities",
+  gender: "m",
+  activities: ["702 Management consultancy activities", "6201 Computer programming"],
   email: ` customer-${Math.random().toString(36).slice(2)}@example.com `,
   phoneCountry: "BH",
   countryCode: "+973",
   phoneNumber: "36123456",
   nationality: "Bahrain",
+  idType: "cpr",
   cprNumber: "880112345",
   passportNumber: "",
   remarks: " Need a 4-desk office. ",
@@ -50,14 +51,14 @@ test("toApiCustomer: company = customer, the person = its owner; fixed codes as 
     lmraStatus: 0,
     isVatOn: 0,
     company_id: 2,
-    owners: [{ name: "Test Person", mobile: "0097336123456", email: "a@example.com", country: "Bahrain", type: "o" }],
+    owners: [{ name: "Test Person", mobile: "0097336123456", email: "a@example.com", country: "Bahrain", gender: "m", type: "o" }],
   });
   assert.deepEqual(CUSTOMER_FIXED_FIELDS, { status: 1, isIncubation: 0, lmraStatus: 0, isVatOn: 0, company_id: 2 });
 });
 
-test("never sent: CPR / passport numbers, activity, remarks; nationality 'Other' → no country", () => {
+test("never sent: CPR / passport numbers, activities, remarks; nationality 'Other' → no country", () => {
   const body = JSON.stringify(toApiCustomer(signUp({ nationality: "Other", cprNumber: "", passportNumber: "P1234567" })));
-  assert.doesNotMatch(body, /880112345|P1234567|cpr|passport|activity|remarks|Need a 4-desk/i);
+  assert.doesNotMatch(body, /880112345|P1234567|cpr|passport|activit|6201|remarks|Need a 4-desk/i);
   assert.equal(JSON.parse(body).owners[0].country, null);
 });
 
@@ -66,7 +67,8 @@ test("switched off (default): sign-up makes NO request and reports 'disabled'", 
   setRoutes({ "/customers": acceptCustomer() });
   const result = await api.registerNewUser(signUp());
   assert.equal(result.customer.status, "disabled");
-  assert.equal(callsTo(""), 0);
+  assert.equal(callsTo("/customers"), 0);
+  assert.equal(callsTo(""), callsTo("/sendotp"), "only the verification code is requested");
   assert.equal(posted.length, 0);
 });
 
@@ -80,7 +82,7 @@ test("success: one JSON POST to /customers → recorded; no session is created a
   assert.equal(posted[0].headers["Content-Type"], "application/json");
   assert.deepEqual(posted[0].body, toApiCustomer(values));
 
-  const verified = await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE });
+  const verified = await api.verifyEmail({ email: result.email, code: TEST_OTP_CODE });
   assert.deepEqual(verified, { verified: true }, "never a session — signing in needs the MAZ login");
   // Even a hand-built session naming the created customer is not verified → no customer data.
   auth.setCurrentSession({ token: "forged", user: { email: result.email, customerId: "1", identity: "maz" } });
@@ -98,7 +100,7 @@ test("422 → customer failed (VALIDATION, field names kept); the account and th
   assert.equal(result.customer.status, "failed");
   assert.equal(result.customer.code, "VALIDATION");
   assert.equal(result.enquiry.status, "recorded", "the enquiry is sent independently");
-  const verified = await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE });
+  const verified = await api.verifyEmail({ email: result.email, code: TEST_OTP_CODE });
   assert.equal(verified.verified, true, "the demo verification still works");
 });
 

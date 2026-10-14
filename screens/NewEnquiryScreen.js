@@ -18,6 +18,7 @@ import { useTheme } from "../theme/ThemeContext";
 import { useAccountState } from "../auth/AuthContext";
 import InfoNote from "../components/InfoNote";
 import { DEMO_NOTES } from "../data/demoNotes";
+import { homeRoute } from "../utils/navigation";
 
 const NO_CONTRACT = "Not about a specific contract";
 const contractLabel = (contract) => `${contract.id} · ${contract.unit}`;
@@ -65,7 +66,7 @@ export default function NewEnquiryScreen({ navigation, route }) {
     if (result) {
       navigation.reset({
         index: 1,
-        routes: [{ name: "HomeDashboard" }, { name: "Support", params: { submitted: true } }],
+        routes: [homeRoute(), { name: "Support", params: { submitted: true } }],
       });
     }
   });

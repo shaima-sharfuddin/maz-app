@@ -164,7 +164,7 @@ export default function RequestInvoiceScreen({ navigation, route }) {
           <Block title="Details">
             {summary?.plan ? <Line label="Service" value={summary.plan} /> : null}
             {summary?.term ? <Line label="Lease length" value={summary.term} /> : null}
-            {summary?.paymentFrequency ? <Line label="Payment frequency" value={summary.paymentFrequency} /> : null}
+            {summary?.payment ? <Line label="Payment" value={summary.payment} /> : null}
             {unit ? <Line label="Unit" value={unitWithLocation(unit.name, unit.location)} /> : null}
           </Block>
 

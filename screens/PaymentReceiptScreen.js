@@ -8,6 +8,7 @@ import { formatDate } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
 import { TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
+import { homeRoute } from "../utils/navigation";
 
 // Payment Successful — shown after every (mock) payment: an office request's invoice ({ requestId }) or a
 // contract's outstanding balance ({ contractId }). receipt: { receipt, amount, paidDate, method, requestId |
@@ -113,7 +114,7 @@ export default function PaymentReceiptScreen({ navigation, route }) {
               <AnimatedButton
                 label="Go to dashboard"
                 variant="ghost"
-                onPress={() => navigation.reset({ index: 0, routes: [{ name: "HomeDashboard" }] })}
+                onPress={() => navigation.reset({ index: 0, routes: [homeRoute()] })}
               />
             </View>
           </FadeIn>

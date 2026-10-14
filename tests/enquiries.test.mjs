@@ -2,11 +2,10 @@
 // fake fetch in helpers.mjs — nothing ever reaches MAZ. Sending is OFF unless EXPO_PUBLIC_SEND_ENQUIRIES=true.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { api, setRoutes, status, json, networkDown, calls, resetCalls, callsTo } from "./helpers.mjs";
+import { api, setRoutes, status, json, networkDown, calls, resetCalls, callsTo, TEST_OTP_CODE } from "./helpers.mjs";
 import { toApiEnquiry, ENQUIRY_FIXED_FIELDS } from "../services/apiMappers.js";
 import { enquiryDate } from "../services/serviceConfig.js";
 import { newUserSignUpSchema } from "../validation/schemas.js";
-import { MOCK_OTP_CODE } from "../services/mockApi.js";
 import { toISODate } from "../utils/formatDate.js";
 
 // What NewUserSignUpScreen submits (phone already split into dial code + national digits). Unique per call so the
@@ -14,12 +13,14 @@ import { toISODate } from "../utils/formatDate.js";
 const signUp = (overrides = {}) => ({
   companyName: "  Test Holdings ",
   customerName: " Test Person ",
-  activity: "702 Management consultancy activities",
+  gender: "m",
+  activities: ["702 Management consultancy activities", "6201 Computer programming"],
   email: ` enquiry-${Math.random().toString(36).slice(2)}@example.com `,
   phoneCountry: "BH",
   countryCode: "+973",
   phoneNumber: "36123456",
   nationality: "Bahrain",
+  idType: "cpr",
   cprNumber: "880112345",
   passportNumber: "",
   remarks: " Need a 4-desk office from November. ",
@@ -64,7 +65,7 @@ test("toApiEnquiry maps the sign-up fields and adds the fixed values — nothing
 
 test("display labels and sensitive / app-only fields are never sent", () => {
   const keys = Object.keys(toApiEnquiry(signUp(), { date: "2026-10-05" }));
-  for (const key of ["status_label", "Channel_label", "ServiceType_label", "nationality", "cprNumber", "passportNumber", "activity"]) {
+  for (const key of ["status_label", "Channel_label", "ServiceType_label", "nationality", "cprNumber", "passportNumber", "activities", "gender"]) {
     assert.ok(!keys.includes(key), key);
   }
 });
@@ -98,7 +99,7 @@ test("switched off (default): sign-up works and makes NO request", async () => {
   assert.equal(api.areEnquiriesLive(), false);
   const result = await api.registerNewUser(signUp());
   assert.deepEqual(result.enquiry, { status: "disabled" });
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, ["/sendotp"], "only the verification code is requested");
 });
 
 // ---- switched on ----
@@ -115,7 +116,7 @@ test("success: one JSON POST to /enquiries with the mapped body → recorded; th
   assert.deepEqual(posted[0].body, toApiEnquiry(input, { date: toISODate(new Date()) }));
   assert.equal(result.enquiry.enquiry.email, input.email.trim(), "MAZ's echoed record is returned");
 
-  const verified = await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE });
+  const verified = await api.verifyEmail({ email: result.email, code: TEST_OTP_CODE });
   assert.equal(verified.verified, true, "the OTP flow is unchanged");
 });
 
@@ -135,7 +136,7 @@ test("422 validation error → failed (VALIDATION, field names kept); the demo a
 
   const error = await api.submitSignUpEnquiry(signUp()).catch((e) => e);
   assert.deepEqual(error.fields, ["mobile"]);
-  assert.equal((await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE })).verified, true);
+  assert.equal((await api.verifyEmail({ email: result.email, code: TEST_OTP_CODE })).verified, true);
 });
 
 test("server error → failed SERVER; its HTML / stack trace never reaches the message", async () => {
