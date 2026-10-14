@@ -17,6 +17,8 @@ const form = (overrides = {}) => ({
   gender: "m",
   activities: [ACTIVITIES[3]],
   email: `activity-${Math.random().toString(36).slice(2)}@example.com`,
+  password: "Secret1234",
+  confirmPassword: "Secret1234",
   phoneCountry: "BH",
   phoneNumber: "36123456",
   nationality: "Bahrain",

@@ -13,7 +13,7 @@ import { DEFAULT_PHONE_COUNTRY, PHONE_COUNTRY_OPTIONS, findCountry, flagOf } fro
 import { useTheme } from "../theme/ThemeContext";
 
 // The account fields collected at New User sign-up (rules: newUserSignUpSchema in validation/schemas.js):
-// Company Name, Customer Name, Activities (sign-up only — not on EditProfile), Email, Mobile Number (country code + number),
+// Company Name, Customer Name, Activities (sign-up only — not on EditProfile), Email, Password + Confirm (sign-up only), Mobile Number (country code + number),
 // Remarks (optional, sign-up only), Nationality, an ID — CPR Number or Passport Number, the user's choice whatever
 // their nationality — then Gender.
 // Shared by NewUserSignUp (one group per step) and EditProfile (all at once) so the two never drift.
@@ -24,6 +24,8 @@ export const EMPTY_ACCOUNT_DETAILS = {
   gender: "", // MAZ GENDER code ("m" / "f")
   activities: [], // one or more activity labels
   email: "",
+  password: "",
+  confirmPassword: "",
   phoneCountry: DEFAULT_PHONE_COUNTRY, // ISO code of the dial code; any country can be picked
   phoneNumber: "",
   nationality: "",
@@ -126,6 +128,34 @@ export function EmailField({ control, readOnly = false }) {
           Your verified sign-in email. Contact MAZ to change it.
         </Text>
       ) : null}
+    </>
+  );
+}
+
+// Password + Confirm password for the new MAZ login (sign-up only; rules: newUserSignUpSchema). Never shown on Review.
+export function PasswordFields({ control }) {
+  return (
+    <>
+      <FormField
+        control={control}
+        name="password"
+        component={StyledInput}
+        label="Password"
+        placeholder="At least 8 characters, a letter and a number"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+      />
+      <FormField
+        control={control}
+        name="confirmPassword"
+        component={StyledInput}
+        label="Confirm Password"
+        placeholder="Enter your password again"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+      />
     </>
   );
 }

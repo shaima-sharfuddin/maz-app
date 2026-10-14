@@ -3,8 +3,9 @@ import { ACTIVITIES as SAMPLE_ACTIVITIES } from "../data/formOptions";
 
 // The New User sign-up's Activity options — the ONLY activities entry point for screens.
 // REAL: GET /activities (MAZ's business activities, e.g. "702 Management consultancy activities" — the leading code
-// is kept in the label). If MAZ's list can't be loaded or comes back empty, the labelled SAMPLE options
-// (data/formOptions.js ACTIVITIES) are used instead, so sign-up never blocks.
+// is kept in the label). MAZ answers it only with a login (Bearer token, sent automatically by apiClient); signed out —
+// as on the sign-up form — it answers 401. If MAZ's list can't be loaded (401, network, server) or comes back empty,
+// the labelled SAMPLE options (data/formOptions.js ACTIVITIES) are used instead, so sign-up never blocks.
 // The chosen label is kept in the app only (sign-up → session → office / CR request). It is NOT saved to MAZ: there
 // is no write endpoint, and /activities returns no id to send (customers' activityId values don't match its codes).
 //   → { options: [label], source: "maz" | "sample" }

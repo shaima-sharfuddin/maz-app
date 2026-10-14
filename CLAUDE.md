@@ -59,8 +59,20 @@ an earlier TypeScript version — the conversion is complete and current files a
   INVALID_EMAIL; a 2xx body with status / success false or an `error` counts as a failure. MAZ's SUCCESS body is still
   unconfirmed (any 2xx = success). The demo code 123456 / MOCK_OTP_CODE is GONE. registerNewUser → otp { status "sent" |
   "failed" }; a failed send never blocks sign-up — VerifyAccount { codeSent: false, codeError } shows a banner and
-  enables Resend at once. Then VerifyAccount replaces itself with Login { email, justVerified } ("Email verified. Log in
-  with the MAZ account details MAZ gives you."). Sign-up does NOT create a MAZ login. The sign-up Activities are therefore no longer on
+  enables Resend at once. Then VerifyAccount replaces itself with Login { email, justVerified } ("Email verified and
+  your account is created. Log in with your email and password.").
+- New User MAZ LOGIN (2026-10-14): services/registerService.js createMazLogin → POST /register (public, no token) with
+  apiMappers.toApiRegister: { name (company), username + email (the sign-up email), password, phone + mobile (both the Mobile Number, "00…"),
+  ownername (Customer Name), cpr_no / passport_no (only the chosen ID, the other null), country (Nationality as chosen,
+  incl. "Other"), gender "m" / "f" }. ALWAYS ON. ORDER (2026-10-14): "Submit & verify email" (registerNewUser) only
+  sends the code — no login yet; VerifyAccount calls registrationService.verifyAndRegister({ email, code }) → POST
+  /verifyotp, THEN POST /register → Login. The sign-up details (incl. password) wait in registrationService's memory
+  (never route params / storage; cleared once the login exists; lost on restart → SIGN_UP_EXPIRED "Sign up again").
+  The verified state is remembered, so "Try again" after a failed /register retries only /register. Errors on
+  VerifyAccount: 422 naming username / email → ACCOUNT_EXISTS ("Log in"), other 422 / a failed 2xx body →
+  REGISTRATION_FAILED. Sign-up's Contact step has Password + Confirm Password (PasswordFields; the app's password rule).
+  The password is never stored, put in navigation params or sent anywhere else. UNCONFIRMED: MAZ's success body, its 422
+  field names, and whether it accepts null phone / mobile / ID. Tests: tests/register.test.mjs. The sign-up Activities are no longer on
   any session (MAZ logins carry activities null) — ReviewRequest sends null until MAZ stores activities
 - Demo session boundary: authService.setCurrentSession → services/mock/demoSession.js. When the ACCOUNT (sign-in
   email) changes or signs out, every session-only demo store is cleared (demo payments + payments still processing,
@@ -130,7 +142,7 @@ Simplified per the client's demo feedback (2026-10-07):
    ISO — data/countryCodes.js, mobileNumberIssue in validation/schemas.js; kept in the app, and sent to MAZ only as the enquiry's `mobile` when
    EXPO_PUBLIC_SEND_ENQUIRIES=true — see enquiryService) · Identification:
    Nationality, then CPR Number for Bahrain or Passport Number otherwise — then a Review step) → VerifyAccount
-   (6-digit code REALLY emailed by MAZ — POST /sendotp / /verifyotp) → Login (sign-up creates no MAZ login)
+   (6-digit code REALLY emailed by MAZ — POST /sendotp / /verifyotp) → POST /register creates the MAZ login once the code is verified → Login with the email + password chosen at sign-up
    Existing User: Login → dashboard
 3. Home dashboard (new user state: "What are you looking for?" services + their office request; tenant state:
    contract status, quick actions)
@@ -172,20 +184,21 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   the label, searchable), falling back to the SAMPLE ACTIVITIES with a note + Try again; ActivityField in AccountDetailsFields — shown AT ONCE, no
   loading placeholder (2026-10-14): WelcomeScreen prefetches (prefetchActivityOptions), the form starts from
   peekActivityOptions() (last answer, else the samples as "pending") and swaps in MAZ's list, dropping picks no longer offered; restored by the recruiter
-  2026-10-10, shown on the Review step too) → Contact (Email) → Identification (Nationality
+  2026-10-10, shown on the Review step too) → Contact (Email, Password + Confirm) → Identification (Nationality
   GCC_NATIONALITIES SelectField, then "ID type" (ID_TYPE_OPTIONS: CPR Number / Passport Number — the user's choice for
   ANY nationality, 2026-10-14) and that number, masked with StyledInput `revealable` (useIdentityFields watches idType,
   swaps the field and clears the other one), then Gender — required SegmentedControl (GenderField, GENDER_OPTIONS:
   stores MAZ's code "m" / "f")) → Review (DetailCard of the
   entered values, ID masked "•••••1234"; "Submit & verify email" / "Edit details" → step 1). Each step's Continue is
   disabled until that step's fields pass the schema; Back (button, hardware, swipe — usePreventRemove) goes to the
-  previous step. Submit → quickSignUp (unverified account) → VerifyAccount { email }. The Review step says "Demo
-  registration — your details are kept in this app only. Your account isn't created with MAZ yet." (LOCAL / DEMO —
-  SERVICE_SOURCES.customerRegistration "mock"; POST /customers not wired, see Open questions)
+  previous step. Submit → registerNewUser (quickSignUp + /sendotp — no MAZ login yet) → VerifyAccount { email }
+  (verifyAndRegister: /verifyotp then POST /register). The Review step says "We'll email you a verification code. Once
+  your email is verified, your MAZ account is created with your email and password." (+ the enquiry / customer
+  sentences when those switches are on)
 - screens/VerifyAccountScreen.js ✅ — the New User OTP step (signed-out group): 6-digit OtpInput (auto-submits), REAL
   code emailed by MAZ (otpService — see "Auth & sessions"), resend with 30s cooldown (none when the first send failed:
-  codeSent false → error banner), verifyEmail → replaces itself with Login { email, justVerified } (sign-up creates no
-  session or MAZ login). Tests: tests/otp.test.mjs (helpers.mjs fakes /sendotp + /verifyotp; TEST_OTP_CODE)
+  codeSent false → error banner), verifyEmail → replaces itself with Login { email, justVerified } (no session —
+  verifyAndRegister created the MAZ login with POST /register right after the code passed). Tests: tests/otp.test.mjs (helpers.mjs fakes /sendotp + /verifyotp; TEST_OTP_CODE)
 - screens/LoginScreen.js ✅ — the ONLY way in: REAL MAZ login (logIn → services/mazAuth.js POST /login) → signIn(session) —
   the dashboard follows the session's customerId (useAccountState: customer → "tenant", none → "newUser") (navigator
   switches automatically). Shows the session-expired notice and the justVerified note; wrong credentials → ErrorBanner
@@ -555,7 +568,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   caption); and TYPES (REAL) — VIOLATION_TYPES_ARE_REAL, fetchViolationTypes() → [{ name, code, label }] by code (public
   catalogue, no customer needed). Tests: tests/api-integrations.test.mjs
 - services/activityService.js — fetchActivityOptions() → { options: [label], source "maz" | "sample" }: REAL GET
-  /activities (records with no words, e.g. a bare "332", left out), else the SAMPLE ACTIVITIES. Never rejects. The
+  /activities (needs a login — Bearer token; records with no words, e.g. a bare "332", left out), else (401 signed out,
+  failure, empty) the SAMPLE ACTIVITIES. Never rejects. The
   chosen label is app-only (no write endpoint; /activities has no id — customers' activityId don't match its codes)
 - services/enquiryService.js + services/registrationService.js — New User ENQUIRY → POST /enquiries (2026-10-10), the
   app's ONLY write to MAZ, OFF unless the bundler starts with EXPO_PUBLIC_SEND_ENQUIRIES=true (serviceConfig
@@ -616,7 +630,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   the dashboard is assembled in contractService.
   Contract ids in the app are the API contract number (name, "CN-2026-00001"); bills are receipts by vch_no.
   fetchCustomer(id) refuses a record whose owners name a DIFFERENT customer (NOT_FOUND). Catalogues (2026-10-10):
-  fetchViolationTypes / fetchActivities — one public list each (no paging envelope; ?page ignored), cached per app
+  fetchViolationTypes / fetchActivities — one list each (no paging envelope; ?page ignored; since 2026-10-14 they NEED A
+  LOGIN — apiClient's Bearer token; signed out MAZ answers 401 → NOT_AUTHORIZED, no sign-out), cached per app
   run, shared by simultaneous callers; failures and EMPTY lists aren't cached. Units' status / std_rent_amt / max_cr
   are NOT used (meaning unconfirmed — std_rent_amt is never shown as a price)
 - utils/formatUnit.js — unitWithLocation(unit, location): "Office 204 · Seef District" or just "INC 009"
@@ -830,7 +845,9 @@ or showing an error/result. Nothing may do nothing when tapped.
   (c) how location is chosen — currently a placeholder "Seef District" (MAZ assigns the unit). All live in
   data/pricing.js and are labelled as samples on screen via RequestSummaryCard's isPlaceholder note.
 - Activity options come from GET /activities; ACTIVITIES in data/formOptions.js is only the SAMPLE fallback. Open: the
-  activity id to save with a customer / contract (see above).
+  activity id to save with a customer / contract (see above). SIGN-UP SHOWS THE SAMPLES TODAY (2026-10-14): GET /activities
+  now answers 401 without a login, and sign-up happens signed out — ask MAZ to make it public. GET /activity (singular,
+  given as the activity API) answers 404 — confirm with MAZ which route is meant.
 - New User polish (2026-10-07) — backend needed for: (a) service details (location, capacity, size, furnishing,
   amenities — no screen shows plan.details now); (b) "Action required" on a request (a field MAZ sets
   + a way for the customer to respond — the unused ActionRequiredCard UI was removed in Cleanup 4; rebuild it once the field exists); (c) a requests
@@ -915,8 +932,8 @@ or showing an error/result. Nothing may do nothing when tapped.
     (mockApi.quickSignUp, labelled demo on screen); the transport's only write method is post(), used only by
     mazAuth (POST /login, /logout), otpService (POST /sendotp, /verifyotp), enquiryService (POST /enquiries) and customerCreationService (POST /customers) (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
   • Auth — LIVE (2026-10-14): POST /login + POST /logout (services/mazAuth.js); the login's user.customer_id links it to
-    a customer. Still missing: GET /me (re-check a restored token), password reset, token refresh, and a way for a
-    sign-up to get a MAZ login. Per-tenant filtering — PENDING: no server-side filtering (?customer_id= is ignored, so every tenant's
+    a customer. Still missing: GET /me (re-check a restored token), password reset, token refresh, (sign-ups now get a MAZ
+    login via POST /register). Per-tenant filtering — PENDING: no server-side filtering (?customer_id= is ignored, so every tenant's
     contracts are downloaded) — needs a per-user endpoint
   • No unit location field; no receipt period dates (only the description text); no payment / renewal endpoints
   • Server debug mode is on (404s return stack traces) — ask MAZ to turn it off

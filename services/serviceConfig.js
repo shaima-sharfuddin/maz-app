@@ -13,7 +13,8 @@ import { toISODate } from "../utils/formatDate";
 // customer data needs a session verified by services/liveAuth.js, whatever `auth` says here.
 export const SERVICE_SOURCES = Object.freeze({
   auth: "real", // POST /login + POST /logout — services/mazAuth.js (Bearer token on every request)
-  // New User sign-up: a LOCAL / DEMO form (mockApi.quickSignUp) — it doesn't create a MAZ login. The MAZ customer RECORD: REAL
+  registration: "real", // New User sign-up creates the MAZ LOGIN: POST /register — services/registerService.js (always on)
+  // The rest of sign-up is LOCAL / DEMO (mockApi.quickSignUp). The MAZ customer RECORD: REAL
   // POST /customers (services/customerCreationService.js) — but OFF unless the bundler is started with
   // EXPO_PUBLIC_SEND_CUSTOMERS=true (customersEnabled below). Its body is copied from the existing records, not a MAZ
   // spec (apiMappers.toApiCustomer). A created customer isn't linked to any login by the app.
@@ -39,7 +40,7 @@ export const SERVICE_SOURCES = Object.freeze({
   emailVerification: "real", // New User sign-up code: MAZ emails it (POST /sendotp) and checks it (POST /verifyotp)
   violations: "mock", // customer-specific violation NOTICES: no MAZ endpoint — services/mock/mockViolations.js ("Demo data")
   violationTypes: "real", // GET /violations — MAZ's catalogue of violation TYPES (not notices) — ViolationTypesScreen
-  activities: "real", // GET /activities — sign-up Activity options; falls back to the SAMPLE list if it fails / is empty
+  activities: "real", // GET /activities (needs a login) — sign-up Activity options; SAMPLE list if it fails / 401s / is empty
 });
 
 // CONFIRMED business rule (client, 2026-10-08): an ACTIVE contract shows the expiry / renewal alert and can request a

@@ -87,6 +87,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (path.startsWith("/customers")) return json(customerBody())();
   if (path.startsWith("/login")) return json(loginBody())();
   if (path.startsWith("/logout")) return json('{"message":"Logged out"}')();
+  if (path.startsWith("/register")) return json('{"message":"Registered"}')();
   if (path.startsWith("/sendotp")) return json('{"message":"OTP sent"}')();
   if (path.startsWith("/verifyotp")) return verifyOtpAnswer(init);
   throw new Error(`Unexpected request in test: ${path}`);

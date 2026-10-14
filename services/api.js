@@ -62,7 +62,7 @@ export {
   fetchViolationTypes,
 } from "./violationService";
 export { fetchActivityOptions, peekActivityOptions, prefetchActivityOptions } from "./activityService";
-export { registerNewUser } from "./registrationService";
+export { registerNewUser, verifyAndRegister } from "./registrationService";
 // Email verification — REAL (POST /sendotp, /verifyotp).
 export { sendVerificationCode, resendVerificationCode, verifyEmail } from "./otpService";
 export { submitSignUpEnquiry, areEnquiriesLive } from "./enquiryService";

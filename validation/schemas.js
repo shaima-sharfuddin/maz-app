@@ -192,6 +192,8 @@ export const newUserSignUpSchema = z
       .array(z.string().min(1, "Select activities from the list").max(200, "Select activities from the list"))
       .min(1, "Select at least one activity"),
     email,
+    password,
+    confirmPassword: z.string().min(1, "Confirm your password"),
     phoneCountry: requiredSelect("Country code"), // ISO code; the dial code is derived (data/countryCodes.js)
     phoneNumber: z.string(),
     nationality: requiredSelect("Nationality"),
@@ -202,6 +204,9 @@ export const newUserSignUpSchema = z
     remarks: z.string().trim().max(500, "Keep remarks under 500 characters").optional(),
   })
   .superRefine((values, ctx) => {
+    if (values.confirmPassword && values.confirmPassword !== values.password) {
+      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Passwords don't match" });
+    }
     const phoneIssue = values.phoneCountry ? mobileNumberIssue(values.phoneCountry, values.phoneNumber) : null;
     if (phoneIssue) ctx.addIssue({ code: "custom", path: ["phoneNumber"], message: phoneIssue });
     if (values.idType === "cpr") {

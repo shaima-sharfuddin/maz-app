@@ -5,7 +5,7 @@
 //   contracts  — today's single contract belongs to ANOTHER customer than the demo login
 //   units      — extra fields (status, std_rent_amt, max_cr) the app must not use
 //   violations — a catalogue of TYPES ({ name: "#186 …" }), not notices
-//   activities — { name: "702 …" } only, no id, no paging envelope
+//   activities — { name: "702 …" } only, no id, no paging envelope; needs a login since 2026-10-14 (401 signed out)
 // Catalogues are cached for the process, and failures / empty lists aren't — so within this file the failure and
 // empty-list tests run BEFORE the success tests that fill the cache.
 import { test } from "node:test";
@@ -24,11 +24,15 @@ import {
   callsTo,
   loginLiveCustomer,
   rejectionOf,
+  requests,
   TEST_OTP_CODE,
 } from "./helpers.mjs";
 import { toUiCustomer, customerIdOf, toUiCodedName } from "../services/apiMappers.js";
 import { ACTIVITIES as SAMPLE_ACTIVITIES } from "../data/formOptions.js";
 import { SERVICE_SOURCES } from "../services/serviceConfig.js";
+
+const header = (request, name) =>
+  Object.entries(request.headers).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
 
 // ---- synthetic fixtures ----
 const SENSITIVE = ["SYNTH-CPR-0001", "SYNTH-PP-0001", "+973 0000 0001", "owner@synthetic.test", "SYNTH-CR-1"];
@@ -189,7 +193,18 @@ test("activities: a failed, malformed or empty /activities falls back to the lab
   }
 });
 
+test("activities: signed out (the sign-up form), MAZ answers 401 → the sample list, nobody is signed out", async () => {
+  auth.setCurrentSession(null);
+  routes({ "/activities": json('{"message":"Unauthenticated."}', 401) });
+  resetCalls();
+  const result = await api.fetchActivityOptions();
+  assert.equal(result.source, "sample");
+  assert.deepEqual(result.options, SAMPLE_ACTIVITIES);
+  assert.equal(header(requests[0], "Authorization"), undefined, "no token to send while signed out");
+});
+
 test("activities: MAZ's labels replace the samples — leading codes kept, blanks and duplicates dropped, cached", async () => {
+  const session = await loginLiveCustomer(null); // a New User login: no customer, but a token
   routes();
   resetCalls();
   const [first, second] = await Promise.all([api.fetchActivityOptions(), api.fetchActivityOptions()]);
@@ -204,12 +219,8 @@ test("activities: MAZ's labels replace the samples — leading codes kept, blank
   assert.deepEqual(second, first);
   await api.fetchActivityOptions();
   assert.equal(callsTo("/activities"), 1, "one request for simultaneous and later calls");
-});
-
-test("activities: no customer or session needed (sign-up happens signed out)", async () => {
-  auth.setCurrentSession(null);
-  routes();
-  assert.equal((await api.fetchActivityOptions()).source, "maz");
+  const request = requests.find((r) => r.path.startsWith("/activities"));
+  assert.equal(header(request, "Authorization"), `Bearer ${session.token}`, "the login's token is sent");
 });
 
 // ---------------------------------------------------------------- violation types (failure BEFORE success)
@@ -303,10 +314,10 @@ test("sign-up loads Activity options through services/api", () => {
 });
 
 // ---------------------------------------------------------------- customer registration
-// The login is LOCAL / DEMO. POST /customers exists but is switched off by default (customers.test.mjs): with the
-// default settings sign-up stays in the app and says so.
+// The MAZ login is created by POST /register (register.test.mjs). POST /customers exists but is switched off by default
+// (customers.test.mjs): the demo account + verification never create a customer record.
 
-test("registration is local: sign-up + demo verification make zero network requests", async () => {
+test("the demo account + verification send no customer record or enquiry", async () => {
   auth.setCurrentSession(null);
   routes();
   resetCalls();
@@ -340,8 +351,8 @@ test("customer creation is a switched-off real POST; nothing else creates a cust
   assert.doesNotMatch(source("services/enquiryService.js") + source("services/registrationService.js"), /\/customers/);
 });
 
-test("sign-up says the account itself stays in the app; VerifyAccount uses the REAL emailed code (no demo code)", () => {
-  assert.match(source("screens/NewUserSignUpScreen.js"), /your account isn't created with MAZ yet/);
+test("sign-up says the MAZ account is created; VerifyAccount uses the REAL emailed code (no demo code)", () => {
+  assert.match(source("screens/NewUserSignUpScreen.js"), /Once your email is verified, your MAZ account is created/);
   const verify = source("screens/VerifyAccountScreen.js");
   assert.match(verify, /code we emailed to/);
   assert.doesNotMatch(verify, /MOCK_OTP_CODE|Demo verification|123456/);

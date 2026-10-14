@@ -13,13 +13,15 @@ import InfoNote from "../components/InfoNote";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import { verifyAccountSchema } from "../validation/schemas";
-import { verifyEmail, resendVerificationCode } from "../services/api";
+import { verifyAndRegister, resendVerificationCode } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 
 const RESEND_COOLDOWN_S = 30;
 
 // Email OTP after New User sign-up — REAL (2026-10-14): MAZ emails the code (POST /sendotp, sent by registerNewUser on
-// "Submit & verify email"; Resend asks again) and checks it (POST /verifyotp). Afterwards → Login: signing in needs the MAZ account details (services/mazAuth.js); sign-up doesn't create a login.
+// "Submit & verify email"; Resend asks again). Verify = verifyAndRegister: MAZ checks the code (POST /verifyotp), and
+// only then creates the MAZ login (POST /register) from the sign-up details. Afterwards → Login with the email +
+// password the user chose.
 export default function VerifyAccountScreen({ navigation, route }) {
   const { colors } = useTheme();
   const email = route.params?.email ?? "";
@@ -37,7 +39,7 @@ export default function VerifyAccountScreen({ navigation, route }) {
     formState: { isValid },
   } = useZodForm(verifyAccountSchema, { code: "" });
 
-  const verify = useSubmit(verifyEmail);
+  const verify = useSubmit(verifyAndRegister);
   const resend = useSubmit(resendVerificationCode);
   const [secondsLeft, setSecondsLeft] = useState(codeSent ? RESEND_COOLDOWN_S : 0);
   const [resentNotice, setResentNotice] = useState(false);
@@ -51,13 +53,28 @@ export default function VerifyAccountScreen({ navigation, route }) {
 
   const onSubmit = handleSubmit(async ({ code }) => {
     const result = await verify.submit({ email, code });
-    if (result) {
-      // Sign-up doesn't create a MAZ login (the app has only the real MAZ login), so verification ends at Login.
-      navigation.replace("Login", { email, justVerified: true });
-    } else {
-      setValue("code", "", { shouldValidate: false }); // clear a wrong code so it can be retyped
-    }
+    // The MAZ login now exists (POST /register) but there's no session: verification ends at Login.
+    if (result) navigation.replace("Login", { email, justVerified: true });
   });
+
+  // Clear a wrong code so it can be retyped. Other failures keep it, so "Try again" can resubmit (once the code has
+  // passed, only the account creation is retried).
+  useEffect(() => {
+    if (verify.errorCode === "INVALID_CODE") setValue("code", "", { shouldValidate: false });
+  }, [verify.errorCode, setValue]);
+
+  const verifyErrorAction = () => {
+    switch (verify.errorCode) {
+      case "INVALID_CODE":
+        return {};
+      case "ACCOUNT_EXISTS":
+        return { retryLabel: "Log in", onRetry: () => navigation.replace("Login", { email }) };
+      case "SIGN_UP_EXPIRED":
+        return { retryLabel: "Sign up again", onRetry: () => navigation.navigate("NewUserSignUp") };
+      default:
+        return { onRetry: onSubmit };
+    }
+  };
 
   const onResend = async () => {
     setResentNotice(false);
@@ -119,8 +136,9 @@ export default function VerifyAccountScreen({ navigation, route }) {
               disabled={!isValid}
               loading={verify.loading}
             />
-            {/* A wrong code needs retyping, not a retry; network-type failures get "Try again". */}
-            <ErrorBanner message={verify.error} onRetry={verify.errorCode === "INVALID_CODE" ? undefined : onSubmit} />
+            {/* A wrong code needs retyping, not a retry; an existing account → Login; lost sign-up details → sign up
+                again; network-type failures get "Try again" (it retries only the account creation once the code passed). */}
+            <ErrorBanner message={verify.error} {...verifyErrorAction()} />
 
             <View style={{ alignItems: "center", marginTop: 16 }}>
               {secondsLeft > 0 ? (

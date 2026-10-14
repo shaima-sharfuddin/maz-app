@@ -62,9 +62,10 @@ export async function fetchCustomer(customerId) {
   return { ...customer, id: customer.id ?? String(customerId) };
 }
 
-// Reference catalogues — public lists with no customer data, one response each (no links / meta; ?page is ignored,
-// checked 2026-10-10). Like /units: fetched once per app run and shared by simultaneous callers; a failure or an
-// empty list isn't cached, so the next call (e.g. "Try again") asks MAZ again.
+// Reference catalogues — lists with no customer data, one response each (no links / meta; ?page is ignored,
+// checked 2026-10-10). Since 2026-10-14 MAZ requires a login for them: apiClient adds the session's Bearer token, and
+// signed out MAZ answers 401 (NOT_AUTHORIZED — nobody is signed out). Like /units: fetched once per app run and shared
+// by simultaneous callers; a failure or an empty list isn't cached, so the next call (e.g. "Try again") asks MAZ again.
 function cachedCatalogue(path, compare) {
   let promise = null;
   return () => {
@@ -93,6 +94,7 @@ export const fetchViolationTypes = cachedCatalogue("/violations", byCode);
 
 // GET /activities — MAZ's business activities ({ name: "702 Management consultancy activities" }, 165 today, no id)
 // → [{ name, code, label }], alphabetical by label. Used for the New User sign-up's Activity options.
+// Needs a login (Bearer token, added by apiClient) — signed out it answers 401, see activityService.
 export const fetchActivities = cachedCatalogue("/activities", byLabel);
 
 // EditProfile's pre-fill → { email, values: { companyName, customerName, email } }. `user` is the session user.

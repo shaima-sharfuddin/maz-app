@@ -15,6 +15,7 @@ import {
   ActivityField,
   CompanyFields,
   EmailField,
+  PasswordFields,
   MobileNumberField,
   RemarksField,
   IdentificationFields,
@@ -40,7 +41,7 @@ const STEPS = [
     label: "Contact",
     title: "Your contact details",
     subtitle: "We'll send a verification code to your email, and keep you updated on your request.",
-    fields: ["email", "phoneCountry", "phoneNumber", "remarks"],
+    fields: ["email", "password", "confirmPassword", "phoneCountry", "phoneNumber", "remarks"],
   },
   {
     label: "Identification",
@@ -142,7 +143,7 @@ export default function NewUserSignUpScreen({ navigation }) {
   const customerOutcome = (result) =>
     result.customer?.status === "recorded" ? "recorded" : result.customer?.status === "failed" ? "failed" : undefined;
 
-  const onSubmit = handleSubmit(async (formValues) => {
+  const onSubmit = handleSubmit(async ({ confirmPassword, ...formValues }) => {
     const payload = {
       ...formValues,
       // Mobile: dial code and national number kept separate ({ countryCode: "+971", phoneNumber: "501234567" });
@@ -156,9 +157,10 @@ export default function NewUserSignUpScreen({ navigation }) {
     if (!result) return; // the demo account failed — shown by the ErrorBanner below
     setOtpOutcome(result.otp);
     if (result.enquiry.status === "failed") {
+      const { password, ...enquiryDetails } = payload; // the resend sends only the enquiry — no password kept on screen
       setUnsentEnquiry({
         email: result.email,
-        payload,
+        payload: enquiryDetails,
         message: result.enquiry.message,
         code: result.enquiry.code,
         customer: customerOutcome(result),
@@ -191,6 +193,7 @@ export default function NewUserSignUpScreen({ navigation }) {
       return (
         <>
           <EmailField control={control} />
+          <PasswordFields control={control} />
           <MobileNumberField control={control} />
           <RemarksField control={control} />
         </>
@@ -221,19 +224,18 @@ export default function NewUserSignUpScreen({ navigation }) {
         ]}
         style={{ marginBottom: 16 }}
       />
-      {/* The LOGIN is always local (mockApi.quickSignUp). Only what's switched on is sent to MAZ: the enquiry
-          (EXPO_PUBLIC_SEND_ENQUIRIES) and / or the customer record (EXPO_PUBLIC_SEND_CUSTOMERS — no ID numbers). */}
+      {/* The MAZ login is created after the code is verified (VerifyAccount → POST /register). The enquiry (EXPO_PUBLIC_SEND_ENQUIRIES) and the customer
+          record (EXPO_PUBLIC_SEND_CUSTOMERS — no ID numbers) are sent only when switched on. */}
       <InfoNote style={{ marginBottom: 24 }}>
-        {enquiriesLive || customersLive
-          ? `${[
-              enquiriesLive ? "Your company, name, mobile, email and remarks are sent to MAZ as an enquiry." : null,
-              customersLive
-                ? "Your company, name, mobile, email, gender and nationality are sent to MAZ to create your customer record (your CPR / passport number isn't sent)."
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" ")} Your login itself is a demo, kept in this app only.`
-          : "We'll email you a verification code. Your other details are kept in this app only — your account isn't created with MAZ yet."}
+        {[
+          "We'll email you a verification code. Once your email is verified, your MAZ account is created with your email and password.",
+          enquiriesLive ? "Your company, name, mobile, email and remarks are also sent to MAZ as an enquiry." : null,
+          customersLive
+            ? "Your company, name, mobile, email, gender and nationality are also sent to MAZ to create your customer record."
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
       </InfoNote>
       {unsentEnquiry ? renderUnsentEnquiry() : renderSubmit()}
       <View style={{ marginTop: 8 }}>

@@ -18,6 +18,10 @@ export const ERROR_MESSAGES = {
   INVALID_CODE: "That code isn't right or has expired. Check your email, or resend a new code.",
   INVALID_EMAIL: "MAZ couldn't send a code to this email address. Check it and try again.",
   OTP_NOT_SENT: "We couldn't send your verification code. Please try again.",
+  // New User account creation (services/registerService.js — POST /register).
+  ACCOUNT_EXISTS: "An account with this email already exists. Log in instead.",
+  SIGN_UP_EXPIRED: "Your sign-up details are no longer available. Please sign up again.",
+  REGISTRATION_FAILED: "MAZ couldn't create your account with these details. Check them and try again, or contact MAZ.",
   // A 401 when the app sent no token (signed out): not a session problem, so no sign-out.
   NOT_AUTHORIZED: "MAZ didn't allow access to this information. Please try again later.",
 };

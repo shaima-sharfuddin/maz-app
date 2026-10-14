@@ -203,6 +203,32 @@ export function toApiEnquiry(signUp, { date }) {
 export const toApiSendOtp = (email) => ({ email: String(email ?? "").trim() });
 export const toApiVerifyOtp = (email, code) => ({ email: String(email ?? "").trim(), otp: String(code ?? "").trim() });
 
+// New User sign-up → MAZ's login (POST /register, services/registerService.js). Field names from MAZ's example request
+// (2026-10-14). The sign-in email is both the username and the contact email. Only the ID the user chose is sent — the
+// other is null (MAZ accepts either). phone and mobile: both the sign-up's Mobile Number, "00" + dial digits + number,
+// like the enquiry. country: the
+// Nationality as chosen ("Bahrain", "Other" …). gender: MAZ's code ("m" / "f").
+export function toApiRegister(signUp) {
+  const email = String(signUp.email ?? "").trim();
+  const dialDigits = String(signUp.countryCode ?? "").replace(/\D/g, "");
+  const national = String(signUp.phoneNumber ?? "").replace(/\D/g, "");
+  const number = dialDigits && national ? `00${dialDigits}${national}` : null;
+  const isCpr = signUp.idType === "cpr";
+  return {
+    name: String(signUp.companyName ?? "").trim(),
+    username: email,
+    password: String(signUp.password ?? ""),
+    phone: number,
+    mobile: number,
+    email,
+    ownername: String(signUp.customerName ?? "").trim(),
+    cpr_no: isCpr ? String(signUp.cprNumber ?? "").trim() || null : null,
+    passport_no: isCpr ? null : String(signUp.passportNumber ?? "").trim() || null,
+    country: String(signUp.nationality ?? "").trim() || null,
+    gender: signUp.gender || null,
+  };
+}
+
 // POST /customers — UNCONFIRMED by MAZ (2026-10-10): the body below copies the field names and codes of the existing
 // customer records (GET /customers), not a spec. Fixed values every New User customer carries — all four existing
 // records use status 1, isIncubation 0, lmraStatus 0, isVatOn 0; company_id 2 is the MAZ entity of the most recent

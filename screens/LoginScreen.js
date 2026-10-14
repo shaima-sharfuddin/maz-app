@@ -53,7 +53,7 @@ export default function LoginScreen({ navigation, route }) {
 
             {justVerified ? (
               <Text className="text-sm mb-6" style={{ color: colors.success, marginTop: -16 }}>
-                {"✓"} Email verified. Log in with the MAZ account details MAZ gives you.
+                {"✓"} Email verified and your account is created. Log in with your email and password.
               </Text>
             ) : null}
 

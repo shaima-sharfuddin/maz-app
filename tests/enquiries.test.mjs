@@ -78,7 +78,7 @@ test("mobile: '00' + dial code digits + national number, for any country", () =>
 test("remarks are optional: empty → \"\"; over 500 characters is rejected by the form", () => {
   assert.equal(toApiEnquiry(signUp({ remarks: "" }), { date: "x" }).remarks, "");
   assert.equal(toApiEnquiry(signUp({ remarks: undefined }), { date: "x" }).remarks, "");
-  const form = { ...signUp({ email: "ok@example.com" }), phoneNumber: "36123456" };
+  const form = { ...signUp({ email: "ok@example.com" }), phoneNumber: "36123456", password: "Secret1234", confirmPassword: "Secret1234" };
   assert.equal(newUserSignUpSchema.safeParse({ ...form, remarks: "" }).success, true);
   const issues = newUserSignUpSchema.safeParse({ ...form, remarks: "x".repeat(501) }).error.issues;
   assert.deepEqual(issues.map((i) => i.path[0]), ["remarks"]);
