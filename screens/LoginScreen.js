@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
@@ -11,7 +10,8 @@ import TextLink from "../components/TextLink";
 import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import { loginSchema } from "../validation/schemas";
-import { logIn, requestPasswordReset, AUTH_IS_MOCK } from "../services/api";
+import { logIn } from "../services/api";
+import { CONTACT } from "../data/brand";
 import { useTheme } from "../theme/ThemeContext";
 import { useAuth } from "../auth/AuthContext";
 
@@ -22,36 +22,19 @@ export default function LoginScreen({ navigation, route }) {
   const {
     control,
     handleSubmit,
-    trigger,
-    getValues,
     formState: { isValid },
   } = useZodForm(loginSchema, { email: route.params?.email ?? "", password: "" });
 
   const login = useSubmit(logIn);
-  const notVerified = login.errorCode === "EMAIL_NOT_VERIFIED";
-  const reset = useSubmit(requestPasswordReset);
-  const [resetSentTo, setResetSentTo] = useState("");
 
-  // Saving the session switches the navigator to the signed-in screens (App.js) — no navigate() needed.
-  // The dashboard follows the account (useAccountState, auth/AuthContext.js): an account linked to a MAZ customer
-  // (customerId) opens the Existing User (tenant) dashboard; one without a customer yet (a New User) opens the New
-  // User dashboard. Nothing to set here.
+  // REAL MAZ login (POST /login). Saving the session switches the navigator to the signed-in screens (App.js) — no
+  // navigate() needed. The dashboard follows the login's customer id (useAccountState, auth/AuthContext.js): a MAZ
+  // customer opens the Existing User (tenant) dashboard; a login without one opens the New User dashboard.
   const onSubmit = handleSubmit(async (values) => {
     const result = await login.submit(values);
     if (!result) return;
     signIn(result);
   });
-
-
-  // Uses the email already typed above; if it's missing/invalid, surface that field's error instead.
-  const onForgotPassword = async () => {
-    setResetSentTo("");
-    const emailOk = await trigger("email");
-    if (!emailOk) return;
-    const email = getValues("email").trim();
-    const result = await reset.submit(email);
-    if (result) setResetSentTo(email);
-  };
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -70,7 +53,7 @@ export default function LoginScreen({ navigation, route }) {
 
             {justVerified ? (
               <Text className="text-sm mb-6" style={{ color: colors.success, marginTop: -16 }}>
-                {"✓"} Email verified — please log in.
+                {"✓"} Email verified (demo). Log in with the MAZ account details MAZ gives you.
               </Text>
             ) : null}
 
@@ -94,18 +77,10 @@ export default function LoginScreen({ navigation, route }) {
               autoComplete="password"
             />
 
-            {/* StyledInput already adds 20pt below; pull the 44pt-tall link up so spacing stays tight. */}
-            <TextLink align="right" onPress={reset.loading ? undefined : onForgotPassword} style={{ marginTop: -12 }}>
-              <Text className="text-sm" style={{ color: colors.textMuted }}>
-                {reset.loading ? "Sending reset link…" : "Forgot password?"}
-              </Text>
-            </TextLink>
-            {resetSentTo ? (
-              <Text className="text-sm" style={{ color: colors.success, marginBottom: 4 }}>
-                {"✓"} Reset link sent to {resetSentTo}.
-              </Text>
-            ) : null}
-            <ErrorBanner message={reset.error} onRetry={onForgotPassword} />
+            {/* No MAZ password-reset endpoint yet: point to MAZ instead of a link that can't work. */}
+            <Text className="text-sm" style={{ color: colors.textMuted, marginTop: -8, marginBottom: 4 }}>
+              Forgot your password? Contact MAZ at {CONTACT.email} or {CONTACT.phone}.
+            </Text>
 
             <View className="mt-4">
               <AnimatedButton
@@ -114,24 +89,9 @@ export default function LoginScreen({ navigation, route }) {
                 disabled={!isValid}
                 loading={login.loading}
               />
-              {/* A New User who signed up but never entered their code can verify from here. */}
-              <ErrorBanner
-                message={login.error}
-                retryLabel={notVerified ? "Verify email" : "Try again"}
-                onRetry={
-                  notVerified
-                    ? () => navigation.navigate("VerifyAccount", { email: getValues("email").trim() })
-                    : onSubmit
-                }
-              />
+              {/* Wrong credentials need retyping, not a retry; network-type failures get "Try again". */}
+              <ErrorBanner message={login.error} onRetry={login.errorCode === "INVALID_CREDENTIALS" ? undefined : onSubmit} />
             </View>
-
-            {AUTH_IS_MOCK ? (
-              // Honest about the demo: MAZ has no login endpoint yet (services/authService.js).
-              <Text className="text-xs text-center mt-4" style={{ color: colors.textSubtle }}>
-                Demo sign-in — MAZ accounts aren&apos;t connected yet, so any email and password work.
-              </Text>
-            ) : null}
 
             <TextLink onPress={() => navigation.navigate("NewUserSignUp")} style={{ marginTop: 12 }}>
               <Text className="text-sm" style={{ color: colors.textMuted }}>

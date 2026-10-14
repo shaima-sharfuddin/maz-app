@@ -129,6 +129,32 @@ export function toUiCustomer(apiCustomer) {
   return { id: customerIdOf(apiCustomer), name: name || null };
 }
 
+// POST /login's answer → the app session. { token, user: { id, name, username, role, company_id, customer_id } }
+// (checked 2026-10-14). Returns null when the answer doesn't have that shape (no token / no user) — never a guessed
+// session. customer_id null = a MAZ login with no customer yet → the New User dashboard. Ids are kept as text, like
+// customerIdOf. companyName: the login carries only company_id (which MAZ entity), not the customer's company name.
+export function toUiAuthSession(body, { email } = {}) {
+  const token = typeof body?.token === "string" ? body.token.trim() : "";
+  const user = body?.user;
+  if (!token || !user || typeof user !== "object") return null;
+  const username = typeof user.username === "string" && user.username.trim() ? user.username.trim() : email;
+  const name = typeof user.name === "string" && user.name.trim() ? user.name.trim() : null;
+  return {
+    token,
+    user: {
+      email: username ?? null,
+      name: name ?? username ?? null,
+      companyName: null,
+      customerId: user.customer_id == null || user.customer_id === "" ? null : String(user.customer_id),
+      mazUserId: user.id == null ? null : String(user.id),
+      companyId: user.company_id == null ? null : String(user.company_id),
+      role: user.role ?? null,
+      activity: null,
+    },
+    profileComplete: true,
+  };
+}
+
 // Reference catalogues whose records are just a coded name: violation types ("#186 The commercial registration …")
 // and business activities ("702 Management consultancy activities", "46691-1 Sale/Trading in …"). The code — digits,
 // optionally "-<digits>" — is split off only when the name clearly starts with one and has a label after it; otherwise

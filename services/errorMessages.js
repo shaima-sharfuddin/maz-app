@@ -1,4 +1,4 @@
-// User-facing wording for failures — one place, used by the HTTP transport (services/httpClient.js) and by screens
+// User-facing wording for failures — one place, used by the HTTP transport (services/http/apiClient.js) and by screens
 // (via services/api.js → errorMessage). Fixed, friendly sentences only: server error bodies (stack traces, file
 // paths — MAZ runs with debug output on) are never shown.
 
@@ -13,7 +13,8 @@ export const ERROR_MESSAGES = {
   VALIDATION: "MAZ couldn't accept some of these details. Check them and try again, or contact MAZ.",
   NOT_FOUND: "We couldn't find what you were looking for.",
   UNAUTHORIZED: "Your session has expired. Please log in again.",
-  // A 401 when the app sent no token (auth is still mock): not a session problem, so no sign-out.
+  INVALID_CREDENTIALS: "Incorrect email or password.",
+  // A 401 when the app sent no token (signed out): not a session problem, so no sign-out.
   NOT_AUTHORIZED: "MAZ didn't allow access to this information. Please try again later.",
 };
 

@@ -15,13 +15,11 @@ import useSubmit from "../hooks/useSubmit";
 import { verifyAccountSchema } from "../validation/schemas";
 import { verifyEmail, resendVerificationCode, MOCK_OTP_CODE } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
-import { useAuth } from "../auth/AuthContext";
 
 const RESEND_COOLDOWN_S = 30;
 
 // Email OTP after New User sign-up (and from Login's "Verify email" for an account that never verified).
-// A New User's verifyEmail result carries their session: they're signed in at once and land on the new-user
-// dashboard ("What are you looking for?") — no confirmation screen (client feedback). Otherwise → Login.
+// Afterwards → Login: signing in needs the MAZ account details (services/mazAuth.js); sign-up doesn't create a login.
 export default function VerifyAccountScreen({ navigation, route }) {
   const { colors } = useTheme();
   const email = route.params?.email ?? "";
@@ -36,7 +34,6 @@ export default function VerifyAccountScreen({ navigation, route }) {
     formState: { isValid },
   } = useZodForm(verifyAccountSchema, { code: "" });
 
-  const { signIn } = useAuth();
   const verify = useSubmit(verifyEmail);
   const resend = useSubmit(resendVerificationCode);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_S);
@@ -51,11 +48,8 @@ export default function VerifyAccountScreen({ navigation, route }) {
 
   const onSubmit = handleSubmit(async ({ code }) => {
     const result = await verify.submit({ email, code });
-    if (result?.session) {
-      // A brand-new account has no MAZ customer (customerId null), so the dashboard shows the new-user state.
-      // Switches the navigator to the signed-in screens (App.js) — the dashboard is the first screen.
-      signIn(result.session);
-    } else if (result) {
+    if (result) {
+      // Sign-up doesn't create a MAZ login (the app has only the real MAZ login), so verification ends at Login.
       navigation.replace("Login", { email, justVerified: true });
     } else {
       setValue("code", "", { shouldValidate: false }); // clear a wrong code so it can be retyped

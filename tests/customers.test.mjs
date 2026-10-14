@@ -70,7 +70,7 @@ test("switched off (default): sign-up makes NO request and reports 'disabled'", 
   assert.equal(posted.length, 0);
 });
 
-test("success: one JSON POST to /customers → recorded; the login stays a demo New User with NO customer data", async () => {
+test("success: one JSON POST to /customers → recorded; no session is created and no customer data is loaded", async () => {
   setRoutes({ "/customers": acceptCustomer() });
   const values = signUp();
   const result = await api.registerNewUser(values);
@@ -80,9 +80,10 @@ test("success: one JSON POST to /customers → recorded; the login stays a demo 
   assert.equal(posted[0].headers["Content-Type"], "application/json");
   assert.deepEqual(posted[0].body, toApiCustomer(values));
 
-  const { session } = await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE });
-  assert.equal(session.user.customerId, null, "never linked to the created customer (no MAZ auth)");
-  auth.setCurrentSession({ token: session.token, user: { ...session.user, customerId: null } });
+  const verified = await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE });
+  assert.deepEqual(verified, { verified: true }, "never a session — signing in needs the MAZ login");
+  // Even a hand-built session naming the created customer is not verified → no customer data.
+  auth.setCurrentSession({ token: "forged", user: { email: result.email, customerId: "1", identity: "maz" } });
   assert.equal(customerDataSource(), null);
   await assert.rejects(api.fetchContracts(), { code: "NO_CUSTOMER" });
 });
@@ -98,7 +99,7 @@ test("422 → customer failed (VALIDATION, field names kept); the account and th
   assert.equal(result.customer.code, "VALIDATION");
   assert.equal(result.enquiry.status, "recorded", "the enquiry is sent independently");
   const verified = await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE });
-  assert.ok(verified.session, "the demo account still exists");
+  assert.equal(verified.verified, true, "the demo verification still works");
 });
 
 test("server error → failed SERVER; its HTML never reaches the message", async () => {

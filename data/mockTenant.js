@@ -1,8 +1,6 @@
 // MOCK — replace with API data. Content follows the recruiter's wireframe (dashboard + contract
 // detail); dates are moved to 2026 so nothing looks years overdue. Raw values only — screens format.
 
-export const MOCK_TENANT_NAME = "Sara";
-
 export const MOCK_CONTRACTS = [
   {
     id: "BH-2026-0184",

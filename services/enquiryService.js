@@ -1,4 +1,4 @@
-import { post } from "./httpClient";
+import { post } from "./http/apiClient";
 import { toApiEnquiry } from "./apiMappers";
 import { enquiriesEnabled, enquiryDate } from "./serviceConfig";
 

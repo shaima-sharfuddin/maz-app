@@ -21,15 +21,30 @@ an earlier TypeScript version — the conversion is complete and current files a
   customer the login belongs to (null = no customer yet, e.g. a New User). Every session change goes through one
   setter that also calls authService.setCurrentSession synchronously, so the data layer sees it before the first
   screen loads
-- AUTH IS MOCK (Existing User phase 2, 2026-10-08): services/authService.js is the only auth entry (logIn, logOut,
-  requestPasswordReset, AUTH_IS_MOCK, current session, onSessionExpired); its provider is services/mock/mockAuth.js
-  (wraps mockApi's demo accounts). Customer identity: services/customerService.js (getCurrentCustomerId /
-  requireCurrentCustomerId → ApiError NO_CUSTOMER) reads the session; the session's customerId is decided ONLY in
-  services/mock/mockCustomerIdentity.js — demo Existing User logins → customer 1 as the DEMO TENANT, which sees SAMPLE
-  data only (dashboard labelled "Demo account"), a New User who signed up this session → null. Going live:
-  add services/mazAuth.js with the same functions (login response / GET /me must supply the customer id), switch the
-  provider line in authService, set SERVICE_SOURCES.auth = "real" (services/serviceConfig.js)
-- Sessions saved before customerId existed (no customerId key) are discarded at launch → log in again
+- REAL MAZ LOGIN (2026-10-14 — the mock login was REMOVED entirely: no demo tenant "Sara", no sample contracts, no
+  "any email works"). services/authService.js is the only auth entry (logIn, logOut, restoreSession, withUserDetails,
+  current session, onSessionExpired); its provider is services/mazAuth.js:
+  POST /login { username, password } → { token, user: { id, name, username, role, company_id, customer_id } };
+  wrong credentials → MAZ 422 → ApiError INVALID_CREDENTIALS ("Incorrect email or password."); a 2xx without token /
+  user → INVALID_RESPONSE. POST /logout (Bearer) revokes the token — best effort, never rejects, its 401 never fires
+  the sign-out handler. There is NO GET /me and NO password-reset endpoint (Login shows "Forgot your password? Contact
+  MAZ at …" from data/brand.js CONTACT). apiMappers.toUiAuthSession maps the answer: user.email = username,
+  customerId = String(customer_id) or null, mazUserId / companyId (text), role, identity "maz", companyName null
+- The TOKEN: kept in the session (SecureStore maz.session, encrypted) and sent as "Authorization: Bearer <token>" on
+  EVERY MAZ request by the axios request interceptor (services/http/apiClient.js; token provider set by authService).
+  Only the login itself is sent without one ({ skipAuth: true })
+- Verified sessions: services/liveAuth.js issues them — issueSession (a login MAZ accepted) / restoreSession (a saved
+  session with identity "maz", a token, an email and a customerId key) — FROZEN objects in a WeakSet;
+  isVerifiedLiveSession answers true only for those exact objects (copies, edits, hand-built or old demo sessions →
+  false). withUserDetails(session, { name, companyName, profileComplete }) re-issues for EditProfile / CompleteProfile
+  (token + customer id never change). AuthContext stores the issued session AS IS (signIn(result) — never rebuilt)
+- Customer data: customerService.customerDataSource() → "live" (verified session WITH a customer id) | null.
+  httpApi's customer reads (contracts, bills, customer record) call requireLiveCustomerId() FIRST → NO_CUSTOMER with no
+  request otherwise. accountStateOf(user): customerId → "tenant" dashboard, else "newUser". A MAZ login with
+  customer_id null (e.g. the test user sarfaraz@info.com) → New User dashboard. SERVICE_SOURCES is Object.freeze'd
+- Restore at launch: restoreSession(saved); anything that isn't a MAZ session (e.g. a session from the removed demo
+  login) is discarded → Login "Your session has expired". No /me to re-check the token — a revoked / expired token is
+  caught by the first 401. The legacy SecureStore key maz.demoAccounts is deleted at launch
 - The session is stored encrypted with expo-secure-store (key maz.session) and restored on launch; the splash
   screen waits for it, so logged-in users never see Welcome flash first. Demo exception: Settings → Demo data →
   "Always start at Welcome" discards it at launch instead
@@ -37,41 +52,22 @@ an earlier TypeScript version — the conversion is complete and current files a
   NewUserSignUp, Login; signed in without profile → CompleteProfile, Settings (no current path creates such an
   account — kept for safety); signed in → dashboard and all tenant screens. Screens never navigate across these groups — they call signIn / completeProfile /
   signOut and the navigator switches. Any new screen must be added to the right group
-- Mock accounts: a New User sign-up (quickSignUp) starts UNVERIFIED; verifyEmail with the OTP (123456) returns
-  its session. Logging in before verifying fails with EMAIL_NOT_VERIFIED ("Verify email" → VerifyAccount);
-  afterwards login returns the same name and company. Any other email logs in as the existing tenant "Sara".
-  logOut() never fails (best effort). New User demo accounts are REMEMBERED across app restarts (Phase 2): mockApi
-  exportDemoAccounts / restoreDemoAccounts, saved by AuthContext in SecureStore key maz.demoAccounts (email, name,
-  company, activity, verified, profileComplete — never mobile / nationality / CPR / passport; newest 10), so a New
-  User logging in after a restart stays a New User (customerId null) instead of becoming "Sara" / customer 1. If the
-  saved list can't be read (SecureStore error / malformed), logIn FAILS SAFELY with ACCOUNT_CHECK_FAILED ("Try again"
-  on Login re-reads it) — no identity is guessed; sign-up still works; the stored list isn't overwritten meanwhile
-- Session identity + customer data source (2026-10-10): sessions carry user.identity — "demoTenant" (mock demo tenant,
-  customer 1) or "newUser". customerService.customerDataSource() is the ONLY gate to customer data: "demo" (auth "mock"
-  + demoTenant → SAMPLE contracts / bills / receipts from services/mock/mockTenantContracts.js, no network), "live" ONLY
-  for a session VERIFIED by services/liveAuth.js isVerifiedLiveSession — which answers false for everything until real
-  MAZ auth replaces it (FAIL CLOSED: no config value, email, customer id, identity label, token or hand-built session
-  counts), or null (New User, a New User demo email, old / forged / unknown identity → NO_CUSTOMER). SERVICE_SOURCES is
-  Object.freeze'd (read-only at runtime; it never grants access). httpApi's customer reads (contracts, bills, customer
-  record) call requireLiveCustomerId() FIRST, so live customer-specific requests are unavailable in the app. A restored
-  session with a customer id but no allowed identity (saved before 2026-10-10) is discarded at launch → Login "Your
-  session has expired". Going live: services/mazAuth.js must replace liveAuth with a MAZ-backed check (re-verify a
-  restored session with the server; don't let a verified session be edited). TESTS: tests/register.mjs makes the Node
-  test loader swap services/liveAuth.js for tests/fixtures/fakeLiveAuth.mjs (verifies only the frozen sessions it issued
-  — helpers.loginLiveCustomer) to exercise the live API code; Metro never runs that loader. tests/live-config-boundary
-  .test.mjs re-checks the app's own verifier in a child process WITHOUT the swap (tests/register-app.mjs +
-  fixtures/appBoundaryProbe.mjs) and that no app file imports test code. Also tests/live-data-boundary.test.mjs,
-  demo-session, demo-accounts-storage (helpers.loginDemoTenant for the demo tenant)
-- Demo session boundary (Phase 2): authService.setCurrentSession → services/mock/demoSession.js. When the ACCOUNT
-  changes or signs out, every session-only demo store is cleared (demo payments + payments still processing, renewals,
-  notification events / read state / email outbox, mock enquiries, bookings, notifications) — a profile edit (same
-  account) clears nothing. Office requests are stored PER ACCOUNT (mockApi requestsByAccount), so only the account
-  that submitted them sees them. Real MAZ data is never touched
-- Right after a New User verifies their email, VerifyAccount calls signIn(session) (no customerId → New User) → the navigator opens straight on the new-user dashboard
-  ("What are you looking for?"). (The write-only justSignedUp flag was removed in Cleanup 4, 2026-10-08.)
-- Session expiry: httpClient maps a MAZ 401 to ApiError UNAUTHORIZED and calls the handler AuthContext registers
-  (onSessionExpired) → signed out, Login shows "Your session has expired". Only a REAL provider's token is sent
-  (Authorization: Bearer); while auth is mock no token is sent, so this can't fire yet. Not yet: token refresh
+- New User sign-up stays a LOCAL demo (quickSignUp + OTP 123456 via verifyEmail → { verified: true }, NO session) and
+  then VerifyAccount replaces itself with Login { email, justVerified } ("Email verified (demo). Log in with the MAZ
+  account details MAZ gives you."). Sign-up does NOT create a MAZ login. The sign-up Activity is therefore no longer on
+  any session (MAZ logins carry activity null) — ReviewRequest sends null until MAZ stores activities
+- Demo session boundary: authService.setCurrentSession → services/mock/demoSession.js. When the ACCOUNT (sign-in
+  email) changes or signs out, every session-only demo store is cleared (demo payments + payments still processing,
+  renewals, notification events / read state / email outbox, mock enquiries, bookings, notifications) — a profile edit
+  (same account) clears nothing. Office requests are stored PER ACCOUNT (mockApi requestsByAccount). Real MAZ data is
+  never touched
+- Session expiry: the transport maps a 401 to a request that CARRIED the token to ApiError UNAUTHORIZED and calls the
+  handler AuthContext registers (onSessionExpired) → signed out, Login shows "Your session has expired". A tokenless
+  401 is NOT_AUTHORIZED (no sign-out). Not yet: token refresh
+- TESTS: tests/helpers.mjs plugs an axios adapter into apiClient that hands requests to a fake fetch (records `calls` +
+  `requests` with method / headers / body); loginLiveCustomer(customerId, { username }) logs in through the real logIn
+  against a fake POST /login (customerId null → New User). tests/maz-auth.test.mjs (login request / mapping / errors,
+  Bearer on later requests, logout), live-data-boundary, demo-session
 
 ## Theme system (light + dark) — never hardcode colors
 - THE 5-COLOUR PALETTE — permanent rule (premium redesign, client 2026-10-10; REPLACES the 2026-10-09 crimson-primary
@@ -100,8 +96,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Expo (managed workflow), NativeWind v4 for styling, React Navigation (native-stack)
 - expo-haptics for button feedback, @react-native-community/datetimepicker for dates, expo-print + expo-sharing
   for the (demo) invoice PDF download (utils/invoicePdf.js; both are in Expo Go — a dev build needs a native rebuild)
-- axios is installed with a configured instance in services/axiosClient.js (base URL, 15 s timeout) — UNUSED so far;
-  services/httpClient.js (fetch) is still the only transport in use (auth hooks, error codes, test fakes stub fetch)
+- axios is THE transport (2026-10-14): services/http/apiClient.js (axios instance + Bearer interceptor + our own status →
+  ApiError mapping and JSON parsing). The old fetch-based services/httpClient.js and the unused axiosClient.js are gone
 - Screens live in /screens, reusable UI in /components
 - Real backend (Laravel, read-only so far): contracts, customers and units are LIVE via services/httpApi.js;
   everything else is still mock data until the recruiter provides endpoints (see "Real API" below)
@@ -166,15 +162,15 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   registration — your details are kept in this app only. Your account isn't created with MAZ yet." (LOCAL / DEMO —
   SERVICE_SOURCES.customerRegistration "mock"; POST /customers not wired, see Open questions)
 - screens/VerifyAccountScreen.js ✅ — the New User OTP step (signed-out group): 6-digit OtpInput (auto-submits),
-  resend with 30s cooldown, verifyEmail. A New User's result carries the session →
-  signIn(session) → new-user dashboard (no "You're verified" state any more); any other account → replaces itself with Login
-  { email, justVerified }. Shows "Demo verification — no email is sent and this isn't an identity check. Use code
+  resend with 30s cooldown, verifyEmail → replaces itself with Login { email, justVerified } (sign-up creates no
+  session or MAZ login — 2026-10-14). Shows "Demo verification — no email is sent and this isn't an identity check. Use code
   123456." (MOCK_OTP_CODE) — the demo OTP is NOT a real email / identity verification
-- screens/LoginScreen.js ✅ — the "Existing User" path. logIn (authService, MOCK) → signIn(session) — the
-  dashboard follows the session's customerId (useAccountState: customer → "tenant", none → "newUser") (navigator switches automatically). Shows "Demo sign-in —
-  MAZ accounts aren't connected yet…" while AUTH_IS_MOCK, and the session-expired notice;
-  Forgot password → requestPasswordReset; "Don't have an account? Sign up" → NewUserSignUp; EMAIL_NOT_VERIFIED
-  (signed up but never entered the code) → "Verify email" → VerifyAccount
+- screens/LoginScreen.js ✅ — the ONLY way in: REAL MAZ login (logIn → services/mazAuth.js POST /login) → signIn(session) —
+  the dashboard follows the session's customerId (useAccountState: customer → "tenant", none → "newUser") (navigator
+  switches automatically). Shows the session-expired notice and the justVerified note; wrong credentials → ErrorBanner
+  "Incorrect email or password." (no retry button — retype); network / server errors → "Try again". No reset endpoint:
+  "Forgot your password? Contact MAZ at {CONTACT.email} or {CONTACT.phone}." "Don't have an account? Sign up" →
+  NewUserSignUp
 - screens/CompleteProfileScreen.js ✅ (registered, but no current path reaches it — New User sign-ups are
   complete at once) — fields match MAZ's "Create Customer" form exactly (Company Details
   open, Owner Details collapsed); required: Customer Name, Owner Name, Owner Type, Gender. Owner Type (SelectField,
@@ -194,13 +190,12 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   Settings { profileUpdated } ("✓ Profile updated in demo mode — not sent to MAZ"). Screen note: "Demo mode:
   changes are kept in the app for this session and aren't sent to MAZ."
 - screens/HomeDashboardScreen.js ✅ — two states, chosen by the session's customerId (useAccountState, auth/AuthContext.js):
-  • Tenant (default): "Welcome back, {session name}", "Demo account — the contracts, bills and payments
-    shown are sample data created in the app, not MAZ records" (while AUTH_IS_MOCK), "Contract expiring soon" alert (ExpiringSoonAlert —
+  • Tenant (default): "Welcome back, {session name}", "Contract expiring soon" alert (ExpiringSoonAlert —
     data.expiringSoon from contractService.expiringSoon: every ACTIVE contract with 10 days or fewer left, incl. the end
     date itself, soonest first; each row "{contract} expires on {date}" + unit · "Expires in N days" / "Expires today"
     + "Renew contract ›" → that contract's ContractDetail; plus getExpiryNote(); hidden when none qualify, never for
     expired contracts), Contracts card (ONLY Total / Active / Expired from the session's
-    contracts — the demo tenant's are SAMPLE data while auth is mock — no other breakdown, client 2026-10-08; tap → ContractList), Payment card (DetailCard: Total contract amount
+    contracts — no other breakdown, client 2026-10-08; tap → ContractList), Payment card (DetailCard: Total contract amount
     / Amount paid / Balance / Due amount of the ACTIVE contracts only — client 2026-10-08; expired contracts keep their
     own Pay on Contract / Bill Details — CALCULATED from the real installments — "Provisional — not confirmed by MAZ"
     (+ "Includes BHD … paid with demo payments this session"); "Pay now · BHD …" pays the due amount first, else the
@@ -457,8 +452,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   AuthProvider discard the saved session at launch (every launch opens Welcome). Remove once real account data
   exists (and drop the useDemo() read in auth/AuthContext.js)
 - services/api.js — the ONLY module screens import API functions from: `export *` from ./mockApi, then explicit
-  re-exports override it: ./httpApi (fetchCustomer, fetchUnits, fetchProfile), ./authService (logIn, logOut,
-  requestPasswordReset, AUTH_IS_MOCK), ./contractService (fetchDashboard, fetchContracts, fetchContract,
+  re-exports override it: ./httpApi (fetchCustomer, fetchUnits, fetchProfile), ./authService (logIn, logOut — REAL MAZ),
+  ./contractService (fetchDashboard, fetchContracts, fetchContract,
   summarizeContracts, contractAmounts) and ./billService (fetchBill, PAYMENT_STATUS_NOTE)
 - services/contractService.js — REAL contracts for the session's customer: fetchContracts, fetchContract (bills get
   their status from billService.withPaymentStatus), summarizeContracts (total / active / expired /
@@ -488,23 +483,12 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   renewal alert and can request a renewal only with 10 days or fewer left before its end date, whatever the contract's
   length; expired contracts can't. Update SERVICE_SOURCES whenever a mock is replaced
 - services/mock/ — Existing User mock providers, kept out of screens and out of mockApi.js (which keeps the New User,
-  Support and Meeting rooms mocks): mockAuth.js, mockCustomerIdentity.js, mockPayments.js (DEMO / TEST payments: no
+  Support and Meeting rooms mocks): mockPayments.js (DEMO / TEST payments: no
   network request, no money; createPayment → getPaymentResult with a tester-chosen outcome), demoPaymentLedger.js
   (bills paid with a demo payment — in memory only, so it resets on every app reload / restart), mockRenewals.js
   (renewal requests in memory; stages requested → reviewing → approved), mockNotifications.js (session events, read
   state, and an email OUTBOX where every email is "not_sent"), mockViolations.js (data/mockViolations.js records as
   demo: true, contractId / unit null). All session-only; none makes a network request
-- services/mock/mockDemoContracts.js — ONE DEMO-ONLY contract for recruiter demos of the renewal flow: DEMO-RENEWAL-001,
-  "Demo Office 101", ACTIVE, end date always 7 days from today (start = a 12-month term before it), BHD 250/month,
-  12 months, Quarterly, deposit 250, NO bills, demo: true. Only for the mock demo customer (isDemoTenantCustomer in
-  mockCustomerIdentity.js) and only while SERVICE_SOURCES.auth is "mock" — never with real login. contractService
-  merges it into fetchContracts / answers fetchContract for it without a network request, so the normal expiry →
-  dashboard "Contract expiring soon" alert → Contract Details → Renew → Review → Submit (demo) → Renewal Status flow
-  applies. Part of the demo tenant's sample contracts (services/mock/mockTenantContracts.js, with DEMO-CN-0001 active
-  + bills and DEMO-CN-0002 expired), so it IS counted on the Contracts card (no bills → nothing in the payment figures);
-  no email is recorded for it; labelled "Demo data" badge (ContractRow, ContractDetail), "Demo contract" eyebrow + note on
-  Contract Details, "· Demo contract" in the dashboard alert, "DEMO contract — not MAZ data" in its notification.
-  Never sent to MAZ; real contracts untouched. Remove the file and its use in contractService when no longer needed
 - services/expiryService.js — expiry from the REAL end date (contracts.to_date) with the CONFIRMED 10-day rule:
   getExpiryStatus(contract, { today, thresholdDays = getExpiryWarningDays() }) → { state "expired" (date passed, or MAZ
   status Expired) | "expiring" (today … +10 days, inclusive — day 0 counts) | "ok" (11+ days) | "unknown" (no end
@@ -529,7 +513,7 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   unchanged; their ids start "NTF-"). Existing User with a customer → DEMO list built in the app: expiry alerts
   (EXP-{contract} while expiring, END-{contract} for up to 10 days after the end) and one payment-due alert (DUE-…,
   active contracts, provisional) from REAL data + session events (payment succeeded / failed — recorded by
-  paymentService; renewal submitted / updated — renewalService) + a "Demo account" notice. All demo: true;
+  paymentService; renewal submitted / updated — renewalService) + a "Demo notifications" notice. All demo: true;
   basedOnRealData on the alerts. No customer → []. recordNotificationEvent(event) for other services. Emails:
   requestEmail() only RECORDS each one in the mock outbox as "not_sent" (EMAIL_DELIVERY_AVAILABLE = false) —
   getEmailOutbox() for checks
@@ -549,17 +533,20 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   company, ContactPerson, mobile ("00" + dial digits + number, the format of the existing records), email, remarks +
   ENQUIRY_FIXED_FIELDS (status "1", Channel "c", assigned_to "Asad", ServiceType "i", payment_term "1"); *_label fields,
   nationality, CPR / passport and activity are NOT sent. date = today, or EXPO_PUBLIC_ENQUIRY_TEST_DATE (initial test
-  only). Identical details post once per app run (in-flight shared, success remembered). httpClient.post: 422 →
+  only). Identical details post once per app run (in-flight shared, success remembered). apiClient.post: 422 →
   VALIDATION (+ error.fields), 2xx empty body = success, 2xx non-JSON → INVALID_RESPONSE. Remarks: optional multiline
   field (RemarksField, max 500) on sign-up's Contact step + Review. Tests: tests/enquiries.test.mjs
-- services/httpClient.js — real transport: API_BASE_URL (HTTPS), get() with a 15 s timeout (covers the body read),
+- services/http/apiClient.js — real transport on AXIOS (2026-10-14): one axios instance (responseType text, no
+  transformResponse, validateStatus always true — so the status → ApiError mapping and JSON parsing below stay ours);
+  request interceptor adds "Authorization: Bearer <session token>" unless { skipAuth } (the login); post(path, body,
+  { skipAuth, skipUnauthorizedHandler }). API_BASE_URL (HTTPS), get() with a 15 s timeout (covers the body read),
   getAllPages() (follows Laravel links.next — at most MAX_PAGES 50, never the same URL twice, only https links on the
   MAZ API host; anything else → INVALID_RESPONSE). Error codes (error handling phase, 2026-10-09): NETWORK, TIMEOUT,
   BAD_REQUEST (400 / 422 / other 4xx), UNAUTHORIZED (401 to a request that CARRIED a token → the app signs out),
-  NOT_AUTHORIZED (401 without a token — auth is mock — no sign-out), FORBIDDEN (403), NOT_FOUND, RATE_LIMITED (429),
+  NOT_AUTHORIZED (401 without a token — signed out — no sign-out), FORBIDDEN (403), NOT_FOUND, RATE_LIMITED (429),
   SERVER (5xx), INVALID_RESPONSE (empty / malformed / HTML / wrong-shape body). Messages are fixed sentences from
   services/errorMessages.js (server error bodies are never shown — the backend has debug output on). Auth hooks set by
-  authService: setAuthTokenProvider (Bearer token — null while auth is mock) and setUnauthorizedHandler (401)
+  authService: setAuthTokenProvider (the session's Bearer token) and setUnauthorizedHandler (401)
 - services/errorMessages.js — ERROR_MESSAGES (the wording per code) + errorMessage(error) (exported via services/api.js):
   every screen's load-error panel shows errorMessage(error) under its own title — never a hardcoded "check your
   connection". Unexpected (non-ApiError) exceptions get a generic sentence, never their technical text
@@ -601,8 +588,7 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   are NOT used (meaning unconfirmed — std_rent_amt is never shown as a price)
 - utils/formatUnit.js — unitWithLocation(unit, location): "Office 204 · Seef District" or just "INC 009"
 - services/mockApi.js — every mock endpoint (quickSignUp [New User sign-up; stores the full form in memory],
-  verifyEmail / resendVerificationCode [VerifyAccount], logIn, logOut,
-  requestPasswordReset, saveProfile, updateProfile + mockProfileEdits + mockSignUpProfile (EditProfile's mock save / pre-fill, keyed by email), fetchPlans,
+  verifyEmail / resendVerificationCode [VerifyAccount — demo OTP, no session], saveProfile, updateProfile + mockProfileEdits + mockSignUpProfile (EditProfile's mock save / pre-fill, keyed by email), fetchPlans,
   submitRequest, fetchRequestStatus, fetchLatestRequest, fetchRequests [My Requests], advanceRequestStage [DEMO], fetchRequestInvoice,
   payRequestInvoice, payOutstandingBalance [only PaymentScreen's { contractId } mode — unreachable today],
   fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
@@ -721,7 +707,7 @@ Every screen follows this pattern; don't hand-roll validation, loading flags or 
   random failure MOCK_FAILURE_RATE (15%) of the time, rejecting with ApiError { code, message }.
   Rule-based errors throw ApiError inside produce(). The random failure happens before produce(), so failed
   calls never mutate mock data.
-- Going live: implement the function in services/httpApi.js with the same name/shape (via httpClient, mapping
+- Going live: implement the function in services/httpApi.js with the same name/shape (via services/http/apiClient.js, mapping
   fields in apiMappers), then add it to the explicit re-export in services/api.js. Screens don't change.
   The "Simulate network errors" switch only affects mock functions.
 - Submit buttons: `const { submit, loading, error } = useSubmit(apiFn)` →
@@ -891,10 +877,11 @@ or showing an error/result. Nothing may do nothing when tapped.
     (records have no id today)?; (3) duplicate handling (unique email / CR / CPR? idempotency key?); (4) how a created
     customer logs in (an auth endpoint linking a login to the customer id); (5) a way to create + delete test records
     (or a sandbox); (6) lock down GET /customers + turn off debug mode. Until then sign-up stays local
-    (mockApi.quickSignUp, labelled demo on screen); httpClient's only write method is post(), used only by
-    enquiryService for POST /enquiries (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
-  • Auth / per-tenant filtering — PENDING ("comes later, not urgent", recruiter 2026-10-05): no auth and no login →
-    customer link (the app's mock identity maps demo logins to customer 1 — services/mock/mockCustomerIdentity.js); no server-side filtering (?customer_id= is ignored, so every tenant's
+    (mockApi.quickSignUp, labelled demo on screen); the transport's only write method is post(), used only by
+    mazAuth (POST /login, /logout), enquiryService (POST /enquiries) and customerCreationService (POST /customers) (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
+  • Auth — LIVE (2026-10-14): POST /login + POST /logout (services/mazAuth.js); the login's user.customer_id links it to
+    a customer. Still missing: GET /me (re-check a restored token), password reset, token refresh, and a way for a
+    sign-up to get a MAZ login. Per-tenant filtering — PENDING: no server-side filtering (?customer_id= is ignored, so every tenant's
     contracts are downloaded) — needs a per-user endpoint
   • No unit location field; no receipt period dates (only the description text); no payment / renewal endpoints
   • Server debug mode is on (404s return stack traces) — ask MAZ to turn it off

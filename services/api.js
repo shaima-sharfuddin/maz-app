@@ -8,7 +8,8 @@
 /* eslint-disable import/export -- intentional: httpApi overrides the matching mockApi exports */
 export * from "./mockApi";
 export { fetchCustomer, fetchUnits, fetchProfile } from "./httpApi";
-export { logIn, logOut, requestPasswordReset, AUTH_IS_MOCK } from "./authService";
+// Real MAZ login (POST /login) — the token is sent as a Bearer token on every request.
+export { logIn, logOut } from "./authService";
 export {
   fetchDashboard,
   fetchDashboardActivity,

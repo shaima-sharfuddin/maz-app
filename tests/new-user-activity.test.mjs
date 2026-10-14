@@ -1,10 +1,10 @@
 // New User sign-up: the restored Activity field (recruiter, 2026-10-10). Required, one choice from MAZ's
-// GET /activities labels (or the SAMPLE ACTIVITIES fallback — see api-integrations.test.mjs); kept through OTP verification, the session, a later login and the office / CR request — all mock,
+// GET /activities labels (or the SAMPLE ACTIVITIES fallback — see api-integrations.test.mjs); kept in the local sign-up and the office / CR request — all mock,
 // in memory, never sent to MAZ. (Screens can't be rendered in these Node tests: the dropdown and moving between
 // steps are checked by hand — see CLAUDE.md.)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { api, auth, resetCalls, callsTo } from "./helpers.mjs";
+import { api, resetCalls, callsTo, loginLiveCustomer } from "./helpers.mjs";
 import { newUserSignUpSchema } from "../validation/schemas.js";
 import { ACTIVITIES } from "../data/formOptions.js";
 import { MOCK_OTP_CODE } from "../services/mockApi.js";
@@ -63,33 +63,26 @@ test("changing the activity: the form keeps whichever option was picked last", (
   assert.equal(parsed.activity, ACTIVITIES[1]);
 });
 
-test("sign-up → OTP: the session carries the activity; a later login returns it", async () => {
+test("sign-up → OTP keeps the sign-up local; a MAZ login carries no activity (the field is app-only)", async () => {
   const values = form();
   const { email } = await api.quickSignUp(signUpPayload(values));
+  assert.deepEqual(await api.verifyEmail({ email, code: MOCK_OTP_CODE }), { verified: true });
 
-  await assert.rejects(auth.logIn({ email, password: "secret123" }), { code: "EMAIL_NOT_VERIFIED" });
-
-  const verified = await api.verifyEmail({ email, code: MOCK_OTP_CODE });
-  assert.equal(verified.session.user.activity, ACTIVITY);
-
-  const login = await auth.logIn({ email, password: "secret123" });
-  assert.equal(login.user.activity, ACTIVITY);
-  assert.equal(login.user.customerId, null, "still a New User — no MAZ customer");
+  const session = await loginLiveCustomer(null);
+  assert.equal(session.user.activity, null);
+  assert.equal(session.user.customerId, null, "a MAZ login without customer_id is a New User");
 });
 
-test("the office / CR request stores the signed-up user's activity", async () => {
-  const { email } = await api.quickSignUp(signUpPayload(form({ activity: ACTIVITIES[0] })));
-  const { session } = await api.verifyEmail({ email, code: MOCK_OTP_CODE });
+test("the office / CR request stores the activity it is given", async () => {
+  const session = await loginLiveCustomer(null);
   const { user } = session;
-  // Signed in, as VerifyAccount does (requests belong to the signed-in demo account).
-  auth.setCurrentSession({ token: session.token, user: { ...user, customerId: null } });
 
   // What ReviewRequestScreen sends.
   const { requestId } = await api.submitRequest({
     fullName: user.name,
     email: user.email,
     companyName: user.companyName,
-    activity: user.activity ?? null,
+    activity: ACTIVITIES[0],
     remark: "",
     termMonths: 6,
     paymentFrequency: "12",
@@ -99,15 +92,9 @@ test("the office / CR request stores the signed-up user's activity", async () =>
   assert.equal(status.activity, ACTIVITIES[0]);
 });
 
-test("Existing Users (tenants) have no activity — their requests stay as before", async () => {
-  const login = await auth.logIn({ email: "tenant@example.com", password: "secret123" });
-  assert.equal(login.user.activity, null);
-});
-
-test("sign-up, verification and login make no network request (nothing is sent to MAZ)", async () => {
+test("sign-up and verification make no network request (nothing is sent to MAZ)", async () => {
   resetCalls();
   const { email } = await api.quickSignUp(signUpPayload(form()));
   await api.verifyEmail({ email, code: MOCK_OTP_CODE });
-  await auth.logIn({ email, password: "secret123" });
   assert.equal(callsTo(""), 0);
 });

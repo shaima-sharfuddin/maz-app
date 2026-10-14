@@ -116,7 +116,7 @@ test("success: one JSON POST to /enquiries with the mapped body → recorded; th
   assert.equal(result.enquiry.enquiry.email, input.email.trim(), "MAZ's echoed record is returned");
 
   const verified = await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE });
-  assert.ok(verified.session, "the OTP flow is unchanged");
+  assert.equal(verified.verified, true, "the OTP flow is unchanged");
 });
 
 test("success with an empty 2xx body still counts (the status is MAZ's confirmation)", async () => {
@@ -135,7 +135,7 @@ test("422 validation error → failed (VALIDATION, field names kept); the demo a
 
   const error = await api.submitSignUpEnquiry(signUp()).catch((e) => e);
   assert.deepEqual(error.fields, ["mobile"]);
-  assert.ok((await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE })).session);
+  assert.equal((await api.verifyEmail({ email: result.email, code: MOCK_OTP_CODE })).verified, true);
 });
 
 test("server error → failed SERVER; its HTML / stack trace never reaches the message", async () => {

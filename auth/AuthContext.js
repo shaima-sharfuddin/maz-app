@@ -2,39 +2,20 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { logOut as apiLogOut } from "../services/api";
-import {
-  setCurrentSession,
-  onSessionExpired,
-  onDemoAccountsChange,
-  rememberDemoAccount,
-  setDemoAccountsLoader,
-  loadDemoAccounts,
-} from "../services/authService";
-import { accountStateOf, hasSafeCustomerIdentity } from "../services/customerService";
+import { setCurrentSession, onSessionExpired, restoreSession, withUserDetails } from "../services/authService";
+import { accountStateOf } from "../services/customerService";
 import { useDemo } from "../demo/DemoContext";
 
-// Session = { token, user: { email, name, companyName, customerId, activity }, profileComplete }. Stored encrypted with
-// SecureStore (Keychain / Keystore) so the user stays logged in across app restarts. customerId is the MAZ
-// customer the login belongs to (null for a New User with no customer yet) — set by the auth provider, which is
-// MOCK today (services/authService.js).
+// Session = { token, user: { email, name, companyName, customerId, identity, … }, profileComplete } — issued by the MAZ
+// login (services/mazAuth.js). Stored encrypted with SecureStore (Keychain / Keystore) so the user stays logged in across
+// app restarts; the token is sent as "Authorization: Bearer …" on every MAZ request. customerId is the MAZ customer the
+// login belongs to (null → New User dashboard).
 const SESSION_KEY = "maz.session";
 // Not sensitive (no account data): "1" once anyone has signed in on this device. Welcome uses it to choose its
 // tagline (returning vs new). Kept across logouts — that's the point.
 const SIGNED_IN_BEFORE_KEY = "maz.hasSignedInBefore";
-// DEMO ONLY (mock auth): the New User demo accounts created on this phone — email, name, company, activity, verified;
-// never the mobile, nationality or CPR / passport — so a New User who logs in after an app restart is still a New User
-// instead of MAZ's demo customer. Encrypted like the session. Remove with the mock auth provider.
-const DEMO_ACCOUNTS_KEY = "maz.demoAccounts";
-
-// How the mock auth layer reads the saved list. A read or parse failure REJECTS: the mock layer then refuses logins
-// ("Try again" on Login re-reads) instead of guessing who an unknown email is (services/mockApi.js loadDemoAccounts).
-setDemoAccountsLoader(async () => {
-  const saved = await SecureStore.getItemAsync(DEMO_ACCOUNTS_KEY);
-  return saved ? JSON.parse(saved) : null;
-});
-function saveDemoAccounts(accounts) {
-  SecureStore.setItemAsync(DEMO_ACCOUNTS_KEY, JSON.stringify(accounts)).catch(() => {});
-}
+// Left on phones by the removed mock login (its remembered demo accounts) — deleted at launch.
+const LEGACY_DEMO_ACCOUNTS_KEY = "maz.demoAccounts";
 
 const AuthContext = createContext(null);
 
@@ -48,7 +29,8 @@ async function persist(session) {
 }
 
 // Every session change goes through here: the data layer (services/authService.js) is told synchronously, so
-// the first screen's API calls already see the new session (and its customer id).
+// the first screen's API calls already see the new session (its token and customer id). Sessions are the verified
+// objects services/liveAuth.js issued — stored as they are, never rebuilt here (a copy wouldn't be verified).
 function useSessionState() {
   const [session, setSessionState] = useState(null);
   const setSession = useCallback((next) => {
@@ -78,69 +60,40 @@ export function AuthProvider({ children }) {
   const { ready: demoReady, startAtWelcome } = useDemo();
   const restored = useRef(false);
 
-  // Saved demo accounts follow every change (sign-up, verification, profile edit).
-  useEffect(() => onDemoAccountsChange(saveDemoAccounts), []);
-
   useEffect(() => {
     if (!demoReady || restored.current) return;
     restored.current = true;
     const loadSignedInBefore = AsyncStorage.getItem(SIGNED_IN_BEFORE_KEY)
       .then((value) => setHasSignedInBefore(value === "1"))
       .catch(() => {});
-    const accountsLoaded = loadDemoAccounts();
+    SecureStore.deleteItemAsync(LEGACY_DEMO_ACCOUNTS_KEY).catch(() => {});
     if (startAtWelcome) {
-      Promise.all([persist(null), loadSignedInBefore, accountsLoaded]).finally(() => setReady(true));
+      Promise.all([persist(null), loadSignedInBefore]).finally(() => setReady(true));
       return;
     }
-    const loadSession = accountsLoaded
-      .then(() => SecureStore.getItemAsync(SESSION_KEY))
+    const loadSession = SecureStore.getItemAsync(SESSION_KEY)
       .then((saved) => {
         if (!saved) return;
-        const parsed = JSON.parse(saved);
-        if (!parsed?.token || !parsed?.user?.email) return;
-        // Sessions saved before customer identity existed have no customerId at all — they can't say whose
-        // data to load, so they're discarded and the user logs in again.
-        if (!("customerId" in parsed.user)) {
-          persist(null);
-          return;
-        }
-        // A session with a customer id must carry an identity allowed to have one (services/customerService.js). One
-        // that can't — e.g. saved before identities existed (2026-10-10), when a New User logging in after a restart
-        // could be given the demo customer — is discarded: log in again, and nothing of MAZ's is loaded meanwhile.
-        if (parsed.user.customerId != null && !hasSafeCustomerIdentity(parsed.user)) {
+        // Only a session the MAZ login issued can be restored (services/liveAuth.js restoreSession). Anything else —
+        // e.g. a session from the removed demo login — is discarded and Login says the session expired. MAZ has no
+        // GET /me to re-check the token: if it was revoked, the first request's 401 signs the user out.
+        const restored = restoreSession(JSON.parse(saved));
+        if (!restored) {
           persist(null);
           setSessionExpired(true);
           return;
         }
-        // A restored New User keeps being one after logging out and back in (sessions saved before the demo
-        // accounts were remembered).
-        if (parsed.user.customerId == null) rememberDemoAccount(parsed.user);
-        setSession(parsed);
+        setSession(restored);
         markSignedInBefore();
       })
       .catch(() => {});
     Promise.all([loadSession, loadSignedInBefore]).finally(() => setReady(true));
   }, [demoReady, startAtWelcome, setSession, markSignedInBefore]);
 
-  // Called with logIn()'s result, or verifyEmail()'s session after a New User sign-up.
+  // Called with logIn()'s result — the verified session the MAZ login issued.
   const signIn = useCallback(
-    ({ token, user }) => {
-      setSession({
-        token,
-        user: {
-          email: user.email,
-          name: user.name,
-          companyName: user.companyName ?? null,
-          customerId: user.customerId ?? null,
-          // Which kind of account this is ("demoTenant" | "newUser" while auth is mock) — only some identities may
-          // load MAZ customer data (services/customerService.js hasSafeCustomerIdentity).
-          identity: user.identity ?? null,
-          // A New User's sign-up Activity (SAMPLE options, app-only — never sent to MAZ); null otherwise, and in
-          // sessions saved before it existed.
-          activity: user.activity ?? null,
-        },
-        profileComplete: user.profileComplete !== false,
-      });
+    (session) => {
+      setSession(session);
       setSessionExpired(false);
       markSignedInBefore();
     },
@@ -150,7 +103,7 @@ export function AuthProvider({ children }) {
   const completeProfile = useCallback(
     (name) => {
       if (!session) return;
-      setSession({ ...session, profileComplete: true, user: { ...session.user, name: name || session.user.name } });
+      setSession(withUserDetails(session, { name, profileComplete: true }));
       setJustCompletedProfile(true);
     },
     [session, setSession]
@@ -160,10 +113,7 @@ export function AuthProvider({ children }) {
   const updateUserDetails = useCallback(
     ({ name, companyName }) => {
       if (!name || !session) return;
-      setSession({
-        ...session,
-        user: { ...session.user, name, companyName: companyName || session.user.companyName },
-      });
+      setSession(withUserDetails(session, { name, companyName }));
     },
     [session, setSession]
   );
@@ -174,9 +124,8 @@ export function AuthProvider({ children }) {
     setJustCompletedProfile(false);
   }, [setSession]);
 
-  // MAZ rejected the session (401): sign out locally and let Login explain why. services/httpClient.js calls this
-  // only for a 401 to a request that carried a token — and only a real auth provider's token is ever sent, so it
-  // can't fire while auth is mock (a tokenless 401 is reported as NOT_AUTHORIZED instead).
+  // MAZ rejected the session (401): sign out locally and let Login explain why. services/http/apiClient.js calls this
+  // only for a 401 to a request that carried the session's token (a tokenless 401 is NOT_AUTHORIZED instead).
   useEffect(() => {
     onSessionExpired(() => {
       setSession(null);

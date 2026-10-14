@@ -253,14 +253,6 @@ export default function ContractDetailScreen({ navigation, route }) {
 
     return (
       <View>
-        {contract.demo ? (
-          // ⚠️ A demo tenant's SAMPLE contract (services/mock/mockTenantContracts.js) — say so plainly.
-          <InfoNote boxed style={{ marginBottom: 16 }}>
-            DEMO contract — sample data created in the app for demonstration. It isn&apos;t MAZ data and nothing about it
-            is sent to MAZ.
-          </InfoNote>
-        ) : null}
-
         <FadeIn index={1}>
           <ExpiryAlert contract={contract} canRenew={canRenew} onRenew={openRenew} />
         </FadeIn>
@@ -439,7 +431,7 @@ export default function ContractDetailScreen({ navigation, route }) {
       <FadeIn style={{ paddingTop: 64 }}>
         <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
           <Ionicons name="document-text-outline" size={14} color={colors.onHeroMuted} style={{ marginRight: 6 }} />
-          <Text style={[TYPE.overline, { color: colors.onHeroMuted }]}>{contract.demo ? "Demo contract" : "Contract"}</Text>
+          <Text style={[TYPE.overline, { color: colors.onHeroMuted }]}>Contract</Text>
         </View>
         <Text
           accessibilityRole="header"
@@ -465,7 +457,6 @@ export default function ContractDetailScreen({ navigation, route }) {
           }}
         >
           <StatusBadge status={contract.status} />
-          {contract.demo ? <StatusBadge status="demo" /> : null}
           <Text style={{ color: colors.onHeroMuted, fontSize: 13 }}>
             {contract.status === "expired"
               ? `Ended ${formatDate(contract.endDate)}`

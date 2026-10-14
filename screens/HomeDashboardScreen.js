@@ -32,7 +32,6 @@ import {
   payNowTarget,
   describeExpiry,
   getExpiryNote,
-  AUTH_IS_MOCK,
   PAYMENT_SUMMARY_NOTE,
   errorMessage,
 } from "../services/api";
@@ -265,7 +264,7 @@ function ExpiringSoonAlert({ items, onOpen }) {
                 {item.contractId} expires on {formatDate(item.endDate)}
               </Text>
               <Text style={[TYPE.caption, { color: colors.textMuted, marginTop: 2 }]}>
-                {[item.unit, when, item.demo ? "Demo contract" : null].filter(Boolean).join(" · ")}
+                {[item.unit, when].filter(Boolean).join(" · ")}
               </Text>
             </View>
             <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600", marginRight: 2 }}>Renew contract</Text>
@@ -516,17 +515,6 @@ export default function HomeDashboardScreen({ navigation, route }) {
 
     return (
       <View>
-        {AUTH_IS_MOCK ? (
-          // Honest about the demo login: while auth is mock, the demo tenant sees SAMPLE contracts only
-          // (services/mock/mockTenantContracts.js) — never MAZ's live customer data.
-          <FadeIn>
-            <InfoNote boxed style={{ marginBottom: 16 }}>
-              Demo account — the contracts, bills and payments shown are sample data created in the app, not MAZ
-              records.
-            </InfoNote>
-          </FadeIn>
-        ) : null}
-
         {contractSections}
 
         <FadeIn index={4}>

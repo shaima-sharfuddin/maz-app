@@ -323,9 +323,9 @@ test("registration is local: sign-up + demo verification make zero network reque
     cprNumber: "000000000",
     passportNumber: "",
   });
-  const { session } = await api.verifyEmail({ email, code: MOCK_OTP_CODE });
+  const result = await api.verifyEmail({ email, code: MOCK_OTP_CODE });
   assert.equal(callsTo(""), 0, "nothing sent to MAZ by default — no customer is created");
-  assert.equal(session.user.customerId ?? null, null, "a demo sign-up gets no MAZ customer id");
+  assert.deepEqual(result, { verified: true }, "verification gives no session — signing in needs the MAZ login");
 });
 
 // The transport has TWO writes, both switched off by default: POST /enquiries and POST /customers (write-safety, enquiries
@@ -333,7 +333,7 @@ test("registration is local: sign-up + demo verification make zero network reque
 test("customer creation is a switched-off real POST; nothing else creates a customer", () => {
   assert.equal(SERVICE_SOURCES.customerRegistration, "real");
   assert.match(source("services/serviceConfig.js"), /EXPO_PUBLIC_SEND_CUSTOMERS === "true"/);
-  assert.doesNotMatch(source("services/httpClient.js"), /method:\s*["'](PUT|PATCH|DELETE)/i);
+  assert.doesNotMatch(source("services/http/apiClient.js"), /method:\s*["'](PUT|PATCH|DELETE)/i);
   assert.doesNotMatch(source("services/enquiryService.js") + source("services/registrationService.js"), /\/customers/);
 });
 

@@ -1,5 +1,5 @@
 import { SERVICES, BROWSE_PLAN_IDS } from "../data/brand";
-import { MOCK_CONTRACTS, MOCK_TENANT_NAME } from "../data/mockTenant";
+import { MOCK_CONTRACTS } from "../data/mockTenant";
 import { MOCK_NOTIFICATIONS } from "../data/mockNotifications";
 import { MOCK_ENQUIRIES } from "../data/mockEnquiries";
 import { MOCK_VIOLATIONS } from "../data/mockViolations";
@@ -148,154 +148,21 @@ function pushNotification({ type, title, body, target = null }) {
   });
 }
 
-// ---- Auth & profile --------------------------------------------------------
+// ---- Sign-up & profile (demo) ---------------------------------------------
 
-// New User demo accounts, by email: created this session, or restored at launch (restoreDemoAccounts below). Any other
-// email logs in as an existing tenant with a completed profile, so demos can skip sign-up.
-const registeredUsers = new Map(); // email → { email, fullName, phone, companyName?, activity, verified, profileComplete }
-// New User quick sign-ups, by email: the full form, kept for later reuse (cleared on app reload).
+// New User quick sign-ups, by email: the full form, kept for later reuse (cleared on app reload). Signing up does NOT
+// create a MAZ login — users log in with the account MAZ gives them (services/mazAuth.js).
 const quickSignUps = new Map();
 const emailKey = (email) => email.trim().toLowerCase();
-
-// ---- Demo New User accounts, remembered across app restarts ----------------------------------------------------
-// The accounts above live in memory. Without this, a New User who signed up before an app restart would be unknown to
-// logIn — and come back as the demo tenant "Sara" with MAZ's demo customer (services/mock/mockCustomerIdentity.js).
-// auth/AuthContext.js saves this list encrypted (SecureStore) and restores it at launch, before any login.
-// Only the non-sensitive account fields are kept: email, name, company, activity, verified, profileComplete — NEVER the
-// mobile number, nationality or CPR / passport number (those stay in quickSignUps, in memory only).
-export const MAX_REMEMBERED_ACCOUNTS = 10;
-const accountListeners = new Set();
-
-// Whether this app run KNOWS the remembered accounts: "pending" (not read yet) | "ready" | "unavailable" (the phone's
-// storage couldn't be read). Until "ready", nobody can log in: an email that isn't known could be a remembered New
-// User, and treating it as the demo tenant would show a MAZ customer's data to them. logIn re-reads first
-// (ensureDemoAccountsLoaded), so the Login screen's "Try again" recovers once storage works. Sign-up doesn't depend on
-// it (a brand-new account is a New User by definition).
-let demoAccountsState = "pending";
-let demoAccountsLoader = null; // async () → saved list | null — set by auth/AuthContext.js (SecureStore)
-export const demoAccountsStatus = () => demoAccountsState;
-export function setDemoAccountsLoader(loader) {
-  demoAccountsLoader = loader;
-}
-
-// Reads the saved list (if not known yet). Never rejects: the outcome is demoAccountsStatus(). Accounts created in this
-// run before the list could be read are merged in and saved again.
-export async function loadDemoAccounts() {
-  if (demoAccountsState === "ready") return;
-  if (!demoAccountsLoader) {
-    demoAccountsState = "unavailable";
-    return;
-  }
-  try {
-    const saved = await demoAccountsLoader();
-    if (saved != null && !Array.isArray(saved)) throw new Error("Saved demo accounts are malformed");
-    const savedEmails = new Set((saved ?? []).map((account) => (typeof account?.email === "string" ? emailKey(account.email) : null)));
-    const unsaved = [...registeredUsers.keys()].some((key) => !savedEmails.has(key));
-    restoreDemoAccounts(saved ?? []);
-    if (unsaved) demoAccountsChanged();
-  } catch {
-    demoAccountsState = "unavailable";
-  }
-}
-
-export const ACCOUNT_CHECK_FAILED_MESSAGE =
-  "We couldn't check the demo accounts saved on this phone, so you can't log in safely right now. Please try again — or sign up again.";
-
-// For logIn: the remembered accounts must be known before an email can be matched to an identity.
-export async function ensureDemoAccountsLoaded() {
-  await loadDemoAccounts();
-  if (demoAccountsState !== "ready") throw new ApiError("ACCOUNT_CHECK_FAILED", ACCOUNT_CHECK_FAILED_MESSAGE);
-}
-
-// → [{ email, name, companyName, activity, verified, profileComplete }], at most MAX_REMEMBERED_ACCOUNTS (newest kept).
-export function exportDemoAccounts() {
-  return [...registeredUsers.values()].slice(-MAX_REMEMBERED_ACCOUNTS).map((user) => ({
-    email: user.email,
-    name: user.fullName,
-    companyName: user.companyName ?? null,
-    activity: user.activity ?? null,
-    verified: Boolean(user.verified),
-    profileComplete: user.profileComplete !== false,
-  }));
-}
-
-// listener(accounts) runs after every change (sign-up, verification, profile edit). Returns an unsubscribe function.
-export function onDemoAccountsChange(listener) {
-  accountListeners.add(listener);
-  return () => accountListeners.delete(listener);
-}
-
-function demoAccountsChanged() {
-  // Not saved until the stored list has been read — saving now would overwrite it with only this run's accounts.
-  if (demoAccountsState !== "ready") return;
-  const accounts = exportDemoAccounts();
-  accountListeners.forEach((listener) => {
-    try {
-      listener(accounts);
-    } catch {
-      // saving is best effort — never breaks the sign-up itself
-    }
-  });
-}
-
-// The saved list (from exportDemoAccounts) → known accounts again, and the list counts as read ("ready"). Malformed
-// entries are skipped; an account already known in this app run keeps its newer in-memory record.
-export function restoreDemoAccounts(accounts) {
-  if (!Array.isArray(accounts)) return;
-  demoAccountsState = "ready";
-  for (const account of accounts) {
-    if (typeof account?.email !== "string" || !account.email.trim()) continue;
-    const key = emailKey(account.email);
-    if (registeredUsers.has(key)) continue;
-    registeredUsers.set(key, {
-      email: account.email.trim(),
-      fullName: typeof account.name === "string" ? account.name : "",
-      phone: null,
-      companyName: account.companyName ?? null,
-      activity: account.activity ?? null,
-      verified: account.verified === true,
-      profileComplete: account.profileComplete !== false,
-    });
-  }
-}
-
-// A restored New User session (customerId null) whose account isn't known — e.g. saved before this list existed —
-// is added, so logging out and back in keeps it a New User instead of the demo tenant.
-export function rememberDemoAccount(user) {
-  if (!user?.email || registeredUsers.has(emailKey(user.email))) return;
-  registeredUsers.set(emailKey(user.email), {
-    email: user.email.trim(),
-    fullName: user.name ?? "",
-    phone: null,
-    companyName: user.companyName ?? null,
-    activity: user.activity ?? null,
-    verified: true, // it had a signed-in session, so it was verified
-    profileComplete: true,
-  });
-  demoAccountsChanged();
-}
-
-// True for a New User demo account (signed up in this app, now or before a restart) — never a MAZ customer. (Only
-// complete once demoAccountsStatus() is "ready" — logIn checks that first.)
-export function isDemoNewUserAccount(email) {
-  return Boolean(email) && registeredUsers.has(emailKey(email));
-}
 
 // ⚠️ MOCK — the real backend emails a random code. This fixed code is shown on the Verify screen.
 export const MOCK_OTP_CODE = "123456";
 
-// payload: { email, code } → { verified: true, session? }. For a New User sign-up the result also carries
-// the session ({ token, user }), so the app signs them in straight after verifying — no separate log in.
+// payload: { email, code } → { verified: true }. Demo only: confirms the sign-up's email; the app then opens Login.
 export function verifyEmail(payload) {
   return simulate(() => {
     if (payload.code !== MOCK_OTP_CODE) throw new ApiError("INVALID_CODE", "That code isn't right. Check your email and try again.");
-    const user = registeredUsers.get(emailKey(payload.email));
-    if (user) {
-      user.verified = true;
-      demoAccountsChanged();
-    }
-    const quick = quickSignUps.get(emailKey(payload.email));
-    return quick ? { verified: true, session: quickSession(quick) } : { verified: true };
+    return { verified: true };
   });
 }
 
@@ -304,43 +171,6 @@ export function resendVerificationCode(email) {
   return simulate(() => ({ sent: true, email }));
 }
 
-// payload: { email, password } → { token, user: { email, name, companyName, activity, profileComplete } }
-// (activity: the sign-up Activity of a New User account; null for everyone else)
-// Dev shortcut: the password "wrong" always fails with INVALID_CREDENTIALS, to test that error.
-export function logIn(payload) {
-  return simulate(() => {
-    if (payload.password === "wrong") throw new ApiError("INVALID_CREDENTIALS", "Incorrect email or password.");
-    const registered = registeredUsers.get(emailKey(payload.email));
-    if (registered && !registered.verified) {
-      throw new ApiError("EMAIL_NOT_VERIFIED", "Please verify your email before logging in.");
-    }
-    return {
-      token: newId("TKN"),
-      user: {
-        email: payload.email.trim(),
-        name: registered ? registered.fullName : MOCK_TENANT_NAME,
-        companyName: registered?.companyName ?? null,
-        activity: registered?.activity ?? null,
-        profileComplete: registered ? registered.profileComplete : true,
-      },
-    };
-  }, { instant: true });
-}
-
-// The session a verified New User sign-up gets — the same shape as logIn's.
-const quickSession = (record) => ({
-  token: newId("TKN"),
-  user: {
-    customerId: null, // a New User demo account never has a MAZ customer
-    identity: "newUser",
-    email: record.email,
-    name: record.customerName,
-    companyName: record.companyName,
-    activity: record.activity,
-    profileComplete: true,
-  },
-});
-
 // New User sign-up (the client's short form, replacing the old SignUp + CompleteProfile).
 // payload: { companyName, customerName, activity, email, countryCode, phoneNumber, phoneCountry, nationality,
 // cprNumber | passportNumber, remarks } → { email }. activity is the chosen label (MAZ's GET /activities or the samples). The mobile
@@ -348,9 +178,7 @@ const quickSession = (record) => ({
 // ⚠️ LOCAL / DEMO: kept in memory and NOT sent to MAZ (SERVICE_SOURCES.customerRegistration = "mock"). Going live needs
 // MAZ's POST /customers contract — request fields, required ones, validation + success response (with the new
 // customer id) and duplicate handling — then a real provider behind the same function name.
-// The account starts UNVERIFIED: the app goes on to VerifyAccount (code MOCK_OTP_CODE), whose verifyEmail
-// returns the session. Logging in before verifying fails with EMAIL_NOT_VERIFIED; afterwards it returns the
-// same name and company.
+// The app goes on to VerifyAccount (code MOCK_OTP_CODE), then Login — logging in needs a real MAZ account.
 export function quickSignUp(payload) {
   return simulate(() => {
     const email = payload.email.trim();
@@ -370,29 +198,8 @@ export function quickSignUp(payload) {
       createdAt: toISODateTime(new Date()),
     };
     quickSignUps.set(emailKey(email), record);
-    registeredUsers.delete(emailKey(email)); // re-inserted last, so it's among the accounts remembered
-    registeredUsers.set(emailKey(email), {
-      email,
-      fullName: record.customerName,
-      phone: `${record.countryCode} ${record.phoneNumber}`,
-      companyName: record.companyName,
-      activity: record.activity,
-      verified: false,
-      profileComplete: true,
-    });
-    demoAccountsChanged();
     return { email };
   });
-}
-
-// Best effort: logging out locally must never be blocked by the network, so this never fails.
-export function logOut() {
-  return simulate(() => ({ loggedOut: true }), { canFail: false });
-}
-
-// email → { sent: true }
-export function requestPasswordReset(email) {
-  return simulate(() => ({ sent: true, email }));
 }
 
 // Saved Create Customer profiles by customer id (cleared on app reload).
@@ -408,11 +215,6 @@ export function saveProfile(payload) {
       customer: clone(payload?.customer ?? {}),
       owner: clone(payload?.owner ?? {}),
     });
-    const user = payload?.email ? registeredUsers.get(emailKey(payload.email)) : null;
-    if (user) {
-      user.profileComplete = true;
-      demoAccountsChanged();
-    }
     return { customerId };
   });
 }
@@ -424,8 +226,7 @@ const profileEdits = new Map();
 const PROFILE_FIELDS = ["companyName", "customerName", "email"];
 const copyProfile = (values) => Object.fromEntries(PROFILE_FIELDS.map((key) => [key, values?.[key] ?? ""]));
 
-// (email, { companyName, customerName }) → { email }. A New User's stored account follows the edit, so logging
-// in again returns the new name and company.
+// (email, { companyName, customerName }) → { email }.
 export function updateProfile(email, values) {
   return simulate(() => {
     const saved = {
@@ -434,12 +235,6 @@ export function updateProfile(email, values) {
       customerName: values.customerName.trim(),
     };
     profileEdits.set(emailKey(email), saved);
-    const registered = registeredUsers.get(emailKey(email));
-    if (registered) {
-      registered.fullName = saved.customerName;
-      registered.companyName = saved.companyName;
-      demoAccountsChanged();
-    }
     return { email };
   });
 }

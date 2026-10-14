@@ -1,9 +1,14 @@
-import { ApiError } from "./apiError";
-import { ERROR_MESSAGES } from "./errorMessages";
+import axios, { isCancel } from "axios";
+import { ApiError } from "../apiError";
+import { ERROR_MESSAGES } from "../errorMessages";
 
-// Transport for the real MAZ backend (Laravel). Only services/httpApi.js uses this — screens never do.
-// Reads (get / getAllPages) plus ONE write: post(), used only by the New User enquiry (POST /enquiries), which is
-// switched off unless EXPO_PUBLIC_SEND_ENQUIRIES=true (services/serviceConfig.js). No PUT / PATCH / DELETE.
+// Transport for the real MAZ backend (Laravel), built on axios. Only the services use it — screens never do.
+// Reads (get / getAllPages) plus post(), used only by: the MAZ login / logout (services/mazAuth.js), the New User
+// enquiry (POST /enquiries) and customer record (POST /customers) — both switched off by default
+// (services/serviceConfig.js). No PUT / PATCH / DELETE.
+//
+// Every request carries "Authorization: Bearer <token>" for the signed-in MAZ session (services/authService.js plugs
+// in the token), except the login itself ({ skipAuth: true }).
 
 export const API_BASE_URL = "https://maz.beeinfosoft.com/public/api";
 const API_ORIGIN = API_BASE_URL.match(/^https:\/\/[^/]+/)[0]; // "https://maz.beeinfosoft.com"
@@ -14,24 +19,33 @@ export const MAX_PAGES = 50; // a list longer than this is treated as a broken p
 // debug output on, so its error bodies (stack traces, file paths) are never shown.
 //   NETWORK          — couldn't connect (offline, DNS, connection refused)
 //   TIMEOUT          — no complete answer within REQUEST_TIMEOUT_MS
-//   BAD_REQUEST      — 400 / 422 and other unexpected 4xx
-//   UNAUTHORIZED     — 401 for a request that carried a real session token → the app signs out
-//   NOT_AUTHORIZED   — 401 for a request without a token (auth is mock) → no sign-out
+//   BAD_REQUEST      — 400 / 422 (to a GET) and other unexpected 4xx
+//   UNAUTHORIZED     — 401 for a request that carried a session token → the app signs out
+//   NOT_AUTHORIZED   — 401 for a request without a token (signed out) → no sign-out
 //   FORBIDDEN        — 403
 //   NOT_FOUND        — 404
 //   RATE_LIMITED     — 429
 //   SERVER           — 5xx (and any other non-success status)
 //   INVALID_RESPONSE — empty / malformed / unexpected body, or an unsafe pagination link
 //   VALIDATION       — 422 to a POST: MAZ rejected some fields. error.fields lists their names (from Laravel's
-//                      { errors: { field: [...] } }) for debugging; the server's wording is never shown
+//                      { errors: { field: [...] } }); the server's wording is never shown
 const failure = (code) => new ApiError(code, ERROR_MESSAGES[code]);
 
-// Auth hooks, set by services/authService.js. Kept as plugged-in functions so this transport never imports
-// the auth layer.
-// - getAuthToken() → the session token to send as "Authorization: Bearer …", or null. It's null while auth is
-//   MOCK: MAZ's endpoints are public today and the demo token means nothing to them.
-// - onUnauthorized() → called when MAZ answers 401 to a request that carried a token (expired / revoked
-//   session), so the app can sign out. A 401 without a token can't mean the session expired.
+// The status → ApiError mapping and JSON parsing are ours, not axios's: every status resolves (validateStatus) and the
+// body arrives as raw text (no transformResponse), so an empty 200 or an HTML page is caught as INVALID_RESPONSE.
+// eslint-disable-next-line import/no-named-as-default-member -- axios.create is the documented API
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { Accept: "application/json" },
+  responseType: "text",
+  transformResponse: [(data) => data],
+  validateStatus: () => true,
+});
+
+// Auth hooks, set by services/authService.js — plugged-in functions so this transport never imports the auth layer.
+// - getAuthToken() → the session token to send as "Authorization: Bearer …", or null when signed out.
+// - onUnauthorized() → called when MAZ answers 401 to a request that carried a token (expired / revoked session),
+//   so the app can sign out. A 401 without a token can't mean the session expired.
 let getAuthToken = () => null;
 let onUnauthorized = () => {};
 export function setAuthTokenProvider(provider) {
@@ -41,10 +55,16 @@ export function setUnauthorizedHandler(handler) {
   onUnauthorized = handler;
 }
 
-function statusFailure(status, sentToken) {
+apiClient.interceptors.request.use((config) => {
+  const token = config.skipAuth ? null : getAuthToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+function statusFailure(status, sentToken, { skipUnauthorizedHandler = false } = {}) {
   if (status === 401) {
     if (sentToken) {
-      onUnauthorized();
+      if (!skipUnauthorizedHandler) onUnauthorized();
       return failure("UNAUTHORIZED");
     }
     return failure("NOT_AUTHORIZED");
@@ -56,27 +76,29 @@ function statusFailure(status, sentToken) {
   return failure("SERVER");
 }
 
-// GET a path ("/contracts") or a full URL (a pagination link) → parsed JSON.
-export async function get(pathOrUrl) {
-  const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_BASE_URL}${pathOrUrl}`;
+// One request → { status, text, sentToken }. The timer covers the whole answer, body included; an abort is a TIMEOUT,
+// anything else without an answer a NETWORK failure.
+async function send(config) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  const token = getAuthToken();
-  let response;
-  let text;
+  const sentToken = !config.skipAuth && Boolean(getAuthToken());
   try {
-    const headers = token ? { Accept: "application/json", Authorization: `Bearer ${token}` } : { Accept: "application/json" };
-    response = await fetch(url, { headers, signal: controller.signal });
-    if (!response.ok) throw statusFailure(response.status, Boolean(token));
-    text = await response.text(); // still inside the timeout window
+    const response = await apiClient.request({ ...config, signal: controller.signal });
+    return { status: response.status, text: typeof response.data === "string" ? response.data : "", sentToken };
   } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw failure(error?.name === "AbortError" ? "TIMEOUT" : "NETWORK");
+    const timedOut = controller.signal.aborted || isCancel(error) || error?.name === "AbortError";
+    throw failure(timedOut ? "TIMEOUT" : "NETWORK");
   } finally {
     clearTimeout(timer);
   }
+}
 
+const isOk = (status) => status >= 200 && status < 300;
+
+// GET a path ("/contracts") or a full URL (a pagination link) → parsed JSON.
+export async function get(pathOrUrl) {
+  const { status, text, sentToken } = await send({ method: "get", url: pathOrUrl });
+  if (!isOk(status)) throw statusFailure(status, sentToken);
   if (!text || !text.trim()) throw failure("INVALID_RESPONSE"); // e.g. an empty 200
   try {
     return JSON.parse(text);
@@ -88,30 +110,17 @@ export async function get(pathOrUrl) {
 // POST a JSON body to a path ("/enquiries") → the parsed JSON answer, or null when MAZ answers 2xx with no body
 // (the 2xx status itself is MAZ's confirmation). Unlike get(), a TIMEOUT here is ambiguous: MAZ may still have saved
 // the record, so callers must not resend automatically.
-export async function post(path, body) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+// options: skipAuth (send no token — the login) · skipUnauthorizedHandler (a 401 doesn't sign out — the logout).
+export async function post(path, body, { skipAuth = false, skipUnauthorizedHandler = false } = {}) {
+  const { status, text, sentToken } = await send({
+    method: "post",
+    url: path,
+    data: JSON.stringify(body ?? {}),
+    headers: { "Content-Type": "application/json" },
+    skipAuth,
+  });
 
-  const token = getAuthToken();
-  let response;
-  let text;
-  try {
-    const headers = { Accept: "application/json", "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    text = await response.text(); // still inside the timeout window
-  } catch (error) {
-    throw failure(error?.name === "AbortError" ? "TIMEOUT" : "NETWORK");
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (response.status === 422) {
+  if (status === 422) {
     const error = failure("VALIDATION");
     try {
       error.fields = Object.keys(JSON.parse(text)?.errors ?? {});
@@ -120,7 +129,7 @@ export async function post(path, body) {
     }
     throw error;
   }
-  if (!response.ok) throw statusFailure(response.status, Boolean(token));
+  if (!isOk(status)) throw statusFailure(status, sentToken, { skipUnauthorizedHandler });
   if (!text || !text.trim()) return null;
   try {
     return JSON.parse(text);

@@ -69,7 +69,6 @@ export default function ContractRow({ contract, onPress }) {
         </View>
         <View style={{ alignItems: "flex-end", gap: 6, marginLeft: 8 }}>
           <StatusBadge status={contract.status} />
-          {contract.demo ? <StatusBadge status="demo" /> : null}
         </View>
       </View>
       {detail ? (

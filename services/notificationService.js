@@ -7,7 +7,7 @@ import {
 } from "./mockApi";
 import { fetchContracts } from "./contractService";
 import { summarizePayments, contractsForAccountPayments, PAYMENT_SUMMARY_NOTE } from "./paymentSummary";
-import { getCurrentCustomerId, customerDataSource } from "./customerService";
+import { getCurrentCustomerId } from "./customerService";
 import { getCurrentSession } from "./authService";
 import { describeExpiry, warningStartDate, getExpiryNote } from "./expiryService";
 import { SERVICE_SOURCES } from "./serviceConfig";
@@ -57,8 +57,7 @@ function expiryAlerts(contracts) {
           id: `EXP-${contract.id}`,
           type: "expiry",
           title: `Contract ${contract.id} is approaching expiry`,
-          body: `${contract.demo ? "DEMO contract — not MAZ data. " : ""}${unit} · ${describeExpiry(expiry)} (${formatDate(expiry.endDate)}). You can request a renewal from the contract. ${getExpiryNote()}`,
-          demoContract: Boolean(contract.demo),
+          body: `${unit} · ${describeExpiry(expiry)} (${formatDate(expiry.endDate)}). You can request a renewal from the contract. ${getExpiryNote()}`,
           createdAt: morningOf(warningStartDate(expiry)),
           target: { screen: "ContractDetail", params: { contractId: contract.id } },
         },
@@ -98,28 +97,24 @@ function paymentDueAlert(contracts) {
   ];
 }
 
-const accountNotice = (live) => ({
+const accountNotice = () => ({
   id: "DEMO-ACCOUNT",
   type: "account",
-  title: "Demo account",
-  body: live
-    ? "These notifications are demo — created in the app from your contract data, not sent by MAZ."
-    : "You're signed in with a demo login. The contracts, bills and payments shown are sample data created in the app — not MAZ records — and these notifications are demo.",
+  title: "Demo notifications",
+  body: "These notifications are demo — created in the app from your contract data, not sent by MAZ.",
   createdAt: `${toISODate(new Date())}T00:00:00`,
   target: { screen: "Settings", params: undefined },
 });
 
 async function existingUserNotifications() {
-  const contracts = await fetchContracts(); // the session's contracts: live (read only) or the demo tenant's samples
-  const live = customerDataSource() === "live";
+  const contracts = await fetchContracts(); // the customer's MAZ contracts (read only)
   const alerts = [...expiryAlerts(contracts), ...paymentDueAlert(contracts)];
-  // The email each alert would get — recorded only, and only for a live customer's real contracts (never about sample
-  // data or the DEMO contract).
-  if (live) alerts.filter((alert) => !alert.demoContract).forEach(requestEmail);
+  // The email each alert would get — recorded only (no MAZ email service).
+  alerts.forEach(requestEmail);
   const notifications = [
     ...provider.listEvents(),
-    ...alerts.map((n) => ({ ...n, demo: true, basedOnRealData: live })),
-    { ...accountNotice(live), demo: true, basedOnRealData: false },
+    ...alerts.map((n) => ({ ...n, demo: true, basedOnRealData: true })),
+    { ...accountNotice(), demo: true, basedOnRealData: false },
   ];
   return notifications
     .map((n) => ({ ...n, read: provider.isRead(n.id) }))

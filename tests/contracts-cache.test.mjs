@@ -69,10 +69,10 @@ test("logout → no request and no cached data; a new login downloads fresh", as
 });
 
 test("a different customer never sees the previous customer's cached contracts", async () => {
-  loginLiveCustomer(1);
+  await loginLiveCustomer(1);
   setRoutes({});
   assert.ok((await api.fetchContracts()).some((c) => c.id === "CN-TEST-0001"));
-  loginLiveCustomer(2); // another verified customer (an edited copy of a verified session is never verified)
+  await loginLiveCustomer(2); // another verified customer (an edited copy of a verified session is never verified)
   resetCalls();
   const theirs = (await api.fetchContracts()).map((c) => c.id);
   assert.equal(callsTo("/contracts"), 1, "fresh download for the new customer");

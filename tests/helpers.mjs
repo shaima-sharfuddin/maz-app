@@ -37,8 +37,10 @@ export const customerBody = () => JSON.stringify({ data: { id: 1, name: "Test Cu
 
 // ---- fake fetch ----
 // routes: { "/contracts": handler, "/units": handler, … } — handler(url, init) → Response | Promise | throws.
-// Unrouted paths answer with the default fixtures. Every call is recorded in `calls` (paths).
+// Unrouted paths answer with the default fixtures. Every call is recorded in `calls` (paths) and `requests`
+// ({ path, method, headers, body }).
 export const calls = [];
+export const requests = [];
 let routes = {};
 export const json = (body, status = 200) => () => new Response(body, { status, headers: { "Content-Type": "application/json" } });
 export const status = (code, body = "<html>Whoops! Stack trace: /var/www/app/Http/Controllers/…</html>") => () =>
@@ -52,12 +54,22 @@ export function setRoutes(next) {
 }
 export function resetCalls() {
   calls.length = 0;
+  requests.length = 0;
 }
 export const callsTo = (prefix) => calls.filter((path) => path.startsWith(prefix)).length;
+
+// A fake MAZ login: POST /login answers this user (customer_id → the session's customer).
+export const loginBody = ({ customerId = 1, token = "TKN-TEST", username = "live@example.com", name = "Live Customer" } = {}) =>
+  JSON.stringify({
+    message: "Login successful",
+    token,
+    user: { id: 7, name, username, role: null, company_id: 1, customer_id: customerId },
+  });
 
 globalThis.fetch = async (url, init = {}) => {
   const path = String(url).replace(API, "");
   calls.push(path);
+  requests.push({ path, method: (init.method ?? "GET").toUpperCase(), headers: init.headers ?? {}, body: init.body ?? null });
   const key = Object.keys(routes)
     .sort((a, b) => b.length - a.length)
     .find((prefix) => path.startsWith(prefix));
@@ -65,38 +77,45 @@ globalThis.fetch = async (url, init = {}) => {
   if (path.startsWith("/contracts")) return json(contractsBody())();
   if (path.startsWith("/units")) return json(unitsBody())();
   if (path.startsWith("/customers")) return json(customerBody())();
+  if (path.startsWith("/login")) return json(loginBody())();
+  if (path.startsWith("/logout")) return json('{"message":"Logged out"}')();
   throw new Error(`Unexpected request in test: ${path}`);
 };
 
 // ---- app modules ----
+// The app's axios client gets an adapter that hands each request to the fake fetch above (no request ever leaves the
+// test). The app's own code — interceptors (Bearer token), timeout, status → ApiError mapping — runs unchanged.
+const { apiClient, API_BASE_URL } = await import("../services/http/apiClient.js");
+apiClient.defaults.adapter = async (config) => {
+  const url = /^https?:/.test(config.url) ? config.url : `${API_BASE_URL}${config.url}`;
+  const headers = typeof config.headers?.toJSON === "function" ? config.headers.toJSON() : { ...config.headers };
+  const response = await globalThis.fetch(url, {
+    method: (config.method ?? "get").toUpperCase(),
+    headers,
+    body: config.data,
+    signal: config.signal,
+  });
+  return { data: await response.text(), status: response.status, statusText: "", headers: {}, config, request: {} };
+};
+
 export const api = await import("../services/api.js");
 export const auth = await import("../services/authService.js");
-// What AuthContext does at launch: the phone's saved demo accounts have been read (none saved here). Without it, logIn
-// refuses with ACCOUNT_CHECK_FAILED — it never guesses who an unknown email is.
-auth.restoreDemoAccounts([]);
 
-// TEST-ONLY: the fake live-auth verifier that tests/loader-hooks.mjs swaps in for services/liveAuth.js (npm test).
-const { issueVerifiedLiveSession } = await import("./fixtures/fakeLiveAuth.mjs");
-
-// A session as REAL MAZ authentication will create it (services/mazAuth.js — not built yet): issued — and so verified —
-// by the fake verifier, so the LIVE API code (services/httpApi.js) can be exercised against the fake fetch. In the app
-// no session can be verified (services/liveAuth.js answers false), so no session can load live customer data. Each
-// call is a new session object → its own contracts cache. Customer 1 owns the fixture contract CN-TEST-0001.
-export function loginLiveCustomer(customerId = 1) {
-  const session = issueVerifiedLiveSession({
-    token: `TKN-LIVE-${Math.random().toString(36).slice(2)}`,
-    user: { email: `live.${Math.random().toString(36).slice(2)}@example.com`, name: "Live Customer", companyName: null, customerId },
-    profileComplete: true,
-  });
-  auth.setCurrentSession(session);
-  return session;
-}
-
-// A fresh MOCK demo tenant (what Login gives any email that isn't a New User demo account): SAMPLE data only.
-export async function loginDemoTenant() {
-  const session = await auth.logIn({ email: `tenant.${Math.random().toString(36).slice(2)}@example.com`, password: "x" });
-  auth.setCurrentSession(session);
-  return session;
+// A signed-in customer, as the app gets one: the real logIn against the fake POST /login (answering customer_id
+// `customerId`), then the session is made current like AuthContext does. Each call is a new session object → its own
+// contracts cache. Customer 1 owns the fixture contract CN-TEST-0001. customerId null → a New User login.
+// `username` logs in as a given account again (same email → same account for the per-account demo stores).
+export async function loginLiveCustomer(customerId = 1, { username = `live.${Math.random().toString(36).slice(2)}@example.com` } = {}) {
+  const previous = routes;
+  const token = `TKN-LIVE-${Math.random().toString(36).slice(2)}`;
+  routes = { ...routes, "/login": json(loginBody({ customerId, token, username })) };
+  try {
+    const session = await auth.logIn({ email: username, password: "secret" });
+    auth.setCurrentSession(session);
+    return session;
+  } finally {
+    routes = previous;
+  }
 }
 
 // The rejection of a promise (or null if it resolved).

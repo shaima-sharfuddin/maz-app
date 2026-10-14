@@ -1,17 +1,13 @@
 import { fetchCustomerContracts, fetchContract as fetchContractFromMaz, fetchCustomer } from "./httpApi";
 import { mockTenantActivity } from "./mockApi";
 import { withPaymentStatus } from "./billService";
-import { requireCurrentCustomerId, customerDataSource } from "./customerService";
-import { listDemoTenantContracts, getDemoTenantContract } from "./mock/mockTenantContracts";
-import { ApiError } from "./apiError";
+import { requireCurrentCustomerId } from "./customerService";
 import { summarizePayments, contractsForAccountPayments } from "./paymentSummary";
 import { getExpiryStatus } from "./expiryService";
 import { countOpenViolations } from "./violationService";
 
-// Contracts for the logged-in customer, from the session's customer data source (services/customerService.js):
-//   "live" — REAL MAZ data (GET /contracts + GET /units, scoped to the session's customer in services/httpApi.js);
-//   "demo" — the MOCK demo tenant's SAMPLE contracts (services/mock/mockTenantContracts.js) — never MAZ's live data.
-// Bills get their (provisional / demo) paid status from services/billService.js either way.
+// Contracts for the logged-in customer: REAL MAZ data (GET /contracts + GET /units, scoped to the session's customer in
+// services/httpApi.js). Bills get their (provisional / demo-payment) paid status from services/billService.js.
 
 // Bills get their (provisional / demo) paid status; the contract gets `expiry` (expiryService — confirmed 10-day
 // window, worked out from the real end date, which is left as it is).
@@ -23,21 +19,15 @@ const withBillStatuses = (contract) => ({
 
 // Every contract of the logged-in customer (Contract List). Live: the MAZ download, shared / briefly cached in
 // services/httpApi.js; { withUnits: false } doesn't wait for the unit list (unit names null) — for the dashboard's
-// first paint. Demo: the sample contracts, in the app (no network request). No customer → NO_CUSTOMER.
+// first paint. No customer → NO_CUSTOMER.
 export async function fetchContracts({ withUnits = true } = {}) {
-  const customerId = requireCurrentCustomerId();
-  if (customerDataSource() === "demo") return listDemoTenantContracts(customerId).map(withBillStatuses);
+  requireCurrentCustomerId();
   return (await fetchCustomerContracts({ withUnits })).map(withBillStatuses);
 }
 
-// One contract by its number, e.g. "CN-2026-00001" (Contract Details, Payment) — from the same source as above.
+// One contract by its number, e.g. "CN-2026-00001" (Contract Details, Payment).
 export async function fetchContract(contractId) {
-  const customerId = requireCurrentCustomerId();
-  if (customerDataSource() === "demo") {
-    const demo = getDemoTenantContract(contractId, customerId);
-    if (!demo) throw new ApiError("NOT_FOUND", "Contract not found.");
-    return withBillStatuses(demo);
-  }
+  requireCurrentCustomerId();
   return withBillStatuses(await fetchContractFromMaz(contractId));
 }
 
@@ -50,7 +40,6 @@ export function expiringSoon(contracts) {
     .sort((a, b) => a.expiry.daysLeft - b.expiry.daysLeft)
     .map((contract) => ({
       contractId: contract.id,
-      demo: Boolean(contract.demo), // the DEMO expiring contract (mockDemoContracts) — labelled on screen
       unit: contract.unit,
       endDate: contract.expiry.endDate,
       daysLeft: contract.expiry.daysLeft,
@@ -59,7 +48,7 @@ export function expiringSoon(contracts) {
 }
 
 // Counts for the dashboard's Contracts card (total / active / expired only). Status comes from MAZ's own contract
-// status enum. Every contract of the session's source counts (the demo tenant's are all sample contracts).
+// status enum. Every contract of the customer counts.
 export function summarizeContracts(contracts) {
   const active = contracts.filter((c) => c.status === "active");
   const expired = contracts.filter((c) => c.status === "expired");
@@ -115,10 +104,9 @@ export async function fetchDashboardActivity(userState = "tenant") {
 }
 
 // The customer record's name — the dashboard's fallback when the session has no name (REAL GET /customers/{id}).
-// Loaded alongside, never blocking the dashboard. The demo tenant has no MAZ record to read → null (session name).
+// Loaded alongside, never blocking the dashboard.
 export async function fetchTenantName() {
   const customerId = requireCurrentCustomerId();
-  if (customerDataSource() === "demo") return null;
   const customer = await fetchCustomer(customerId);
   return customer.name;
 }

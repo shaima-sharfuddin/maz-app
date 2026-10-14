@@ -1,4 +1,4 @@
-import { get, getAllPages } from "./httpClient";
+import { get, getAllPages } from "./http/apiClient";
 import { toUiBill, toUiCodedName, toUiContract, toUiCustomer } from "./apiMappers";
 import { mockProfileEdits, mockSignUpProfile } from "./mockApi";
 import { ApiError } from "./apiError";
@@ -9,10 +9,10 @@ import { getCurrentSession } from "./authService";
 // so services/api.js can switch them one at a time and screens don't change.
 
 // ⚠️ LIVE CUSTOMER DATA GATE: every customer-specific read here (customer record, contracts, bills / receipts) first
-// calls customerService.requireLiveCustomerId(), which only passes for a session from REAL MAZ authentication. While
-// auth is mock — the demo tenant, a New User, any old or unsafe session — it throws NO_CUSTOMER BEFORE any request,
-// so no live customer data can be loaded through mock authentication. (The demo tenant gets sample data instead:
-// services/mock/mockTenantContracts.js.) Public catalogues (units, violation types, activities) aren't customer data.
+// calls customerService.requireLiveCustomerId(), which only passes for a session issued by the MAZ login whose user
+// has a customer_id. Anything else — a New User (customer_id null), an edited or hand-built session — gets NO_CUSTOMER
+// BEFORE any request. Every request carries the session's Bearer token (services/http/apiClient.js). Public
+// catalogues (units, violation types, activities) aren't customer data.
 
 // Units rarely change and /units returns the full list (~480) in one response, so it's fetched
 // once per session. A failed load isn't cached, so "Try again" refetches.
@@ -50,7 +50,7 @@ const NO_UNITS = new Map();
 // id → { id, name } — ONLY the id and name (apiMappers.toUiCustomer drops the owners' CPR / passport / contact
 // details the record carries). Only the logged-in LIVE customer's own record (any other id → NOT_FOUND, unrequested). A record that says it belongs to a different
 // customer is refused (NOT_FOUND), so another customer's name can never be shown. An unknown id → MAZ answers 404
-// (with a debug page — never shown: httpClient turns it into a fixed NOT_FOUND message).
+// (with a debug page — never shown: the transport turns it into a fixed NOT_FOUND message).
 export async function fetchCustomer(customerId) {
   const liveCustomerId = requireLiveCustomerId();
   if (customerId != null && String(customerId) !== String(liveCustomerId)) throw new ApiError("NOT_FOUND", "Customer not found.");

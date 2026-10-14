@@ -6,9 +6,8 @@ import { clearSessionNotifications } from "./mockNotifications";
 
 // ⚠️ DEMO SESSION BOUNDARY — keeps one person's demo actions from showing for the next person on the same phone.
 //
-// Every demo Existing User login is MAZ's demo customer (services/mock/mockCustomerIdentity.js), and the mock stores
-// live in memory for the whole app run, so without this a sign-out → another login would still see the previous
-// person's "Paid (demo)" bills, renewal requests, notifications and read state, enquiries and bookings.
+// The mock stores (demo payments, renewals, notifications, enquiries, bookings) live in memory for the whole app run,
+// so without this a sign-out → another login would still see the previous person's "Paid (demo)" bills, renewal requests, notifications and read state, enquiries and bookings.
 //
 // services/authService.js calls demoSessionChanged on EVERY session change (sign-in, sign-out, restore at launch,
 // expiry). When the signed-in ACCOUNT changes (or signs out), every session-only demo store is cleared. A profile edit

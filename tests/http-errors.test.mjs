@@ -1,8 +1,8 @@
 // HTTP error classification, safe messages, timeout, invalid responses and pagination guards.
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { api, contract, setRoutes, status, json, networkDown, calls, resetCalls, callsTo, loginLiveCustomer, rejectionOf } from "./helpers.mjs";
-import * as httpClient from "../services/httpClient.js";
+import { api, auth, contract, setRoutes, status, json, networkDown, calls, resetCalls, callsTo, loginLiveCustomer, rejectionOf } from "./helpers.mjs";
+import * as httpClient from "../services/http/apiClient.js";
 import { ERROR_MESSAGES } from "../services/errorMessages.js";
 
 const API = "https://maz.beeinfosoft.com/public/api";
@@ -31,25 +31,22 @@ for (const [code, expected] of expectations) {
   });
 }
 
-test("HTTP 401 without a token (mock auth) → NOT_AUTHORIZED and NO sign-out", async () => {
+test("HTTP 401 without a token (signed out, public catalogue) → NOT_AUTHORIZED and NO sign-out", async () => {
   let signOuts = 0;
   httpClient.setUnauthorizedHandler(() => signOuts++);
-  const error = await contractsFailure(status(401));
+  auth.setCurrentSession(null);
+  setRoutes({ "/violations": status(401) });
+  const error = await rejectionOf(api.fetchViolationTypes());
   assert.equal(error?.code, "NOT_AUTHORIZED");
   assert.equal(signOuts, 0);
 });
 
-test("HTTP 401 with a real token → UNAUTHORIZED and the sign-out handler runs", async () => {
+test("HTTP 401 with the session's token → UNAUTHORIZED and the sign-out handler runs", async () => {
   let signOuts = 0;
   httpClient.setUnauthorizedHandler(() => signOuts++);
-  httpClient.setAuthTokenProvider(() => "real-token");
-  try {
-    const error = await contractsFailure(status(401));
-    assert.equal(error?.code, "UNAUTHORIZED");
-    assert.equal(signOuts, 1);
-  } finally {
-    httpClient.setAuthTokenProvider(() => null); // auth is mock: no token is ever sent
-  }
+  const error = await contractsFailure(status(401));
+  assert.equal(error?.code, "UNAUTHORIZED");
+  assert.equal(signOuts, 1);
 });
 
 test("network failure → NETWORK", async () => {

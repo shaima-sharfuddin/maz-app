@@ -12,25 +12,22 @@ import { toISODate } from "../utils/formatDate";
 // FROZEN: read-only at runtime. It documents where data comes from; it never grants access — in particular live
 // customer data needs a session verified by services/liveAuth.js, whatever `auth` says here.
 export const SERVICE_SOURCES = Object.freeze({
-  auth: "mock", // no login endpoint yet — services/mock/mockAuth.js
-  // New User sign-up: the app LOGIN stays a LOCAL / DEMO account (mockApi.quickSignUp). The MAZ customer RECORD: REAL
+  auth: "real", // POST /login + POST /logout — services/mazAuth.js (Bearer token on every request)
+  // New User sign-up: a LOCAL / DEMO form (mockApi.quickSignUp) — it doesn't create a MAZ login. The MAZ customer RECORD: REAL
   // POST /customers (services/customerCreationService.js) — but OFF unless the bundler is started with
   // EXPO_PUBLIC_SEND_CUSTOMERS=true (customersEnabled below). Its body is copied from the existing records, not a MAZ
-  // spec (apiMappers.toApiCustomer). A created customer is NEVER linked to the login (no MAZ auth): the New User stays a
-  // New User with no customer data.
+  // spec (apiMappers.toApiCustomer). A created customer isn't linked to any login by the app.
   customerRegistration: "real",
   // New User ENQUIRY: REAL POST /enquiries (services/enquiryService.js) — but OFF unless the bundler is started with
   // EXPO_PUBLIC_SEND_ENQUIRIES=true (enquiriesEnabled below). The route exists (OPTIONS → Allow: GET,HEAD,POST) but MAZ
   // hasn't confirmed the request body / validation / response, so nothing is written to MAZ by default.
   enquiries: "real",
-  customerIdentity: "mock", // nothing links a login to a MAZ customer yet — services/mock/mockCustomerIdentity.js
-  // customer / contracts / bills: the REAL API code (httpApi.js) — used ONLY by a session VERIFIED by real MAZ
-  // authentication (services/liveAuth.js; customerService.customerDataSource "live"). None exists yet, so no session can
-  // load them — changing a value here doesn't change that. The demo tenant gets demoTenantData instead.
+  customerIdentity: "real", // the login's user.customer_id (null → New User) — apiMappers.toUiAuthSession
+  // customer / contracts / bills: the REAL API (httpApi.js) — only for a session issued by the MAZ login with a customer
+  // id (services/liveAuth.js; customerService.customerDataSource "live"). Changing a value here doesn't grant access.
   customer: "real", // GET /customers/{id} — id + name only (the record's owner CPR / passport / contacts are never mapped)
   contracts: "real", // GET /contracts + GET /units (scoped to the customer ON THE PHONE — see httpApi.js)
   bills: "real", // contracts.receipts[]
-  demoTenantData: "mock", // the mock demo tenant's SAMPLE contracts / bills / receipts — services/mock/mockTenantContracts.js
   billPaidStatus: "provisional", // paid = receipt_date set — unconfirmed (services/billService.js)
   paymentSummary: "provisional", // total / paid / balance / due calculated from the installments (paymentSummary.js)
   payments: "mock", // no MAZ payment API / gateway — services/mock/mockPayments.js (DEMO / TEST, session-only)
@@ -42,7 +39,6 @@ export const SERVICE_SOURCES = Object.freeze({
   violations: "mock", // customer-specific violation NOTICES: no MAZ endpoint — services/mock/mockViolations.js ("Demo data")
   violationTypes: "real", // GET /violations — MAZ's catalogue of violation TYPES (not notices) — ViolationTypesScreen
   activities: "real", // GET /activities — sign-up Activity options; falls back to the SAMPLE list if it fails / is empty
-  demoExpiringContract: "mock", // DEMO-RENEWAL-001 (services/mock/mockDemoContracts.js) — demo account + mock auth only
 });
 
 // CONFIRMED business rule (client, 2026-10-08): an ACTIVE contract shows the expiry / renewal alert and can request a
