@@ -2,20 +2,22 @@
 // we don't have permission to reuse their real client quotes.
 
 export const TRUST_STATS = [
-  { value: "4.9", label: "Google rating" },
-  { value: "18+", label: "Years of excellence" },
-  { value: "25+", label: "Companies supported" },
+  { value: "4.9", label: "Google rating", icon: "star-outline" },
+  { value: "18+", label: "Years of excellence", icon: "ribbon-outline" },
+  { value: "25+", label: "Companies supported", icon: "briefcase-outline" },
 ];
 
-// Welcome headline + supporting line (client, 2026-10-14 — replaces the newUser / returning pair; "back" dropped).
+// Welcome headline + supporting line. The 2-minute booking promise is mandatory — keep it in any rewording.
+// Line chosen by the user (2026-10-22). Earlier: "Book your fully serviced office in just two minutes." /
+// "Request your office in just 2 minutes."
 export const WELCOME_TAGLINE = {
-  headline: "Welcome to your workspace.",
-  line: "Request your office in just 2 minutes.",
+  headline: "A prestigious address for your business.",
+  line: "Secure your premium workspace in just two minutes, effortlessly.",
 };
 
 export const BAHRAIN_ADVANTAGES = [
-  { value: "0%", label: "Corporate tax" },
-  { value: "100%", label: "Foreign ownership" },
+  { value: "0%", label: "Corporate tax", icon: "trending-down-outline" },
+  { value: "100%", label: "Foreign ownership", icon: "globe-outline" },
 ];
 
 // Descriptions are MAZ's own wording from their site. `icon` is an Ionicons name chosen for the app
@@ -28,16 +30,18 @@ export const BROWSE_PLAN_IDS = ["office-suites", "cr-registration"]; // Meeting 
 export const SERVICES = [
   {
     id: "office-suites",
-    title: "Office Suites",
+    title: "Office Space", // was "Office Suites" (user, 2026-10-22)
     requiresCr: true, // asks "existing CR or new CR?" first (CommercialRegistrationScreen)
     icon: "business-outline",
     description: "Private, fully serviced executive rooms with sea views",
+    tagline: "Private executive office · fully serviced",
   },
   {
     id: "cr-registration",
     title: "CR Registration",
     icon: "document-text-outline",
     description: "Commercial Registration and address services for entrepreneurs",
+    tagline: "Company setup · registered address",
   },
   {
     id: "startup-incubator",
@@ -52,6 +56,15 @@ export const SERVICES = [
     hourly: true,
     description: "Marble boardrooms and intimate conference suites",
   },
+];
+
+// PlanDetail's "How it works" — the app's REAL flow for a request (2026-10-20: invoice at once, Tap payment); the unit
+// itself is assigned by MAZ afterwards. Keep in step with ReviewRequest / RequestInvoice / TapCheckout.
+export const HOW_IT_WORKS = [
+  { icon: "calendar-outline", title: "Choose your lease", body: "Pick any length from 1 to 36 months." },
+  { icon: "receipt-outline", title: "Get your invoice instantly", body: "Rent and deposit, paid in full, upfront." },
+  { icon: "card-outline", title: "Pay securely", body: "Card or BenefitPay, secured by Tap." },
+  { icon: "key-outline", title: "MAZ prepares your office", body: "Our team confirms your unit and contract." },
 ];
 
 // MAZ's real contact details, for the Support screen (not shown anywhere yet).

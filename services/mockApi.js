@@ -233,6 +233,14 @@ export function mockSignUpProfile(email) {
   return record ? copyProfile(record) : null;
 }
 
+// The mobile a New User gave at sign-up THIS app run ({ countryCode "+973", phoneNumber "36123456" }), or null
+// (tenants, a different account, or after an app restart cleared the mock store). Synchronous.
+export function mockSignUpMobile(email) {
+  const record = email ? quickSignUps.get(emailKey(email)) : null;
+  const phoneNumber = String(record?.phoneNumber ?? "").replace(/\D/g, "");
+  return phoneNumber ? { countryCode: record.countryCode ?? null, phoneNumber } : null;
+}
+
 // ---- Plans & requests ------------------------------------------------------
 
 // Only the services Browse Plans offers, in BROWSE_PLAN_IDS order (Startup Incubator is hidden, not deleted).
@@ -248,8 +256,8 @@ const INVOICE_DUE_DAYS = 7;
 // payload: { fullName, email, companyName, activities, remark, termMonths, cr, summary } → { requestId }
 // cr (Office Suites only): { option: "existing" | "new", number } — a new CR adds the CR registration fee to the invoice.
 // Paid in full, upfront: no payment frequency (2026-10-14).
-// A request starts at step 1. The real backend moves it through the stages; in the demo,
-// advanceRequestStage does (RequestStatus shows a demo control for it).
+// No status stepper (client, 2026-10-20): the invoice is issued AT ONCE, so the request starts at "Invoice Generated"
+// and ReviewRequest goes straight to it → Pay → Tap checkout. The unit stays unassigned (MAZ assigns it later).
 // The request is stored under the signed-in demo account (see setDemoAccount) — never in a store shared by everyone.
 export function submitRequest(payload) {
   return simulate(() => {
@@ -257,21 +265,23 @@ export function submitRequest(payload) {
     if (!requestsByAccount.has(demoAccount)) requestsByAccount.set(demoAccount, new Map());
     const requestId = newId("REQ");
     const submittedAt = toISODateTime(new Date());
-    requestsByAccount.get(demoAccount).set(requestId, {
+    const request = {
       requestId,
       payload: clone(payload),
       summary: clone(payload.summary),
       termMonths: payload.termMonths ?? DEFAULT_LEASE_MONTHS,
       cr: payload.cr ? clone(payload.cr) : null,
       submittedAt,
-      currentStep: 1,
-      // When each stage was reached (index = step − 1), for the timeline on RequestStatus.
-      stageReachedAt: [submittedAt],
-      unit: null, // { name, location } once assigned (step 4)
-      invoice: null, // { number, lineItems, amount, issuedOn, dueDate, description } once generated (step 5)
+      currentStep: INVOICE_STEP,
+      // When each stage was reached (index = step − 1) — all at submission now the invoice is immediate.
+      stageReachedAt: Array.from({ length: INVOICE_STEP }, () => submittedAt),
+      unit: null, // { name, location } once MAZ assigns one
+      invoice: null, // { number, lineItems, amount, issuedOn, dueDate, description } — issued below
       payment: null, // { method, paidDate, receipt } once the invoice is paid
       contractStatus: null, // CONTRACT_STATUS code of the resulting contract — "b" Reviewing once paid
-    });
+    };
+    issueInvoice(request);
+    requestsByAccount.get(demoAccount).set(requestId, request);
     return { requestId };
   });
 }
@@ -333,7 +343,26 @@ export function fetchRequests() {
   return simulate(() => [...accountRequests().values()].reverse().map(requestView));
 }
 
-// ⚠️ DEMO ONLY — stands in for MAZ's admin moving the request on. Step 4 assigns a unit; step 5
+// The request's invoice = the whole lease's rent (paid in full) + deposit (+ the CR fee for a new CR) as separate line
+// items, due in 7 days. Sample pricing (data/pricing.js).
+function issueInvoice(request) {
+  const issuedOn = new Date();
+  const { rent, deposit, crFee, total } = firstInvoice(request.termMonths, { newCr: isNewCr(request.cr) });
+  request.invoice = {
+    number: `INV-${issuedOn.getFullYear()}-${request.requestId.slice(-4)}`,
+    lineItems: [
+      { label: `${rentLineLabel(request.termMonths)} — paid in full`, amount: rent },
+      { label: "Deposit", amount: deposit },
+      ...(crFee ? [{ label: "CR registration fee", amount: crFee }] : []),
+    ],
+    amount: total,
+    issuedOn: toISODate(issuedOn),
+    dueDate: toISODate(daysFromToday(INVOICE_DUE_DAYS)),
+    description: `${request.summary?.plan ?? "Office"} · ${formatTerm(request.termMonths)}`,
+  };
+}
+
+// ⚠️ DEMO ONLY (no screen uses it since the invoice is immediate) — stands in for MAZ's admin moving the request on. Step 4 assigns a unit; step 5
 // issues the invoice = the whole lease's rent (paid in full) + deposit (+ the CR fee for a new CR) as separate line items,
 // due in 7 days. Never fails at random, so the demo control always works.
 export function advanceRequestStage(requestId) {
@@ -348,22 +377,7 @@ export function advanceRequestStage(requestId) {
       if (request.currentStep === 4) {
         request.unit = { name: PLACEHOLDER_ASSIGNED_UNIT, location: request.summary?.location ?? null };
       }
-      if (request.currentStep === INVOICE_STEP) {
-        const issuedOn = new Date();
-        const { rent, deposit, crFee, total } = firstInvoice(request.termMonths, { newCr: isNewCr(request.cr) });
-        request.invoice = {
-          number: `INV-${issuedOn.getFullYear()}-${request.requestId.slice(-4)}`,
-          lineItems: [
-            { label: `${rentLineLabel(request.termMonths)} — paid in full`, amount: rent },
-            { label: "Deposit", amount: deposit },
-            ...(crFee ? [{ label: "CR registration fee", amount: crFee }] : []),
-          ],
-          amount: total,
-          issuedOn: toISODate(issuedOn),
-          dueDate: toISODate(daysFromToday(INVOICE_DUE_DAYS)),
-          description: `${request.summary?.plan ?? "Office"} · ${formatTerm(request.termMonths)}`,
-        };
-      }
+      if (request.currentStep === INVOICE_STEP && !request.invoice) issueInvoice(request);
       return requestView(request);
     },
     { canFail: false }
@@ -398,6 +412,24 @@ export function fetchRequestInvoice(requestId) {
       })),
     };
   });
+}
+
+// A REAL Tap payment for the request's invoice was CAPTURED (paymentService.completeTapPayment): record it on the
+// app-only request. Never fails at random — the money has already been taken.
+// payment: { receipt, paidDate, method } → the request view.
+export function recordRequestPayment(requestId, payment) {
+  return simulate(
+    () => {
+      const request = accountRequests().get(requestId);
+      if (!request) throw new ApiError("NOT_FOUND", "Request not found.");
+      if (!request.payment) {
+        request.payment = { method: payment.method, paidDate: payment.paidDate, receipt: payment.receipt };
+        request.contractStatus = "b"; // CONTRACT_STATUS.b — Reviewing
+      }
+      return requestView(request);
+    },
+    { canFail: false, instant: true }
+  );
 }
 
 // ⚠️ MOCK PAYMENT — nothing is charged. Marks the request's invoice paid and returns a receipt in

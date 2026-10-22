@@ -13,7 +13,8 @@ import {
   formatBHD,
 } from "../data/pricing.js";
 import { SERVICES, BROWSE_PLAN_IDS } from "../data/brand.js";
-import { planRoute } from "../utils/openPlan.js";
+import { planRoute, planDetailRoute, openPlan } from "../utils/openPlan.js";
+import { readFileSync } from "node:fs";
 
 const crIssues = (values) => (crChoiceSchema.safeParse(values).error?.issues ?? []).map((i) => [i.path[0], i.message]);
 
@@ -59,8 +60,10 @@ async function invoiceFor(cr) {
     cr,
     summary: buildRequestSummary("Office Suites", 6, cr),
   });
-  let status;
-  for (let step = 1; step < 5; step += 1) status = await api.advanceRequestStage(requestId);
+  // No status stepper: the invoice is issued the moment the request is submitted.
+  const status = await api.fetchRequestStatus(requestId);
+  assert.equal(status.currentStep, 5, "the request starts at Invoice Generated");
+  assert.ok(status.invoice, "the invoice exists straight away");
   return status.invoice;
 }
 
@@ -93,4 +96,20 @@ test("paid in full: the invoice is the whole lease's rent + deposit, with no pay
     { label: "Rent (6 months) — paid in full", amount: 600 },
     { label: "Deposit", amount: 100 },
   ]);
+});
+
+test("a service tap opens its listing page (PlanDetail); its action then goes to the CR question / lease term", () => {
+  const office = SERVICES.find((s) => s.id === "office-suites");
+  assert.deepEqual(planDetailRoute(office), { name: "PlanDetail", params: { plan: office } });
+  const navigated = [];
+  openPlan({ navigate: (name, params) => navigated.push({ name, params }) }, office);
+  assert.deepEqual(navigated, [{ name: "PlanDetail", params: { plan: office } }]);
+  assert.equal(planRoute(office).name, "CommercialRegistration");
+});
+
+test("every service on Browse Plans has listing photos (theme/imagery.js PLAN_PHOTOS)", () => {
+  // imagery.js require()s images, so it's checked as text rather than imported.
+  const source = readFileSync(new URL("../theme/imagery.js", import.meta.url), "utf8");
+  const block = source.slice(source.indexOf("export const PLAN_PHOTOS"));
+  for (const id of BROWSE_PLAN_IDS) assert.ok(block.includes(`"${id}": [`), `${id} has photos`);
 });

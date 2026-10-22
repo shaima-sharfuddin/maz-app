@@ -53,7 +53,7 @@ export default function PaymentReceiptScreen({ navigation, route }) {
     : [];
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-12 pb-10">
           {/* A receipt ticket: the confirmation is its header, the details sit below the tear line. */}

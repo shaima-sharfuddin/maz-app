@@ -173,7 +173,7 @@ export default function ViolationsScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
           <BackButton onPress={() => navigation.goBack()} />

@@ -20,8 +20,11 @@ Files were cropped, desaturated (72%) and re-encoded for the app.
 
 | File | Photographer | Source |
 |---|---|---|
-| welcome-lobby.jpg (no longer used — replaced by maz-reception.jpg) | Darshan Patel (@darshanp9) | https://unsplash.com/photos/modern-lobby-lounge-with-city-view-DfzzpBRZCT0 |
-| dashboard-corridor.jpg (no longer used — replaced by maz-waterfront.jpg) | Mia Baker (@miabaker) | https://unsplash.com/photos/office-hallway-with-glass-walls-jjhvyxm34nY |
+| welcome-lobby.jpg (Welcome screen, full screen — 2026-10-22; also listing photos, theme/imagery.js PLAN_PHOTOS) | Darshan Patel (@darshanp9) | https://unsplash.com/photos/modern-lobby-lounge-with-city-view-DfzzpBRZCT0 |
+| dashboard-corridor.jpg (listing photos — theme/imagery.js PLAN_PHOTOS; no longer on Welcome) | Mia Baker (@miabaker) | https://unsplash.com/photos/office-hallway-with-glass-walls-jjhvyxm34nY |
 | plans-office-suite.jpg | Caroline Badran (@___atmos) | https://unsplash.com/photos/modern-office-space-with-plants-and-artwork-xTmez98cqAM |
 | contract-facade.jpg | Meritt Thomas (@merittthomas) | https://unsplash.com/photos/a-close-up-of-a-glass-building-with-a-sky-background-twYDU18G_Nk |
 | renewal-reception.jpg | Josh Hild (@joshhild) | https://unsplash.com/photos/modern-lobby-with-seating-and-elevator-hIPqoIuf-LQ |
+| cr-signing.jpg (CR Registration listing photo — theme/imagery.js PLAN_PHOTOS, 2026-10-22) | Cytonn Photography | https://unsplash.com/photos/person-writing-on-white-paper-GJao3ZTX9gU |
+| cr-consultation.jpg (CR Registration listing photo — theme/imagery.js PLAN_PHOTOS, 2026-10-22) | Vitaly Gariev | https://unsplash.com/photos/woman-in-suit-shows-document-to-man-2AOIg7Qvu8w |
+| welcome-lounge.jpg (Welcome slideshow, 3rd photo — 2026-10-22; cropped portrait) | Aalo Lens | https://unsplash.com/photos/modern-lounge-area-with-contemporary-furniture-and-large-windows-yGEohCLnrl0 |

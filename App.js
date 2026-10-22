@@ -9,40 +9,52 @@ import * as SplashScreen from "expo-splash-screen";
 
 import { ThemeProvider, useTheme } from "./theme/ThemeContext";
 import { DemoProvider, useDemo } from "./demo/DemoContext";
-import { AuthProvider, useAuth, useAccountState } from "./auth/AuthContext";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
+import PageBackground from "./components/PageBackground";
 import TabBar from "./components/TabBar";
 import { MAIN_TABS } from "./utils/navigation";
 import WelcomeScreen from "./screens/WelcomeScreen";
-import NewUserSignUpScreen from "./screens/NewUserSignUpScreen";
-import VerifyAccountScreen from "./screens/VerifyAccountScreen";
-import LoginScreen from "./screens/LoginScreen";
-import CompleteProfileScreen from "./screens/CompleteProfileScreen";
 import HomeDashboardScreen from "./screens/HomeDashboardScreen";
-import BrowsePlansScreen from "./screens/BrowsePlansScreen";
-import SettingsScreen from "./screens/SettingsScreen";
-import CommercialRegistrationScreen from "./screens/CommercialRegistrationScreen";
-import SelectTermScreen from "./screens/SelectTermScreen";
-import ReviewRequestScreen from "./screens/ReviewRequestScreen";
-import RequestStatusScreen from "./screens/RequestStatusScreen";
-import RequestInvoiceScreen from "./screens/RequestInvoiceScreen";
-import PaymentReceiptScreen from "./screens/PaymentReceiptScreen";
-import PaymentReviewScreen from "./screens/PaymentReviewScreen";
-import PaymentFailedScreen from "./screens/PaymentFailedScreen";
-import MyRequestsScreen from "./screens/MyRequestsScreen";
-import ContractListScreen from "./screens/ContractListScreen";
-import ContractDetailScreen from "./screens/ContractDetailScreen";
-import PaymentScreen from "./screens/PaymentScreen";
-import NotificationsScreen from "./screens/NotificationsScreen";
-import SupportScreen from "./screens/SupportScreen";
-import NewEnquiryScreen from "./screens/NewEnquiryScreen";
-import EnquiryDetailScreen from "./screens/EnquiryDetailScreen";
-import ViolationsScreen from "./screens/ViolationsScreen";
-import ViolationDetailScreen from "./screens/ViolationDetailScreen";
-import ViolationTypesScreen from "./screens/ViolationTypesScreen";
-import RenewContractScreen from "./screens/RenewContractScreen";
-import RenewalStatusScreen from "./screens/RenewalStatusScreen";
-import BillViewerScreen from "./screens/BillViewerScreen";
+
+// Screens load the first time they're opened (React Navigation getComponent), not at launch: Expo keeps Metro's
+// inline requires off, so every eagerly imported screen — with its libraries (WebView, PDF printing, audio …) — ran
+// before the first frame. Only the first screen of each session state (Welcome, the Home tab) is imported up front.
+const screens = {
+  NewUserSignUpScreen: () => require("./screens/NewUserSignUpScreen").default,
+  VerifyAccountScreen: () => require("./screens/VerifyAccountScreen").default,
+  LoginScreen: () => require("./screens/LoginScreen").default,
+  ForgotPasswordScreen: () => require("./screens/ForgotPasswordScreen").default,
+  ResetPasswordScreen: () => require("./screens/ResetPasswordScreen").default,
+  CompleteProfileScreen: () => require("./screens/CompleteProfileScreen").default,
+  BrowsePlansScreen: () => require("./screens/BrowsePlansScreen").default,
+  SettingsScreen: () => require("./screens/SettingsScreen").default,
+  CommercialRegistrationScreen: () => require("./screens/CommercialRegistrationScreen").default,
+  SelectTermScreen: () => require("./screens/SelectTermScreen").default,
+  ReviewRequestScreen: () => require("./screens/ReviewRequestScreen").default,
+  RequestInvoiceScreen: () => require("./screens/RequestInvoiceScreen").default,
+  PaymentReceiptScreen: () => require("./screens/PaymentReceiptScreen").default,
+  TapCheckoutScreen: () => require("./screens/TapCheckoutScreen").default,
+  PlanDetailScreen: () => require("./screens/PlanDetailScreen").default,
+  PaymentResultScreen: () => require("./screens/PaymentResultScreen").default,
+  PaymentReviewScreen: () => require("./screens/PaymentReviewScreen").default,
+  PaymentFailedScreen: () => require("./screens/PaymentFailedScreen").default,
+  MyRequestsScreen: () => require("./screens/MyRequestsScreen").default,
+  ContractListScreen: () => require("./screens/ContractListScreen").default,
+  InvoicesScreen: () => require("./screens/InvoicesScreen").default,
+  ContractDetailScreen: () => require("./screens/ContractDetailScreen").default,
+  PaymentScreen: () => require("./screens/PaymentScreen").default,
+  NotificationsScreen: () => require("./screens/NotificationsScreen").default,
+  SupportScreen: () => require("./screens/SupportScreen").default,
+  NewEnquiryScreen: () => require("./screens/NewEnquiryScreen").default,
+  EnquiryDetailScreen: () => require("./screens/EnquiryDetailScreen").default,
+  ViolationsScreen: () => require("./screens/ViolationsScreen").default,
+  ViolationDetailScreen: () => require("./screens/ViolationDetailScreen").default,
+  ViolationTypesScreen: () => require("./screens/ViolationTypesScreen").default,
+  RenewContractScreen: () => require("./screens/RenewContractScreen").default,
+  RenewalStatusScreen: () => require("./screens/RenewalStatusScreen").default,
+  BillViewerScreen: () => require("./screens/BillViewerScreen").default,
+};
 
 // Keep the splash up until saved state (theme, demo data, login session) has loaded, so the first
 // frame never shows the wrong theme, the wrong dashboard state, or the wrong (logged-out) screens.
@@ -53,15 +65,19 @@ const Tab = createBottomTabNavigator();
 
 // The signed-in home: the custom bottom tab bar (components/TabBar.js). Tab routes keep the names they had as stack
 // screens (utils/navigation.js TAB_ROUTES); every other signed-in screen is pushed on the stack ABOVE the tabs.
-// New users (no MAZ customer) have no contracts, so they get no Contracts tab.
+// Every screen sits on the app-wide page background (ivory / deep navy + navy glow — components/PageBackground.js);
+// screens give their root view colors.canvas (transparent) so it shows through.
+const withPageBackground = ({ children }) => <PageBackground>{children}</PageBackground>;
+
+// Every account has a Contracts tab (user, 2026-10-22) — an account with no MAZ customer sees "No contracts yet".
 function MainTabs({ route }) {
   const { colors } = useTheme();
-  const isTenant = useAccountState() === "tenant";
   return (
     <Tab.Navigator
       tabBar={(props) => <TabBar {...props} />}
       backBehavior="history"
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.background } }}
+      screenLayout={withPageBackground}
     >
       <Tab.Screen
         name="HomeDashboard"
@@ -69,26 +85,24 @@ function MainTabs({ route }) {
         initialParams={route.params?.homeParams}
         options={{ title: "Home", tabIcon: "home-outline", tabIconActive: "home" }}
       />
-      {isTenant ? (
-        <Tab.Screen
-          name="ContractList"
-          component={ContractListScreen}
-          options={{ title: "Contracts", tabIcon: "document-text-outline", tabIconActive: "document-text" }}
-        />
-      ) : null}
+      <Tab.Screen
+        name="ContractList"
+        getComponent={screens.ContractListScreen}
+        options={{ title: "Contracts", tabIcon: "document-text-outline", tabIconActive: "document-text" }}
+      />
       <Tab.Screen
         name="MyRequests"
-        component={MyRequestsScreen}
+        getComponent={screens.MyRequestsScreen}
         options={{ title: "Requests", tabIcon: "clipboard-outline", tabIconActive: "clipboard" }}
       />
       <Tab.Screen
         name="Notifications"
-        component={NotificationsScreen}
+        getComponent={screens.NotificationsScreen}
         options={{ title: "Alerts", tabIcon: "notifications-outline", tabIconActive: "notifications" }}
       />
       <Tab.Screen
         name="Settings"
-        component={SettingsScreen}
+        getComponent={screens.SettingsScreen}
         options={{ title: "Account", tabIcon: "person-circle-outline", tabIconActive: "person-circle" }}
       />
     </Tab.Navigator>
@@ -131,19 +145,23 @@ function AppNavigator() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack.Navigator
         screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}
+        screenLayout={withPageBackground}
       >
         {!isSignedIn ? (
-          // Welcome → "New User" (NewUserSignUp → VerifyAccount OTP) or "Existing User" (Login).
+          // Welcome → "New User" (NewUserSignUp → VerifyAccount OTP) or "Existing User" (Login; "Forgot password?" →
+          // ForgotPassword → ResetPassword → Login).
           <Stack.Group>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
-            <Stack.Screen name="NewUserSignUp" component={NewUserSignUpScreen} />
-            <Stack.Screen name="VerifyAccount" component={VerifyAccountScreen} />
-            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="NewUserSignUp" getComponent={screens.NewUserSignUpScreen} />
+            <Stack.Screen name="VerifyAccount" getComponent={screens.VerifyAccountScreen} />
+            <Stack.Screen name="Login" getComponent={screens.LoginScreen} />
+            <Stack.Screen name="ForgotPassword" getComponent={screens.ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" getComponent={screens.ResetPasswordScreen} />
           </Stack.Group>
         ) : !profileComplete ? (
           <Stack.Group>
-            <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="CompleteProfile" getComponent={screens.CompleteProfileScreen} />
+            <Stack.Screen name="Settings" getComponent={screens.SettingsScreen} />
           </Stack.Group>
         ) : (
           <Stack.Group>
@@ -152,26 +170,38 @@ function AppNavigator() {
               component={MainTabs}
               initialParams={{ homeParams: { profileSaved: justCompletedProfile } }}
             />
-            <Stack.Screen name="BrowsePlans" component={BrowsePlansScreen} />
-            <Stack.Screen name="CommercialRegistration" component={CommercialRegistrationScreen} />
-            <Stack.Screen name="SelectTerm" component={SelectTermScreen} />
-            <Stack.Screen name="ReviewRequest" component={ReviewRequestScreen} />
-            <Stack.Screen name="RequestStatus" component={RequestStatusScreen} />
-            <Stack.Screen name="RequestInvoice" component={RequestInvoiceScreen} />
-            <Stack.Screen name="ContractDetail" component={ContractDetailScreen} />
-            <Stack.Screen name="Payment" component={PaymentScreen} />
-            <Stack.Screen name="PaymentReview" component={PaymentReviewScreen} />
-            <Stack.Screen name="PaymentReceipt" component={PaymentReceiptScreen} />
-            <Stack.Screen name="PaymentFailed" component={PaymentFailedScreen} />
-            <Stack.Screen name="Support" component={SupportScreen} />
-            <Stack.Screen name="NewEnquiry" component={NewEnquiryScreen} />
-            <Stack.Screen name="EnquiryDetail" component={EnquiryDetailScreen} />
-            <Stack.Screen name="Violations" component={ViolationsScreen} />
-            <Stack.Screen name="ViolationDetail" component={ViolationDetailScreen} />
-            <Stack.Screen name="ViolationTypes" component={ViolationTypesScreen} />
-            <Stack.Screen name="RenewContract" component={RenewContractScreen} />
-            <Stack.Screen name="RenewalStatus" component={RenewalStatusScreen} />
-            <Stack.Screen name="BillViewer" component={BillViewerScreen} />
+            <Stack.Screen name="BrowsePlans" getComponent={screens.BrowsePlansScreen} />
+            <Stack.Screen name="PlanDetail" getComponent={screens.PlanDetailScreen} />
+            <Stack.Screen name="CommercialRegistration" getComponent={screens.CommercialRegistrationScreen} />
+            <Stack.Screen name="SelectTerm" getComponent={screens.SelectTermScreen} />
+            <Stack.Screen name="ReviewRequest" getComponent={screens.ReviewRequestScreen} />
+            <Stack.Screen name="RequestInvoice" getComponent={screens.RequestInvoiceScreen} />
+            <Stack.Screen name="ContractDetail" getComponent={screens.ContractDetailScreen} />
+            <Stack.Screen name="Payment" getComponent={screens.PaymentScreen} />
+            <Stack.Screen name="PaymentReview" getComponent={screens.PaymentReviewScreen} />
+            <Stack.Screen name="PaymentReceipt" getComponent={screens.PaymentReceiptScreen} />
+            <Stack.Screen name="PaymentFailed" getComponent={screens.PaymentFailedScreen} />
+            {/* Live Tap checkout (WebView) slides up as a full-screen sheet; its result replaces it. */}
+            <Stack.Screen
+              name="TapCheckout"
+              getComponent={screens.TapCheckoutScreen}
+              options={{ presentation: "fullScreenModal", animation: "slide_from_bottom", gestureEnabled: false }}
+            />
+            <Stack.Screen
+              name="PaymentResult"
+              getComponent={screens.PaymentResultScreen}
+              options={{ animation: "fade", gestureEnabled: false }}
+            />
+            <Stack.Screen name="Support" getComponent={screens.SupportScreen} />
+            <Stack.Screen name="NewEnquiry" getComponent={screens.NewEnquiryScreen} />
+            <Stack.Screen name="EnquiryDetail" getComponent={screens.EnquiryDetailScreen} />
+            <Stack.Screen name="Violations" getComponent={screens.ViolationsScreen} />
+            <Stack.Screen name="ViolationDetail" getComponent={screens.ViolationDetailScreen} />
+            <Stack.Screen name="ViolationTypes" getComponent={screens.ViolationTypesScreen} />
+            <Stack.Screen name="RenewContract" getComponent={screens.RenewContractScreen} />
+            <Stack.Screen name="RenewalStatus" getComponent={screens.RenewalStatusScreen} />
+            <Stack.Screen name="BillViewer" getComponent={screens.BillViewerScreen} />
+            <Stack.Screen name="Invoices" getComponent={screens.InvoicesScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

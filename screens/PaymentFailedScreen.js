@@ -17,7 +17,7 @@ export default function PaymentFailedScreen({ navigation, route }) {
   const { amount, message } = route.params ?? {};
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-12 pb-10">
           <FadeIn offset={16}>

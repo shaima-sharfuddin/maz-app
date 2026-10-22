@@ -135,7 +135,7 @@ export default function RenewalStatusScreen({ navigation, route }) {
   const heading =
     renewal?.status === "approved" && RENEWALS_ARE_DEMO ? { ...base, title: `${base.title} (demo)` } : base;
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <PhotoHero
           photo="renewal"

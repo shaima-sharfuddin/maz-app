@@ -288,9 +288,9 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 
 test("ViolationTypesScreen is registered in the signed-in group and reached from Violations", () => {
   const app = source("App.js");
-  assert.match(app, /import ViolationTypesScreen from "\.\/screens\/ViolationTypesScreen"/);
+  assert.match(app, /ViolationTypesScreen: \(\) => require\("\.\/screens\/ViolationTypesScreen"\)\.default/);
   const signedIn = app.slice(app.indexOf('name="HomeDashboard"'));
-  assert.match(signedIn, /<Stack\.Screen name="ViolationTypes" component=\{ViolationTypesScreen\} \/>/);
+  assert.match(signedIn, /<Stack\.Screen name="ViolationTypes" getComponent=\{screens\.ViolationTypesScreen\} \/>/);
   const signedOut = app.slice(app.indexOf("{!isSignedIn ? ("), app.indexOf('name="HomeDashboard"'));
   assert.doesNotMatch(signedOut, /ViolationTypes/, "not reachable signed out");
   assert.match(source("screens/ViolationsScreen.js"), /navigation\.navigate\("ViolationTypes"\)/);

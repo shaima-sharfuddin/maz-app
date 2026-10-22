@@ -1,57 +1,44 @@
+import { useState } from "react";
 import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AnimatedButton from "../components/AnimatedButton";
-import TrustStats from "../components/TrustStats";
 import BackButton from "../components/BackButton";
-import ServiceCard from "../components/ServiceCard";
+import CategoryChips from "../components/CategoryChips";
+import PlanCard, { PlanCardSkeleton } from "../components/PlanCard";
 import EmptyState from "../components/EmptyState";
-import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import { fetchPlans, errorMessage } from "../services/api";
-import { TRUST_STATS } from "../data/brand";
 import { useTheme } from "../theme/ThemeContext";
 import { TYPE } from "../theme/theme";
 import FadeIn from "../components/FadeIn";
-import PhotoHero from "../components/PhotoHero";
 import { openPlan } from "../utils/openPlan";
 
-function ServiceCardSkeleton() {
-  return (
-    <SkeletonCard style={{ marginBottom: 16, padding: 16, flexDirection: "row", alignItems: "center" }}>
-      <Skeleton width={44} height={44} radius={12} style={{ marginRight: 14 }} />
-      <View style={{ flex: 1 }}>
-        <Skeleton width="50%" height={16} style={{ marginBottom: 8 }} />
-        <Skeleton width="85%" height={12} />
-      </View>
-    </SkeletonCard>
-  );
-}
+const ALL = "all";
 
-// The services a customer can request (fetchPlans: Office Suites, CR Registration — Meeting Rooms removed 2026-10-14).
-// Each opens the lease term (SelectTerm) — Office Suites first asks about the CR (CommercialRegistration) —
-// via utils/openPlan.js.
+// Explore (Visual system v2, Airbnb-inspired): the services a customer can request (fetchPlans: Office Suites, CR
+// Registration) as photo listing cards under a category row. A card opens its listing page (PlanDetail) via
+// utils/openPlan.js. Switching category re-plays the cards' staggered entrance.
 export default function BrowsePlansScreen({ navigation }) {
   const { colors } = useTheme();
   const { loading, data: plans, error, reload } = useAsync(fetchPlans);
+  const [category, setCategory] = useState(ALL);
 
-  const openService = (plan) => openPlan(navigation, plan);
+  const categories = [
+    { value: ALL, label: "All", icon: "grid-outline" },
+    ...(plans ?? []).map((plan) => ({ value: plan.id, label: plan.title, icon: plan.icon ?? "business-outline" })),
+  ];
+  const shown = (plans ?? []).filter((plan) => category === ALL || plan.id === category);
 
   const renderPlans = () => {
-    if (loading) {
-      return [0, 1, 2].map((key) => <ServiceCardSkeleton key={key} />);
-    }
+    if (loading) return [0, 1].map((key) => <PlanCardSkeleton key={key} />);
     if (error) {
       return (
-        <EmptyState
-          icon="cloud-offline-outline"
-          title="We couldn't load our services"
-          message={errorMessage(error)}
-        >
+        <EmptyState icon="cloud-offline-outline" title="We couldn't load our services" message={errorMessage(error)}>
           <AnimatedButton label="Try again" onPress={reload} />
         </EmptyState>
       );
     }
-    if (plans.length === 0) {
+    if (shown.length === 0) {
       return (
         <EmptyState
           icon="briefcase-outline"
@@ -60,42 +47,36 @@ export default function BrowsePlansScreen({ navigation }) {
         />
       );
     }
-    return plans.map((plan, index) => (
-      <FadeIn key={plan.id} index={index + 1}>
-        <ServiceCard plan={plan} onPress={() => openService(plan)} />
-      </FadeIn>
-    ));
+    // key={category}: a new category remounts the list, so its cards settle in again.
+    return (
+      <View key={category}>
+        {shown.map((plan, index) => (
+          <FadeIn key={plan.id} index={index}>
+            <PlanCard plan={plan} onPress={() => openPlan(navigation, plan)} />
+          </FadeIn>
+        ))}
+      </View>
+    );
   };
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        {/* Banner: the screen's existing eyebrow, title and subtitle over an office-suite photo. */}
-        <PhotoHero
-          photo="plans"
-          overlay="navy"
-          minHeight={320}
-          contentStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 28, justifyContent: "space-between" }}
-        >
-          <BackButton onHero onPress={() => navigation.goBack()} />
-          <FadeIn style={{ paddingTop: 72 }}>
-            <Text style={[TYPE.overline, { color: colors.onHeroMuted, marginBottom: 10 }]}>MAZ Business Center</Text>
-            <Text accessibilityRole="header" style={[TYPE.screenTitle, { color: colors.onHero, marginBottom: 8, maxWidth: 300 }]}>
-              What are you looking for?
-            </Text>
-            <Text style={{ color: colors.onHeroMuted, fontSize: 15, lineHeight: 22, maxWidth: 320 }}>
-              Prestigious workspaces and seamless business services, tailored to how you work.
-            </Text>
-          </FadeIn>
-        </PhotoHero>
+    <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.canvas }}>
+      <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
+        <BackButton onPress={() => navigation.goBack()} />
+        <FadeIn>
+          <Text accessibilityRole="header" style={[TYPE.largeTitle, { color: colors.text, marginTop: 4 }]}>
+            Explore
+          </Text>
+          <Text style={[TYPE.body, { color: colors.textMuted, marginTop: 4, marginBottom: 16 }]}>
+            Prestigious workspaces and seamless business services.
+          </Text>
+        </FadeIn>
+      </View>
 
-        <View className="flex-1 px-6 pt-8 pb-10">
-          {renderPlans()}
+      {plans?.length ? <CategoryChips items={categories} value={category} onChange={setCategory} /> : null}
 
-          <FadeIn index={4} style={{ marginTop: 16 }}>
-            <TrustStats stats={TRUST_STATS} variant="inline" />
-          </FadeIn>
-        </View>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32 }}>
+        {renderPlans()}
       </ScrollView>
     </SafeAreaView>
   );

@@ -14,6 +14,9 @@ import { MOCK_ENQUIRIES } from "../data/mockEnquiries.js";
 import { buildRequestSummary } from "../data/pricing.js";
 import { toISODate } from "../utils/formatDate.js";
 
+// These tests cover the DEMO payment provider (live Tap is the default — tap-payments.test.mjs covers it).
+process.env.EXPO_PUBLIC_TAP_PAYMENTS = "false";
+
 // Customer 1's contract ends in 5 days, so a (demo) renewal can be requested.
 const inDays = (days) => {
   const date = new Date();

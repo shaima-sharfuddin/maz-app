@@ -23,6 +23,7 @@ const LABELLED = {
   "screens/RequestStatusScreen.js": ["requestStatus", "sampleUnitTitle", "sampleUnitLabel"],
   "screens/MyRequestsScreen.js": ["requests"],
   "screens/HomeDashboardScreen.js": ["requests", "quickActions"],
+  "screens/InvoicesScreen.js": ["invoices"],
 };
 
 // Claims the mock features can't back up (nothing is sent, emailed, assigned or answered by MAZ).

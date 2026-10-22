@@ -1,25 +1,34 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import AnimatedButton from "../components/AnimatedButton";
 import TrustStats from "../components/TrustStats";
-import ScreenTitle from "../components/ScreenTitle";
 import EmptyState from "../components/EmptyState";
 import PressableScale from "../components/PressableScale";
-import SectionHeading from "../components/SectionHeading";
-import ServiceCard from "../components/ServiceCard";
+import PlanCard, { PlanCardSkeleton } from "../components/PlanCard";
+import SearchPill from "../components/SearchPill";
+import FeatureCard from "../components/FeatureCard";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import CategoryChips from "../components/CategoryChips";
+import { Section } from "../components/Section";
 import RequestRow from "../components/RequestRow";
 import StaleDataNote from "../components/StaleDataNote";
-import TextLink from "../components/TextLink";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import ErrorBanner from "../components/ErrorBanner";
 import FadeIn from "../components/FadeIn";
 import HeroPanel from "../components/HeroPanel";
 import AmountHero from "../components/AmountHero";
 import InfoNote from "../components/InfoNote";
-import PhotoHero from "../components/PhotoHero";
 import BrandMark from "../components/BrandMark";
 import useAsync from "../hooks/useAsync";
 import {
@@ -40,22 +49,11 @@ import { formatDate } from "../utils/formatDate";
 import { useTheme } from "../theme/ThemeContext";
 import { DEMO_NOTES } from "../data/demoNotes";
 import { useCardStyle } from "../theme/surfaces";
-import { RADIUS, TYPE } from "../theme/theme";
+import { PALETTE, RADIUS, TYPE } from "../theme/theme";
+import { WORKSPACE_PHOTOS } from "../theme/imagery";
 import { useAuth, useAccountState } from "../auth/AuthContext";
 import { openPlan } from "../utils/openPlan";
 import { navigateTo } from "../utils/navigation";
-
-function ServiceSkeleton() {
-  return (
-    <SkeletonCard style={{ marginBottom: 16, padding: 16, flexDirection: "row", alignItems: "center" }}>
-      <Skeleton width={44} height={44} radius={12} style={{ marginRight: 14 }} />
-      <View style={{ flex: 1 }}>
-        <Skeleton width="50%" height={16} style={{ marginBottom: 8 }} />
-        <Skeleton width="85%" height={12} />
-      </View>
-    </SkeletonCard>
-  );
-}
 
 // Placeholder for the contract-dependent sections (Payment, Contracts) while /contracts loads.
 function TenantSkeleton() {
@@ -70,43 +68,9 @@ function TenantSkeleton() {
         ))}
         <Skeleton width="100%" height={52} radius={12} style={{ marginTop: 6 }} />
       </SkeletonCard>
-      <SkeletonCard style={{ padding: 20, marginBottom: 32 }}>
-        <Skeleton width="35%" height={14} style={{ marginBottom: 20 }} />
-        <View style={{ flexDirection: "row", gap: 16 }}>
-          {[0, 1, 2].map((key) => (
-            <View key={key} style={{ flex: 1 }}>
-              <Skeleton width="50%" height={28} style={{ marginBottom: 8 }} />
-              <Skeleton width="70%" height={12} />
-            </View>
-          ))}
-        </View>
-      </SkeletonCard>
     </View>
   );
 }
-
-// Small rounded icon tile that opens a dashboard card's header.
-function CardIcon({ icon }) {
-  const { colors } = useTheme();
-  return (
-    <View
-      style={{
-        width: 32,
-        height: 32,
-        borderRadius: RADIUS.sm,
-        backgroundColor: colors.primarySoft,
-        alignItems: "center",
-        justifyContent: "center",
-        marginRight: 10,
-      }}
-    >
-      <Ionicons name={icon} size={16} color={colors.primary} />
-    </View>
-  );
-}
-
-// A figure the data doesn't provide (null) is shown as a dash, never as 0.
-const UNKNOWN_VALUE = "—";
 
 // The Payment card: total / paid / balance / due CALCULATED from the REAL installments with the PROVISIONAL paid
 // rule (services/paymentSummary.js) — labelled so. Pay now pays the due amount first, else the outstanding balance;
@@ -280,72 +244,7 @@ function ExpiringSoonAlert({ items, onOpen }) {
   );
 }
 
-// The Contracts card: ONLY total / active / expired from the REAL contracts (MAZ's own status enum) — no other
-// breakdown (client, 2026-10-08). Tap → Contract List.
-function ContractsCard({ summary, onPress }) {
-  const { colors } = useTheme();
-  const card = useCardStyle();
-  // `dot` marks the status a column counts (success = active, muted = expired); Total has none.
-  const columns = [
-    { label: "Total", value: summary.totalCount },
-    { label: "Active", value: summary.activeCount, dot: colors.success },
-    { label: "Expired", value: summary.expiredCount, dot: colors.textSubtle },
-  ];
-
-  return (
-    <PressableScale
-      onPress={onPress}
-      scaleTo={0.98}
-      accessibilityRole="button"
-      accessibilityLabel={`Contracts: ${columns.map((c) => `${c.value} ${c.label.toLowerCase()}`).join(", ")}. View all contracts`}
-      containerStyle={{ marginBottom: 32 }}
-      style={[card, { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 20 }]}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
-        <CardIcon icon="document-text-outline" />
-        <Text style={[TYPE.cardTitle, { flex: 1, color: colors.text }]}>Contracts</Text>
-        <View
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: colors.surfaceMuted,
-            borderWidth: 1,
-            borderColor: colors.surfaceBorder,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Ionicons name="arrow-forward" size={16} color={colors.textSecondary} />
-        </View>
-      </View>
-      <View style={{ flexDirection: "row" }}>
-        {columns.map((column, index) => (
-          <View
-            key={column.label}
-            style={{
-              flex: 1,
-              paddingLeft: index > 0 ? 16 : 0,
-              borderLeftWidth: index > 0 ? 1 : 0,
-              borderLeftColor: colors.divider,
-            }}
-          >
-            <Text style={[TYPE.statValue, { color: colors.text }]}>{column.value ?? UNKNOWN_VALUE}</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
-              {column.dot ? (
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: column.dot, marginRight: 6 }} />
-              ) : null}
-              <Text style={[TYPE.caption, { color: colors.textMuted }]}>{column.label}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    </PressableScale>
-  );
-}
-
-// Tenant shortcut — three separate elevated tiles side by side: icon, label and a short status caption.
-// Notifications has no tile — the Alerts tab is its entry point.
+// One "Quick actions" tile (the dashboard's last block): icon circle, label, optional caption.
 function QuickAction({ icon, label, caption, onPress }) {
   const { colors } = useTheme();
   const card = useCardStyle();
@@ -378,6 +277,137 @@ function QuickAction({ icon, label, caption, onPress }) {
         <Text style={[TYPE.caption, { color: colors.textMuted, textAlign: "center", marginTop: 2 }]}>{caption}</Text>
       ) : null}
     </PressableScale>
+  );
+}
+
+// Section header (2026-10-22 polish — "looks like plain text"): the brand's crimson square, a title, an optional
+// one-line subtitle and an optional "See all"-style pill on the right.
+function SectionHeader({ title, subtitle, action, style }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[{ flexDirection: "row", alignItems: "flex-end", marginBottom: 16 }, style]}>
+      <View style={{ flex: 1, marginRight: action ? 12 : 0 }}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: colors.highlight, marginRight: 10 }} />
+          <Text accessibilityRole="header" style={[TYPE.sectionTitle, { color: colors.text, fontSize: 20, lineHeight: 26 }]}>
+            {title}
+          </Text>
+        </View>
+        {subtitle ? (
+          <Text style={[TYPE.caption, { color: colors.textMuted, marginTop: 4, marginLeft: 18, fontSize: 13, lineHeight: 18 }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {action ? (
+        <PressableScale
+          onPress={action.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          hitSlop={8}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            minHeight: 32,
+            paddingLeft: 12,
+            paddingRight: 8,
+            borderRadius: RADIUS.pill,
+            backgroundColor: colors.primarySoft,
+          }}
+        >
+          <Text style={[TYPE.status, { color: colors.primary }]}>{action.label}</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.primary} style={{ marginLeft: 2 }} />
+        </PressableScale>
+      ) : null}
+    </View>
+  );
+}
+
+const TIME_ICONS = { morning: "sunny-outline", afternoon: "partly-sunny-outline", evening: "moon-outline" };
+
+// The greeting as a compact one-row ivory card (user, 2026-10-22: a navy panel looked heavy, then a tall ivory card
+// looked too big): initials avatar, "Good evening" with its time icon over the greeting, and — new users only — a
+// round navy arrow to Browse Plans. Light mode: a soft white → ivory gradient so it stands apart from the ivory page;
+// dark mode: the theme's warm ivory tint.
+function GreetingCard({ firstName, fullName, isTenant, onExplore }) {
+  const { colors, isDark, elevation } = useTheme();
+  const initials = String(fullName || firstName || "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("");
+  const greeting = isTenant
+    ? `Welcome back${firstName ? `, ${firstName}` : ""}`
+    : firstName
+      ? `Hello, ${firstName}`
+      : "Welcome to MAZ";
+  return (
+    <View
+      style={[
+        {
+          flexDirection: "row",
+          alignItems: "center",
+          paddingVertical: 14,
+          paddingHorizontal: 16,
+          borderRadius: RADIUS.hero,
+          borderWidth: 1,
+          borderColor: colors.surfaceBorder,
+          backgroundColor: isDark ? colors.ivory : colors.surface,
+        },
+        isDark ? null : { experimental_backgroundImage: `linear-gradient(135deg, #ffffff 0%, ${PALETTE.ivory} 100%)` },
+        elevation.card,
+      ]}
+    >
+      {initials ? (
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: colors.primary,
+            borderWidth: 2,
+            borderColor: colors.surface,
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 12,
+          }}
+        >
+          <Text style={{ color: colors.onPrimary, fontSize: 16, fontWeight: "700" }}>{initials}</Text>
+        </View>
+      ) : null}
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Ionicons name={TIME_ICONS[timeOfDayPart()]} size={13} color={colors.primary} style={{ marginRight: 5 }} />
+          <Text style={[TYPE.caption, { color: colors.textMuted, fontWeight: "600" }]}>{timeOfDayGreeting()}</Text>
+        </View>
+        <Text
+          accessibilityRole="header"
+          numberOfLines={1}
+          style={{ color: colors.heading, fontSize: 20, lineHeight: 26, fontWeight: "700", letterSpacing: -0.3, marginTop: 1 }}
+        >
+          {greeting}
+        </Text>
+      </View>
+      {!isTenant ? (
+        <PressableScale
+          onPress={onExplore}
+          accessibilityRole="button"
+          accessibilityLabel="Explore workspaces"
+          containerStyle={{ marginLeft: 12 }}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.primary,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Ionicons name="arrow-forward" size={18} color={colors.onPrimary} />
+        </PressableScale>
+      ) : null}
+    </View>
   );
 }
 
@@ -415,10 +445,37 @@ export default function HomeDashboardScreen({ navigation, route }) {
   // keepDataOnError (request card): a failed focus refresh keeps the earlier, read-only figures on screen.
   const latestRequest = useAsync(fetchLatestRequest, { keepData: true, keepDataOnError: true });
 
-  // New users: the services they can request ("What are you looking for?"), same source as Browse Plans.
+  // The services (PlanCards): new users browse them here; tenants get a "Find a new office" row. Same source as
+  // Browse Plans.
   const isTenant = userState === "tenant";
-  const loadPlans = useCallback(() => (isTenant ? Promise.resolve(null) : fetchPlans()), [isTenant]);
-  const plans = useAsync(loadPlans);
+  const plans = useAsync(fetchPlans);
+  const [category, setCategory] = useState("all");
+
+  // The sticky header turns solid as soon as content scrolls under it (UI thread).
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+  const headerSolid = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, 24], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  // "Why MAZ" (new users): its stat cards play their entrance once its top scrolls into view (or at once when the page
+  // is short enough to show it without scrolling), so the motion is seen rather than spent off-screen. Its top =
+  // the content container's y + the section's y inside it (both measured by onLayout).
+  const viewportH = useSharedValue(0);
+  const contentTop = useSharedValue(0);
+  const whyY = useSharedValue(0);
+  const [whyInView, setWhyInView] = useState(false);
+  useAnimatedReaction(
+    () => {
+      if (!viewportH.value || !whyY.value) return false;
+      return scrollY.value + viewportH.value >= contentTop.value + whyY.value + 80;
+    },
+    (visible, previous) => {
+      if (visible && !previous) runOnJS(setWhyInView)(true);
+    }
+  );
 
   const skipFirstFocus = useRef(true);
   const reloadRequest = latestRequest.reload;
@@ -446,24 +503,20 @@ export default function HomeDashboardScreen({ navigation, route }) {
     if (!request) return null;
     return (
       <View className="mb-8">
-        <SectionHeading>Your office request</SectionHeading>
+        <SectionHeader
+          title="Your office request"
+          action={{ label: "View all", onPress: () => navigateTo(navigation, "MyRequests") }}
+        />
         <RequestRow
           request={request}
-          onPress={() => navigation.navigate("RequestStatus", { requestId: request.requestId, summary: request.summary })}
+          onPress={() => navigation.navigate("RequestInvoice", { requestId: request.requestId })}
         />
         {/* Office requests are MOCK (services/mockApi.js) — never presented as sent to MAZ. */}
         <InfoNote style={{ marginBottom: 8 }}>{DEMO_NOTES.requests}</InfoNote>
         {latestRequest.stale ? <StaleDataNote onRetry={reloadRequest} /> : null}
-        <TextLink align="left" onPress={() => navigateTo(navigation, "MyRequests")} style={{ marginTop: 4 }}>
-          <Text className="text-sm font-medium" style={{ color: colors.text }}>
-            View all requests
-          </Text>
-        </TextLink>
       </View>
     );
   };
-
-  const cardStyle = useCardStyle();
 
   const errorState = (
     <EmptyState
@@ -500,9 +553,6 @@ export default function HomeDashboardScreen({ navigation, route }) {
           </FadeIn>
         ) : null}
 
-        <FadeIn index={3}>
-          <ContractsCard summary={summary} onPress={() => navigateTo(navigation, "ContractList")} />
-        </FadeIn>
       </>
     );
 
@@ -510,8 +560,50 @@ export default function HomeDashboardScreen({ navigation, route }) {
       <View>
         {contractSections}
 
-        <FadeIn index={4}>
-          <SectionHeading>Quick actions</SectionHeading>
+        {/* Secondary: only a request submitted this session shows here; "Find a new office" is the tenant's
+            way into the request flow. Contracts are listed only in the Contracts tab (no dashboard card since
+            2026-10-22), notifications in the Alerts tab. */}
+        <FadeIn index={5}>
+          {renderRequestSection()}
+
+          {plans.data?.length ? (
+            <View style={{ marginBottom: 8 }}>
+              <SectionHeader
+                title="Find a new office"
+                subtitle="Another space with MAZ, ready in minutes."
+                action={{ label: "Explore", onPress: () => navigation.navigate("BrowsePlans") }}
+              />
+              {/* Airbnb-style row of listing cards, bleeding to the screen edge. */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                snapToInterval={296}
+                style={{ marginHorizontal: -24 }}
+                contentContainerStyle={{ paddingHorizontal: 24 }}
+              >
+                {plans.data.map((plan) => (
+                  <PlanCard
+                    key={plan.id}
+                    plan={plan}
+                    onPress={() => openService(plan)}
+                    style={{ width: 280, marginRight: 16, marginBottom: 0 }}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : (
+            <AnimatedButton label="Find a new office" variant="secondary" onPress={() => navigation.navigate("BrowsePlans")} />
+          )}
+        </FadeIn>
+
+        <FadeIn index={6} style={{ marginTop: 32 }}>
+          {featureCard}
+        </FadeIn>
+
+        {/* Quick actions sit last (user, 2026-10-22). */}
+        <FadeIn index={6} style={{ marginTop: 32 }}>
+          <SectionHeader title="Quick actions" subtitle="Help and compliance in one tap." />
           <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
             <QuickAction
               icon="chatbubbles-outline"
@@ -527,32 +619,20 @@ export default function HomeDashboardScreen({ navigation, route }) {
               }
               onPress={() => navigation.navigate("Violations")}
             />
+            <QuickAction icon="receipt-outline" label="Invoices" caption="All bills" onPress={() => navigation.navigate("Invoices")} />
           </View>
           {/* The quick actions open MOCK features (support, violation notices). */}
-          <InfoNote style={{ marginBottom: 32 }}>{DEMO_NOTES.quickActions}</InfoNote>
-        </FadeIn>
-
-        {/* Secondary: only a request submitted this session shows here; "Find a new office" is the tenant's
-            way into the request flow. Contracts are listed on ContractList (the Contracts card), notifications
-            in the Alerts tab. */}
-        <FadeIn index={5}>
-          {renderRequestSection()}
-
-          <AnimatedButton
-            label="Find a new office"
-            variant="secondary"
-            onPress={() => navigation.navigate("BrowsePlans")}
-          />
+          <InfoNote>{DEMO_NOTES.quickActions}</InfoNote>
         </FadeIn>
       </View>
     );
   };
 
-  // Services open the lease term (Office Suites: the CR question first) — utils/openPlan.js.
+  // A service opens its listing page (PlanDetail) — utils/openPlan.js.
   const openService = (plan) => openPlan(navigation, plan);
 
   const renderServices = () => {
-    if (plans.loading) return [0, 1, 2].map((key) => <ServiceSkeleton key={key} />);
+    if (plans.loading) return [0, 1].map((key) => <PlanCardSkeleton key={key} />);
     if (plans.error) {
       return (
         <EmptyState
@@ -573,49 +653,79 @@ export default function HomeDashboardScreen({ navigation, route }) {
         />
       );
     }
-    return plans.data.map((plan) => (
-      <ServiceCard key={plan.id} plan={plan} onPress={() => openService(plan)} />
-    ));
-  };
-
-  // A request under way is shown first; the services follow so another one can be started.
-  const renderNewUser = () => (
-    <FadeIn index={1}>
-      {renderRequestSection()}
-      <View className="mb-8">
-        <Text style={[TYPE.sectionTitle, { color: colors.text, marginBottom: 4 }]}>
-          {request ? "Looking for something else?" : "What are you looking for?"}
-        </Text>
-        <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20, marginBottom: 16 }}>
-          Choose a service to see how it works.
-        </Text>
-        {renderServices()}
-      </View>
-
-      <SectionHeading>Why MAZ</SectionHeading>
-      <TrustStats stats={TRUST_STATS} />
-      <View style={[cardStyle, { flexDirection: "row", marginTop: 12, marginBottom: 32 }]}>
-        {BAHRAIN_ADVANTAGES.map((item, index) => (
-          <View
-            key={item.label}
-            style={{
-              flex: 1,
-              alignItems: "center",
-              paddingVertical: 16,
-              borderLeftWidth: index > 0 ? 1 : 0,
-              borderLeftColor: colors.divider,
-            }}
-          >
-            <Text className="text-lg font-bold" style={{ color: colors.primary }}>
-              {item.value}
-            </Text>
-            <Text className="text-xs mt-1" style={{ color: colors.textMuted }}>
-              {item.label}
-            </Text>
-          </View>
+    const shown = plans.data.filter((plan) => category === "all" || plan.id === category);
+    // key={category}: switching category re-plays the cards' entrance.
+    return (
+      <View key={category}>
+        {shown.map((plan, index) => (
+          <FadeIn key={plan.id} index={index}>
+            <PlanCard plan={plan} onPress={() => openService(plan)} />
+          </FadeIn>
         ))}
       </View>
-    </FadeIn>
+    );
+  };
+
+  const categories = [
+    { value: "all", label: "All", icon: "grid-outline" },
+    ...(plans.data ?? []).map((plan) => ({ value: plan.id, label: plan.title, icon: plan.icon ?? "business-outline" })),
+  ];
+
+  // MAZ's real waterfront as an Airbnb-style inspiration card (photo drifts; copy + pill on the photo) — never as a
+  // loose banner.
+  const featureCard = (
+    <FeatureCard
+      photo={WORKSPACE_PHOTOS.dashboard}
+      eyebrow="Amwaj Islands · Bahrain"
+      title="Business by the waterfront"
+      body="MAZ Business Center — your prestigious address in Bahrain."
+      cta="Explore offices"
+      onPress={() => navigation.navigate("BrowsePlans")}
+      accessibilityLabel="MAZ Business Center by the Amwaj Islands waterfront. Explore offices."
+    />
+  );
+
+  // A request under way is shown first; then the listings (filtered by the header's category tabs), the waterfront
+  // feature and Why MAZ.
+  const renderNewUser = () => (
+    <View>
+      <FadeIn index={1}>{renderRequestSection()}</FadeIn>
+      <FadeIn index={1}>
+        <SectionHeader
+          title={request ? "Looking for something else?" : "Workspaces for you"}
+          subtitle="Fully serviced, ready when you are."
+          action={{ label: "See all", onPress: () => navigation.navigate("BrowsePlans") }}
+        />
+      </FadeIn>
+      {renderServices()}
+
+      <FadeIn index={3} style={{ marginTop: 4, marginBottom: 8 }}>
+        {featureCard}
+      </FadeIn>
+
+      <View onLayout={(event) => whyY.set(event.nativeEvent.layout.y)}>
+        <Section>
+          <SectionHeader title="Why MAZ" subtitle="A prestigious address with Bahrain's business advantages." />
+          <TrustStats stats={TRUST_STATS} variant="cards" play={whyInView} />
+          <View style={{ height: 10 }} />
+          <TrustStats stats={BAHRAIN_ADVANTAGES} variant="cards" play={whyInView} startIndex={TRUST_STATS.length} />
+        </Section>
+      </View>
+
+      {/* Quick actions sit last (user, 2026-10-22). */}
+      <FadeIn index={5}>
+        <SectionHeader title="Quick actions" />
+        <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
+          <QuickAction icon="receipt-outline" label="Invoices" caption="All invoices" onPress={() => navigation.navigate("Invoices")} />
+          <QuickAction
+            icon="clipboard-outline"
+            label="My requests"
+            caption="Track your requests"
+            onPress={() => navigateTo(navigation, "MyRequests")}
+          />
+        </View>
+      </FadeIn>
+    </View>
   );
 
   // The customer record's name is only a fallback (the session's name comes first) and never blocks the screen.
@@ -624,46 +734,79 @@ export default function HomeDashboardScreen({ navigation, route }) {
   const name = user?.name || (isTenant ? tenantName : undefined);
 
 
+  const firstName = name ? String(name).trim().split(/\s+/)[0] : null;
+
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <PhotoHero
-          photo="dashboard"
-          overlay="fade"
-          rounded={false}
-          minHeight={330}
-          contentStyle={{ paddingHorizontal: 24, paddingTop: 16, justifyContent: "space-between" }}
-        >
-          {/* Notifications and Settings are the Alerts / Account tabs now — the header keeps only the logo. */}
-          <View style={{ flexDirection: "row", alignItems: "center", minHeight: 44 }}>
-            <BrandMark width={88} bare />
-          </View>
-
-          <View style={{ paddingTop: 96 }}>
-            {profileSaved ? (
-              <Text className="text-sm mb-4" style={{ color: colors.success }}>
-                {"✓"} Profile saved
-              </Text>
-            ) : null}
-
-            <FadeIn>
-              <ScreenTitle
-                eyebrow="MAZ Business Center"
-                title={isTenant ? `Welcome back${name ? `, ${name}` : ""}` : name ? `Welcome, ${name}` : "Welcome"}
-                subtitle={
-                  isTenant
-                    ? "Here's an overview of your contracts and payments."
-                    : "Your prestigious business address in Bahrain begins here."
-                }
-              />
-            </FadeIn>
-          </View>
-        </PhotoHero>
-
-        <View className="flex-1 px-6 pb-10">
-          {isTenant ? renderTenant() : renderNewUser()}
+    <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.canvas }}>
+      {/* Sticky Airbnb-style header: the search pill (+ category tabs for new users). Transparent over the page glow at
+          the top; it turns solid with a hairline once the content scrolls under it. */}
+      <View style={{ zIndex: 2 }}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: colors.background,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.divider,
+            },
+            headerSolid,
+          ]}
+        />
+        <View style={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: isTenant ? 12 : 4 }}>
+          <SearchPill onPress={() => navigation.navigate("BrowsePlans")} />
         </View>
-      </ScrollView>
+        {!isTenant && plans.data?.length ? (
+          <CategoryChips items={categories} value={category} onChange={setCategory} fit style={{ borderBottomWidth: 0 }} />
+        ) : null}
+      </View>
+
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        onLayout={(event) => viewportH.set(event.nativeEvent.layout.height)}
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
+        <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 }}>
+          {profileSaved ? (
+            <Text className="text-sm mb-4" style={{ color: colors.success }}>
+              {"\u2713"} Profile saved
+            </Text>
+          ) : null}
+
+          <FadeIn>
+            <BrandMark width={72} bare style={{ marginBottom: 16 }} />
+            <GreetingCard
+              firstName={firstName}
+              fullName={name}
+              isTenant={isTenant}
+              onExplore={() => navigation.navigate("BrowsePlans")}
+            />
+          </FadeIn>
+        </View>
+
+        <View className="flex-1 px-6 pb-10" onLayout={(event) => contentTop.set(event.nativeEvent.layout.y)}>{isTenant ? renderTenant() : renderNewUser()}</View>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
+}
+
+// "morning" | "afternoon" | "evening" by the phone's local time (GreetingCard's icon).
+function timeOfDayPart(now = new Date()) {
+  const hour = now.getHours();
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  return "evening";
+}
+
+// "Good morning" / "Good afternoon" / "Good evening" by the phone's local time.
+function timeOfDayGreeting(now = new Date()) {
+  const hour = now.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 }

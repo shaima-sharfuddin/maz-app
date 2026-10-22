@@ -1,11 +1,13 @@
-import { View, ScrollView } from "react-native";
+import { useState } from "react";
+import { View, Text, ScrollView } from "react-native";
 import { useWatch } from "react-hook-form";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AnimatedButton from "../components/AnimatedButton";
 import BackButton from "../components/BackButton";
 import ScreenTitle from "../components/ScreenTitle";
 import FormField from "../components/FormField";
-import EstimateCard from "../components/EstimateCard";
+import StickyFooter from "../components/StickyFooter";
+import BottomSheet from "../components/BottomSheet";
+import { Section, ListRow } from "../components/Section";
 import MonthsStepper from "../components/MonthsStepper";
 import useZodForm from "../hooks/useZodForm";
 import { selectTermSchema } from "../validation/schemas";
@@ -24,8 +26,10 @@ import {
   formatBHD,
 } from "../data/pricing";
 import { useTheme } from "../theme/ThemeContext";
+import { TYPE } from "../theme/theme";
 
-// BrowsePlans / dashboard service → here → ReviewRequest → RequestStatus. The tenant chooses the lease length (any whole
+// PlanDetail (→ CommercialRegistration for Office Suites) → here → ReviewRequest. Visual system v2: a big month counter,
+// hairline price rows, and a sticky footer with the total + "Price details" sheet. The tenant chooses the lease length (any whole
 // number of months, 1–36 — client decision, 2026-10-07). There is no payment frequency: new requests are paid in full,
 // upfront (2026-10-14), so the estimate shows the whole lease's rent + deposit as separate lines (rate and deposit are
 // PLACEHOLDERS, data/pricing.js). ReviewRequest then submits it with the signed-in user's details — no details form
@@ -54,47 +58,63 @@ export default function SelectTermScreen({ navigation, route }) {
     newCr ? { label: "CR registration fee", value: formatBHD(invoice.crFee) } : null,
   ].filter(Boolean);
 
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const note = newCr
+    ? "You pay the full lease rent upfront, plus the deposit and the CR registration fee. Sample rate, deposit and fee — MAZ confirms final pricing after reviewing your request."
+    : "You pay the full lease rent upfront, plus the deposit. Sample rate and deposit — MAZ confirms final pricing after reviewing your request.";
+  const priceRows = (
+    <>
+      {rows.map((row) => (
+        <ListRow key={row.label} label={row.label} value={row.value} />
+      ))}
+      <View style={{ height: 1, backgroundColor: colors.divider, marginVertical: 6 }} />
+      <ListRow label="Total payable" value={formatBHD(invoice.total)} strong />
+      <Text style={[TYPE.caption, { color: colors.textSubtle, marginTop: 8 }]}>{note}</Text>
+    </>
+  );
+
   const onReview = handleSubmit((values) => {
     navigation.navigate("ReviewRequest", { plan, termMonths: values.termMonths, cr });
   });
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 px-6 pt-8 pb-10">
+        <View className="flex-1 px-6 pt-8 pb-6">
           <BackButton onPress={() => navigation.goBack()} />
 
           <ScreenTitle
             eyebrow={plan?.title}
-            title="Your lease term"
-            subtitle="Choose how long you'd like to lease. The lease is paid in full, upfront — the amounts shown are estimates for your request."
+            title="How long would you like to lease?"
+            subtitle="Any length from 1 to 36 months, paid in full, upfront."
           />
 
           <FormField
             control={control}
             name="termMonths"
             component={MonthsStepper}
-            label="Lease length *"
             min={MIN_LEASE_MONTHS}
             max={MAX_LEASE_MONTHS}
             quickPicks={LEASE_QUICK_PICKS}
           />
 
-          <EstimateCard
-            rows={rows}
-            totalLabel="Total payable"
-            total={formatBHD(invoice.total)}
-            note={
-              newCr
-                ? "You pay the full lease rent upfront, plus the deposit and the CR registration fee. Sample rate, deposit and fee — MAZ confirms final pricing after reviewing your request."
-                : "You pay the full lease rent upfront, plus the deposit. Sample rate and deposit — MAZ confirms final pricing after reviewing your request."
-            }
-            style={{ marginTop: 4, marginBottom: 32 }}
-          />
-
-          <AnimatedButton label="Review request" onPress={onReview} disabled={!isValid} />
+          <Section title="Price details">{priceRows}</Section>
         </View>
       </ScrollView>
+
+      <StickyFooter
+        amount={formatBHD(invoice.total)}
+        caption={`Total for ${formatTerm(termMonths)} · sample`}
+        detailsLabel="Price details"
+        onDetails={() => setDetailsOpen(true)}
+        label="Review"
+        onPress={onReview}
+        disabled={!isValid}
+      />
+
+      <BottomSheet visible={detailsOpen} onClose={() => setDetailsOpen(false)} title="Price details">
+        {priceRows}
+      </BottomSheet>
     </SafeAreaView>
   );
 }

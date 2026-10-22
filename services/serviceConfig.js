@@ -31,7 +31,11 @@ export const SERVICE_SOURCES = Object.freeze({
   bills: "real", // contracts.receipts[]
   billPaidStatus: "provisional", // paid = receipt_date set — unconfirmed (services/billService.js)
   paymentSummary: "provisional", // total / paid / balance / due calculated from the installments (paymentSummary.js)
-  payments: "mock", // no MAZ payment API / gateway — services/mock/mockPayments.js (DEMO / TEST, session-only)
+  // Payments: REAL Tap gateway (POST /tap/create-charge — services/tapPayments.js), ON by default (user decision,
+  // 2026-10-20). EXPO_PUBLIC_TAP_PAYMENTS=false falls back to the DEMO provider (services/mock/mockPayments.js).
+  // ⚠️ Known gaps: the paid / unpaid rule is still provisional (a charge could ask for a bill MAZ has already been
+  // paid), and MAZ has no endpoint to confirm a charge's result — the app never shows a live payment as "paid".
+  payments: "real",
   expiryAlerts: "real", // CONFIRMED client rule (EXPIRY_WARNING_DAYS) applied in the app to the real contracts.to_date
   //                       (expiryService.js) — the alerts themselves are shown via the MOCK notifications below
   renewals: "mock", // no MAZ renewal API — services/mock/mockRenewals.js (requests in memory, never sent)
@@ -58,6 +62,12 @@ export function enquiriesEnabled() {
 // time so tests can flip it.
 export function customersEnabled() {
   return process.env.EXPO_PUBLIC_SEND_CUSTOMERS === "true";
+}
+
+// Tap payments switch: Payment Review opens a REAL Tap checkout (real money) unless the bundler is started with
+// EXPO_PUBLIC_TAP_PAYMENTS=false (demo payments). Read at call time so tests can flip it.
+export function tapPaymentsEnabled() {
+  return process.env.EXPO_PUBLIC_TAP_PAYMENTS !== "false";
 }
 
 // The enquiry's `date`: today (local) by default. For the recruiter's initial test only, a fixed date can be given with

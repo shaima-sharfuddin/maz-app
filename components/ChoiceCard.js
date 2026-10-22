@@ -3,15 +3,13 @@ import { Ionicons } from "@expo/vector-icons";
 import PressableScale from "./PressableScale";
 import FieldError from "./FieldError";
 import { useTheme } from "../theme/ThemeContext";
-import { useCardStyle } from "../theme/surfaces";
 import { RADIUS, TYPE } from "../theme/theme";
 
-// One large, tappable answer to a question (e.g. "I have a CR" / "I need a new CR"): navy icon tile (as on
-// ServiceCard), title, description, an optional `footer` line, and a radio circle. Selected = primary border +
-// filled radio.
+// One large, tappable answer to a question (e.g. "I have a CR" / "I need a new CR") — Airbnb-style (Visual system v2):
+// an outlined card with a plain icon, title, description, an optional `footer` line and a radio circle. Selected = a
+// thicker primary border, a faint tint and a filled radio.
 export function ChoiceCard({ icon, title, description, footer, selected, onPress, style }) {
   const { colors } = useTheme();
-  const card = useCardStyle();
 
   return (
     <PressableScale
@@ -22,32 +20,21 @@ export function ChoiceCard({ icon, title, description, footer, selected, onPress
       accessibilityLabel={[title, description, footer].filter(Boolean).join(". ")}
       containerStyle={[{ marginBottom: 12 }, style]}
       style={{
-        ...card,
         flexDirection: "row",
-        alignItems: "center",
-        padding: 18,
+        alignItems: "flex-start",
+        padding: selected ? 19 : 20,
         minHeight: 44,
-        borderWidth: 1.5,
-        borderColor: selected ? colors.primary : colors.surfaceBorder,
+        borderRadius: RADIUS.card,
+        borderWidth: selected ? 2 : 1,
+        borderColor: selected ? colors.primary : colors.inputBorder,
+        backgroundColor: selected ? colors.primaryTint : colors.surface,
       }}
     >
-      <View
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: RADIUS.md,
-          backgroundColor: colors.hero,
-          alignItems: "center",
-          justifyContent: "center",
-          marginRight: 14,
-        }}
-      >
-        <Ionicons name={icon} size={22} color={colors.onHero} />
-      </View>
+      <Ionicons name={icon} size={26} color={colors.text} style={{ marginRight: 16, marginTop: 1 }} />
       <View style={{ flex: 1, marginRight: 12 }}>
         <Text style={[TYPE.cardTitle, { color: colors.text, marginBottom: 2 }]}>{title}</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>{description}</Text>
-        {footer ? <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: "600", marginTop: 6 }}>{footer}</Text> : null}
+        <Text style={[TYPE.body, { color: colors.textMuted }]}>{description}</Text>
+        {footer ? <Text style={[TYPE.caption, { color: colors.text, fontWeight: "600", marginTop: 8 }]}>{footer}</Text> : null}
       </View>
       <View
         style={{
@@ -55,6 +42,7 @@ export function ChoiceCard({ icon, title, description, footer, selected, onPress
           height: 22,
           borderRadius: 11,
           borderWidth: 2,
+          marginTop: 2,
           borderColor: selected ? colors.primary : colors.inputBorder,
           alignItems: "center",
           justifyContent: "center",

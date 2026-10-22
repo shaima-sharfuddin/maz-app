@@ -15,16 +15,21 @@ export {
   fetchDashboardActivity,
   fetchTenantName,
   fetchContracts,
+  fetchContractsOrNone,
   fetchContract,
   summarizeContracts,
   contractAmounts,
 } from "./contractService";
 export { fetchBill, PAYMENT_STATUS_NOTE } from "./billService";
+export { fetchInvoices } from "./invoiceService";
 export {
   PAYMENTS_ARE_DEMO,
   getPaymentMethods,
   preparePayment,
   submitPayment,
+  submitInvoicePayment,
+  completeTapPayment,
+  knownPayerMobile,
   summarizePayments,
   payNowTarget,
   PAYMENT_SUMMARY_NOTE,
@@ -65,6 +70,8 @@ export { fetchActivityOptions, peekActivityOptions, prefetchActivityOptions } fr
 export { registerNewUser, verifyAndRegister } from "./registrationService";
 // Email verification — REAL (POST /sendotp, /verifyotp).
 export { sendVerificationCode, resendVerificationCode, verifyEmail } from "./otpService";
+// Forgot password — the code is REAL (/sendotp); the save (POST /resetpassword) is an ASSUMED route.
+export { sendPasswordResetCode, resetPassword } from "./passwordResetService";
 export { submitSignUpEnquiry, areEnquiriesLive } from "./enquiryService";
 export { submitSignUpCustomer, areCustomersLive } from "./customerCreationService";
 /* eslint-enable import/export */

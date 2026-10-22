@@ -27,8 +27,12 @@ an earlier TypeScript version — the conversion is complete and current files a
   POST /login { username, password } → { token, user: { id, name, username, role, company_id, customer_id } };
   wrong credentials → MAZ 422 → ApiError INVALID_CREDENTIALS ("Incorrect email or password."); a 2xx without token /
   user → INVALID_RESPONSE. POST /logout (Bearer) revokes the token — best effort, never rejects, its 401 never fires
-  the sign-out handler. There is NO GET /me and NO password-reset endpoint (Login shows "Forgot your password? Contact
-  MAZ at …" from data/brand.js CONTACT). apiMappers.toUiAuthSession maps the answer: user.email = username,
+  the sign-out handler. There is NO GET /me. FORGOT PASSWORD (2026-10-20): Login's "Forgot password?" → ForgotPassword (email →
+  REAL POST /sendotp) → ResetPassword (code + New Password / Confirm, resetPasswordSchema) → services/passwordResetService.js
+  resetPassword → POST /resetpassword { email, otp, password, password_confirmation } — an ASSUMED route (MAZ has no reset
+  endpoint yet; route + field names are guesses) → Login { email, passwordReset } ("Password updated"). The code is not
+  checked with /verifyotp first (it could be used up). 404 → RESET_UNAVAILABLE (no retry); 422 naming otp / { error:
+  "Invalid OTP" } → INVALID_CODE; other 422 → RESET_FAILED. Public (no token). Tests: tests/password-reset.test.mjs apiMappers.toUiAuthSession maps the answer: user.email = username,
   customerId = String(customer_id) or null, mazUserId / companyId (text), role, identity "maz", companyName null
 - The TOKEN: kept in the session (SecureStore maz.session, encrypted) and sent as "Authorization: Bearer <token>" on
   EVERY MAZ request by the axios request interceptor (services/http/apiClient.js; token provider set by authService).
@@ -51,7 +55,9 @@ an earlier TypeScript version — the conversion is complete and current files a
 - App.js renders route groups by auth state (React Navigation's auth-flow pattern): signed out → Welcome,
   NewUserSignUp, Login; signed in without profile → CompleteProfile, Settings (no current path creates such an
   account — kept for safety); signed in → dashboard and all tenant screens. Screens never navigate across these groups — they call signIn / completeProfile /
-  signOut and the navigator switches. Any new screen must be added to the right group
+  signOut and the navigator switches. Any new screen must be added to the right group — LAZILY (2026-10-22, startup speed): add it to App.js's `screens`
+  map (`() => require("./screens/X").default`) and register it with getComponent={screens.X}; only Welcome and
+  HomeDashboard are imported eagerly (Expo keeps Metro's inlineRequires off, so eager imports all run at launch)
 - New User sign-up: the account stays a LOCAL demo (quickSignUp, NO session), but the EMAIL CODE IS REAL (2026-10-14,
   services/otpService.js): registerNewUser emails it via POST /sendotp { email }; VerifyAccount checks it via POST
   /verifyotp { email, otp } → { verified: true }; Resend = /sendotp again. Both public (no token; a 401 signs nobody
@@ -91,7 +97,8 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Signed in, the root stack's first screen is MainTabs (App.js — @react-navigation/bottom-tabs) with the CUSTOM
   floating-pill bar components/TabBar.js (active tab = navy pill with icon + label, others icon only; crimson dot on
   Alerts while fetchUnreadCount > 0; hidden while the Android keyboard is open). Tabs keep their old route names:
-  HomeDashboard (Home) · ContractList (Contracts — tenants only) · MyRequests (Requests) · Notifications (Alerts) ·
+  HomeDashboard (Home) · ContractList (Contracts — EVERY account since 2026-10-22; no customer → "No contracts yet" via
+  contractService.fetchContractsOrNone) · MyRequests (Requests) · Notifications (Alerts) ·
   Settings (Account). Every other signed-in screen is pushed on the stack ABOVE the tabs. Settings is ALSO a stack
   screen in the !profileComplete group
 - utils/navigation.js: navigateTo(navigation, name, params) (tab routes go through MainTabs — React Navigation 7
@@ -102,7 +109,9 @@ an earlier TypeScript version — the conversion is complete and current files a
 
 ## Theme system (light + dark) — never hardcode colors
 - THE 5-COLOUR PALETTE — permanent rule (premium redesign, client 2026-10-10; REPLACES the 2026-10-09 crimson-primary
-  rule), PALETTE in theme/theme.js: soft off-white #f6f7f9 (main background) · pure white #ffffff (cards / content
+  rule; PAGE BACKGROUND CHANGED 2026-10-22 by the user — warm ivory #f2eee7 page + a soft navy glow, "rich and
+  professional", replacing off-white), PALETTE in theme/theme.js: warm ivory #f2eee7 (main background, light mode) ·
+  pure white #ffffff (cards / content
   surfaces) · deep navy #1a3966 = THE PRIMARY colour (colors.primary: primary buttons, important headings —
   colors.heading on ScreenTitle — selected states, the selected tab, focus borders, icon tiles; plus HeroPanel /
   PhotoHero "navy") · warm ivory #f2eee7 (subtle premium accent — colors.ivory / ivoryText, and the "inverse" button
@@ -127,6 +136,9 @@ an earlier TypeScript version — the conversion is complete and current files a
 - Expo (managed workflow), NativeWind v4 for styling, React Navigation (native-stack)
 - expo-haptics for button feedback, @react-native-community/datetimepicker for dates, expo-print + expo-sharing
   for the (demo) invoice PDF download (utils/invoicePdf.js; both are in Expo Go — a dev build needs a native rebuild)
+- react-native-webview (2026-10-20): hosts Tap's checkout INSIDE the app (screens/TapCheckoutScreen.js) so the app can read
+  MAZ's callback page. In Expo Go; a dev build needs a native rebuild. (expo-web-browser was tried and removed — an
+  external browser can't see the callback.)
 - axios is THE transport (2026-10-14): services/http/apiClient.js (axios instance + Bearer interceptor + our own status →
   ApiError mapping and JSON parsing). The old fetch-based services/httpClient.js and the unused axiosClient.js are gone
 - Screens live in /screens, reusable UI in /components
@@ -149,9 +161,12 @@ Simplified per the client's demo feedback (2026-10-07):
 4. Request an office (everyone — new users and tenants via "Find a new office"):
    Dashboard services / Browse plans → tap a service (utils/openPlan.js) → Term & payments (Office Suites → CommercialRegistration first: "I have a CR" + CR number, or "I need a new CR"
    + the sample CR registration fee on the first invoice — 2026-10-14) → Lease term (SelectTermScreen: lease length 1–36 months + estimate — paid IN FULL, upfront; no payment
-   frequency since 2026-10-14) → ReviewRequest: "Submit demo request" saves it (mock — never sent to MAZ) with the signed-in user's name, email and company (no
-   separate details form) →
-   the request then moves through 5 stages, tracked on RequestStatusScreen via StatusStepper:
+   frequency since 2026-10-14) → ReviewRequest: "Submit request & view invoice" saves it (mock — never sent to MAZ) with the signed-in user's name, email and company (no
+   separate details form) → NO STATUS STEPPER (client, 2026-10-20): the invoice is issued AT ONCE (mockApi.submitRequest →
+   issueInvoice; currentStep 5) and ReviewRequest pushes RequestInvoice → "Pay" → Payment (mobile) → TapCheckout (in-app
+   WebView) → PaymentResult (animated success / failed / pending + haptics). The dashboard request card and My Requests
+   open RequestInvoice. RequestStatusScreen is RETIRED (unregistered, file kept). Earlier flow, kept for reference:
+   the request then moved through 5 stages, tracked on RequestStatusScreen via StatusStepper:
      1. Request Submitted → 2. Email Confirmation (simulated) → 3. Admin Review → 4. Unit Assigned → 5. Invoice Generated
      (stage 2's label says "simulated" because no email service exists — restore "Email Confirmation Sent" once MAZ
      really emails it)
@@ -170,7 +185,18 @@ Navigation shortcuts (client feedback on the latest build): verification → das
 (Meeting Rooms → MeetingRooms).
 
 ## Screens built so far (working, in JavaScript)
-- screens/WelcomeScreen.js ✅ — MAZ's REAL reception photo (maz-reception.jpg) as the hero at the TOP of the screen,
+- screens/WelcomeScreen.js ✅ — REDESIGNED 2026-10-22 (user request; supersedes the client-restored layout below):
+  FULL-SCREEN stock lobby photo (welcome-lobby.jpg — NOT MAZ's) with a slow Ken Burns drift, deep navy scrims top and
+  bottom, the MAZ logo TRANSPARENT (BrandMark bare — no white chip, user 2026-10-22) on a soft ivory veil at the top,
+  then a timed entrance (Reanimated): brand squares build one by one, headline word by word,
+  tagline, trust stats counting up (CountUp), then "Get Started" (variant "inverse", with a passing Shimmer sweep) and
+  "Log in" (new variant "heroOutline": white outline on the photo — not the rejected glass style). Reduce motion skips
+  it all. Status bar EXCEPTION: setStatusBarStyle("dark") while focused (useFocusEffect — dark icons on the ivory
+  veil in either theme), restored on blur. COPY (2026-10-22 polish): overline "MAZ Business Center · Kingdom of Bahrain",
+  WELCOME_TAGLINE "A prestigious address for your business." / "Book your fully serviced office in just two minutes."
+  (the 2-minute booking promise is MANDATORY — keep it in any rewording), WELCOME_HIGHLIGHTS pills — REMOVED later the same day, see Visual system v2 notes (Fully serviced ·
+  Sea-view suites · 0% corporate tax — from MAZ's own copy), buttons "Get started" / "Log in to your account".
+  Earlier (kept for history): MAZ's REAL reception photo (maz-reception.jpg) as the hero at the TOP of the screen,
   fading into the page (PhotoHero "fade") — the original layout, RESTORED by the client (2026-10-10) after full-bleed
   photo / glass-button variants were tried and rejected. NO BrandMark logo chip on Welcome (the photo shows the real
   wall logo; other screens keep theirs) — a context tagline (headline + supporting line), inline TrustStats
@@ -202,8 +228,9 @@ Navigation shortcuts (client feedback on the latest build): verification → das
 - screens/LoginScreen.js ✅ — the ONLY way in: REAL MAZ login (logIn → services/mazAuth.js POST /login) → signIn(session) —
   the dashboard follows the session's customerId (useAccountState: customer → "tenant", none → "newUser") (navigator
   switches automatically). Shows the session-expired notice and the justVerified note; wrong credentials → ErrorBanner
-  "Incorrect email or password." (no retry button — retype); network / server errors → "Try again". No reset endpoint:
-  "Forgot your password? Contact MAZ at {CONTACT.email} or {CONTACT.phone}." "Don't have an account? Sign up" →
+  "Incorrect email or password." (no retry button — retype); network / server errors → "Try again". "Forgot password?"
+  link → screens/ForgotPasswordScreen.js → screens/ResetPasswordScreen.js (see "Auth & sessions"; both in the signed-out
+  group); shows "Password updated" on return (passwordReset param) "Don't have an account? Sign up" →
   NewUserSignUp
 - screens/CompleteProfileScreen.js ✅ (registered, but no current path reaches it — New User sign-ups are
   complete at once) — fields match MAZ's "Create Customer" form exactly (Company Details
@@ -300,6 +327,16 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   invoice PDF once the backend provides one
 - screens/MyRequestsScreen.js ✅ — every submitted request, newest first (fetchRequests, refreshed on focus): RequestRow
   with request no. + submitted date → RequestStatus, under DEMO_NOTES.requests; empty → "No requests yet" → BrowsePlans
+- screens/InvoicesScreen.js ✅ — (user, 2026-10-22) EVERY invoice in one grouped list: office request invoices (MOCK,
+  "· Demo") + contract bills (REAL receipts, provisional Paid / Unpaid) from services/invoiceService.js (fetchInvoices /
+  pure buildInvoiceList, newest first; no customer → request invoices only, no /contracts request). SegmentedControl All /
+  Unpaid / Paid; row → RequestInvoice or BillViewer (Pay + PDF live there); DEMO_NOTES.invoices note. Entry points:
+  dashboard Quick actions "Invoices" (tenant: 3rd tile; new user: Invoices + My requests tiles), Account tab "Billing →
+  Invoices" row (only once profileComplete). Tests: tests/invoices.test.mjs
+- DASHBOARD LAYOUT (user, 2026-10-22, supersedes the client's 2026-10-08 Contracts card): NO Contracts card on any
+  dashboard — contracts only via the Contracts tab. Quick actions are the LAST block (tenant: Expiring alert → Payment →
+  office request → Find a new office → FeatureCard → Quick actions; new user: office request → Workspaces for you →
+  FeatureCard → Why MAZ → Quick actions). Why MAZ's stat-card entrance triggers from its measured top (contentTop + whyY).
 - screens/ContractListScreen.js ✅ — Dashboard Contracts card → "Your contracts": SegmentedControl All / Active / Expired
   (route param `filter` preselects) over the logged-in customer's REAL contracts (fetchContracts, contractService) as
   ContractRows → ContractDetail. Skeleton / per-filter EmptyState / error + Try again
@@ -512,6 +549,35 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   today), demoPaidAmount, unpaidBills, dueBills } CALCULATED from the real installments + the provisional / demo
   status; payNowTarget(summary) → { kind "due" | "balance", amount, bills } or null; PAYMENT_SUMMARY_NOTE
   ("Provisional — not confirmed by MAZ"). Replace with MAZ's own balances once they exist
+- TAP PAYMENTS (2026-10-20) — services/tapPayments.js: POST /tap/create-charge { amount (BHD, 3 dp), order_id (bill no. /
+  contract id + "-" + timestamp), customer_name, customer_email (session), customer_mobile (sent as local digits, e.g. "36123456"; PaymentReview always asks —
+  paymentContactSchema, Bahrain; the office invoice's PaymentScreen uses paymentService.knownPayerMobile — the sign-up
+  mobile of this app run, mockApi.mockSignUpMobile — and shows the field ONLY when that's unknown, client 2026-10-22) } → apiMappers.toUiTapCharge { chargeId,
+  checkoutUrl } — success body CONFIRMED (Postman, 2026-10-20): { payment_url, charge_id } (Tap's raw { id,
+  transaction.url } / a `data` wrapper also accepted); only https://checkout.tap.company/ links are opened. Public today (empty body → 422 naming all 5 fields); Bearer sent anyway.
+  ON BY DEFAULT (user decision, 2026-10-20; SERVICE_SOURCES.payments "real") — EXPO_PUBLIC_TAP_PAYMENTS=false falls back
+  to the demo provider (serviceConfig.tapPaymentsEnabled). Known gaps, accepted: the paid rule is provisional (a live
+  charge could ask for an already-paid bill) and there is NO charge-status endpoint: submitPayment → { status
+  "checkout", checkoutUrl, orderId } → PaymentReview opens it (expo-web-browser) and shows "Complete your payment on
+  Tap" + "MAZ confirms the payment" — never "paid"; no demo ledger / notification. Errors: 422 → PAYMENT_REJECTED, 2xx
+  saying failed → PAYMENT_NOT_STARTED, no link → INVALID_RESPONSE. ALSO the New User office request invoice
+  (PaymentScreen { requestId }): paymentService.submitInvoicePayment(invoice, { customer }) → Tap charge for the MOCK
+  invoice's amount (sample pricing; order id = invoice number + timestamp; the request stays "Invoice Generated").
+  CALLBACK (2026-10-20): Tap redirects to MAZ's GET /tap/callback?tap_id=… which answers { message, status, charge {
+  id, amount, currency, metadata.order_id, reference.payment, transaction.date.completed, response.message, card {
+  brand, last_four }, receipt.email … } }. screens/TapCheckoutScreen.js (fullScreenModal, no swipe-back; X / hardware
+  back → "Cancel payment?") runs the checkout in a WebView, spots the callback URL (tapPayments.isTapCallbackUrl →
+  "Confirming your payment" cover), reads the page text via injectedJavaScript → parseTapCallback →
+  apiMappers.toUiTapResult { outcome "succeeded" (CAPTURED) | "pending" (INITIATED / IN_PROGRESS, or unreadable / 15 s
+  timeout) | "failed" (anything else), chargeId, amount, orderId, reference, paidAt, message, card, receiptEmailed } →
+  paymentService.completeTapPayment(purpose, result) (purpose { type "invoice", requestId } → a CAPTURED payment calls
+  mockApi.recordRequestPayment: invoice Paid, contract Reviewing; { type "bills", contractIds } → nothing recorded —
+  MAZ's data) + notification → navigation.replace("PaymentResult"). screens/PaymentResultScreen.js: animated badge
+  (disc settles, glyph lands, halo ripples; Reduce motion respected) + Haptics.notificationAsync Success / Error /
+  Warning, amount, receipt DocumentSheet (Paid with VISA •••• 1111, Date & time, Reference, Transaction ID, Order,
+  "receipt emailed" chip); success → "View invoice" (popTo RequestInvoice { refreshKey }) / "Back to contract"; failed →
+  "Try again" (back to the payment screen); hardware back = the primary exit, never the checkout. Tests in
+  tests/tap-payments.test.mjs use MAZ's real (sandbox) callback body. Needed from MAZ: the redirect after payment, a charge-status endpoint / webhook result, and the confirmed paid field. Tests: tests/tap-payments.test.mjs
 - services/paymentService.js — the ONLY payment entry for screens: PAYMENTS_ARE_DEMO, getPaymentMethods,
   preparePayment(scope) (REAL bills → { kind, amount, dueAmount, bills, contractIds }; NOTHING_DUE when nothing is
   owed), submitPayment(plan, methodId, { testOutcome, onProgress }) → { status "succeeded", receipt } | { status
@@ -684,7 +750,12 @@ Navigation shortcuts (client feedback on the latest build): verification → das
 - Keep it minimal and fast-feeling — no bouncy animations, no unnecessary motion
 - Match the navigation pattern already used in App.js (React Navigation native-stack,
   headerShown: false, screens registered in RootStackParamList-style object)
-- Screen shell: SafeAreaView (style backgroundColor: colors.background) → (KeyboardAvoidingView for forms) → ScrollView →
+- PAGE BACKGROUND (2026-10-22): components/PageBackground.js (page colour + navy glow from the top + a faint
+  BrandSquares motif + a warm low glow) is rendered behind EVERY screen by App.js (`screenLayout` on the stack AND the
+  tab navigator). Screens' root view uses colors.canvas ("transparent") so it shows through — NEVER
+  colors.background on a screen root (that paints over the glow). colors.background stays the opaque page colour for
+  covers / footers / fades (StickyFooter, PhotoHero "fade", TapCheckout covers). Tokens: canvas, pageGlow.
+- Screen shell: SafeAreaView (style backgroundColor: colors.canvas) → (KeyboardAvoidingView for forms) → ScrollView →
   View "flex-1 px-6 pt-8 pb-10"; BackButton + ScreenTitle at the top; sections spaced mb-8
 - Design tokens (visual styling phase 1, 2026-10-08) live in theme/theme.js: SPACING, RADIUS, TYPE (type scale — spread into
   Text styles; figures use tabular numerals) and ELEVATION (soft card shadow in LIGHT mode only — never in dark, where
@@ -693,7 +764,8 @@ Navigation shortcuts (client feedback on the latest build): verification → das
 - Cards: use useCardStyle() (theme/surfaces.js) — radius 16, colors.surface + 1px colors.surfaceBorder + the light-mode
   shadow; rows inside a card are split by colors.divider. Fields: radius 12, minHeight 48. Buttons: pill (RADIUS.pill).
   Buttons: AnimatedButton variant "primary" (navy, one per screen) / "brand" (hero navy) / "inverse" (ivory fill, navy
-  label — the action ON a navy HeroPanel, e.g. dashboard "Pay now") / "secondary" (outlined) / "ghost" (text-only)
+  label — the action ON a navy HeroPanel, e.g. dashboard "Pay now") / "secondary" (outlined) / "ghost" (text-only) /
+  "heroOutline" (white outline + label on a photo / navy scrim — Welcome's "Log in")
 - Visual system (phases 2–3, 2026-10-08) — reuse these few patterns, don't invent new card styles:
   • PhotoHero — full-width workspace photo with a scrim: overlay "navy" (onHero text: Browse Plans banner, Contract
     Details cover, renewal screens) or "fade" (photo dissolves into the page: Welcome, dashboard). Rounded sheet bottom
@@ -732,6 +804,79 @@ Navigation shortcuts (client feedback on the latest build): verification → das
   crimson text is hard to read on the dark background
 - Mock data that differs per account type should read useAccountState() (auth/AuthContext.js — from the session's
   customerId), never a hardcoded flag or a separate setting
+
+## Visual system v2 — Airbnb-inspired (2026-10-22, phase 1: core screens)
+The user asked for Airbnb's style; decisions: CORE SCREENS FIRST (later phases reuse the components) and KEEP THE MAZ
+PALETTE (navy primary, crimson only for highlights — never Airbnb's pink or branding). Borrowed: layout, type, white
+space, photo-first listing cards, hairline sections, sticky price bars, smooth Reanimated motion.
+- Motion is Reanimated 4 (UI thread; babel-preset-expo adds the worklets plugin). JS-thread writes use `sv.set(...)`
+  (the React lint rules reject `sv.value =` outside worklets). Every animation respects useReducedMotion().
+  MOTION.pressSpring / pressScale / cardPressScale / headerFade / sheetDuration in theme/theme.js; TYPE.largeTitle,
+  TYPE.listingTitle; RADIUS.photo (20); SPACING.gutter (24).
+- New components: PhotoCarousel (paged photos + scroll-tracking pill dots, optional "1 / 3"), PlanCard (listing card:
+  photos, title, tagline, "BHD 100 / month · sample"; PlanCardSkeleton), SearchPill ("Find your workspace" → Browse
+  Plans), CategoryChips (icon tabs with a sliding underline + selection haptic), ParallaxHeader (photo header that
+  drifts / stretches, floating back disc, solid title bar fading in), StickyFooter (price left, compact action right,
+  "Price details" link, children above for banners — render it OUTSIDE the ScrollView), Section / ListRow (hairline
+  sections, `action` link e.g. "Edit"), BottomSheet (Reanimated slide-up, backdrop tap closes). PressableScale is
+  Reanimated now (same API). AnimatedButton `fullWidth={false}` = compact pill. ChoiceCard = outlined card.
+  MonthsStepper = big centred number (rolls in) between round − / + buttons.
+- Photos: theme/imagery.js PLAN_PHOTOS / planPhotos(plan) — STOCK only (real MAZ photos stay off service cards); PlanDetail
+  says "Photos are illustrative". data/brand.js SERVICES gain `tagline`; HOW_IT_WORKS = the app's real request flow.
+- Flow change: a service card opens screens/PlanDetailScreen.js (listing page: ParallaxHeader, What you get — only
+  confirmed facts, no invented amenities — How it works timeline (Why MAZ REMOVED 2026-10-22 — user: dashboard only); StickyFooter "Get started" / "Choose
+  term" → utils/openPlan.planRoute: Office Suites → CommercialRegistration, else SelectTerm). openPlan → PlanDetail.
+- Screens restyled: TabBar (flat full-width bar, icon + label on every tab, active navy with icon pop), HomeDashboard
+  (2026-10-22 rework: STICKY header — SearchPill (+ CategoryChips for new users) — transparent at the top, turning solid
+  with a hairline as content scrolls under it; then logo, a time-of-day overline ("Good evening") and largeTitle
+  greeting with the first name; new users: "Workspaces for you" PlanCards, then the waterfront FeatureCard, then "Why
+  MAZ"; tenants: payment / contracts / quick actions, the "Find a new office" row (4:3 cards), then the FeatureCard).
+  The MAZ waterfront photo is NEVER a loose banner — it's components/FeatureCard.js (square, rounded, slow Ken Burns
+  drift, navy fall, eyebrow / title / body + white "Explore offices" pill on the photo → BrowsePlans). PlanCard photos
+  are near-square by default (LISTING_ASPECT 20/19, Airbnb-like; aspectRatio prop for narrow rows) and fade in as they
+  load (PhotoCarousel FadeImage). BrowsePlans
+  ("Explore": CategoryChips + PlanCards), CommercialRegistration / SelectTerm (sticky footer + Price details sheet) /
+  ReviewRequest ("Confirm your request": mini listing card, Your lease (Edit) / Price details / Requesting as sections,
+  sticky Submit) / RequestInvoice (sticky "Pay now" while unpaid) / Payment (sections, "Pay with" row, sticky
+  Continue). Welcome keeps the client-restored layout (2026-10-10) + a slow photo settle-in zoom only. ServiceCard is
+  no longer used by Home / Browse.
+- Not yet (later phases): contracts, bills, notifications, settings, sign-up / login, support, violations.
+- 2026-10-22 dashboard polish (user): the header's category tabs use CategoryChips `fit` (All / Office Suites / CR
+  Registration share the width equally, icon tile fills navy when selected, navy underline slides); "Why MAZ" uses
+  TrustStats variant "cards" (icon tile + CountUp figure, staggered spring entrance — played when the section scrolls
+  into view; 3 trust stats then the 2 Bahrain advantages sideways). CountUp is shared (components/CountUp.js, also
+  Welcome). TRUST_STATS / BAHRAIN_ADVANTAGES carry an `icon`.
+- Tap checkout speed (2026-10-22): components/TapWarmup.js (invisible WebView on checkout.tap.company) sits on
+  PaymentReview / Payment while Tap is live, so the WebView engine + TLS are warm; TapCheckout lifts its "Opening"
+  cover at 70% load progress (or 4 s) instead of waiting for onLoadEnd.
+- CR Registration has its OWN listing photos (user, 2026-10-22): cr-signing.jpg + cr-consultation.jpg (Unsplash stock,
+  CREDITS.md) + the facade — none shared with Office Suites.
+- PaymentResult polish (user, 2026-10-22): navy hero (badge, brand-square confetti on success, status chip, title,
+  amount counting up via CountUp `format`), receipt sheet overlapping the hero, "What you can try" (failed) / "What
+  happens next" (pending), fixed action footer, light status bar while focused. SOUND: utils/resultSound.js plays
+  assets/sounds/payment-{success,failed,pending}.wav (chimes generated for the app) with the haptic — expo-audio
+  (plugin configured with NO microphone / background permissions), silent switch respected, mixes with other audio,
+  lazy-required so an old dev build without the module just stays silent. A dev build needs a native rebuild.
+- Polish pass (user, 2026-10-22): PlanCard photos are 4:3 (LISTING_ASPECT — shorter, same width) with a white
+  service-icon chip, arrow button and "Sample" price pill; SERVICES "Office Suites" is titled "Office Space" (id
+  unchanged). Welcome: rising squares REMOVED (only the MAZ logo), a crossfading 3-photo stock slideshow with a drift
+  (PhotoSlideshow: welcome-lobby, plans-office-suite, welcome-lounge — the corridor was dropped as "unfinished-looking"),
+  UNCROWDED (user): overline → headline → trust stats → tagline (ivory accent bar) right above "Get started" → buttons;
+  highlight pills REMOVED (WELCOME_HIGHLIGHTS deleted); deeper navy scrim from ~45% + text shadows (READABLE) so text
+  reads over any photo; compact sizing below 760pt height so it fits without scrolling,
+  WELCOME_TAGLINE.line "Secure your premium workspace in just two minutes, effortlessly." PAYMENTS: the mobile field was
+  removed, then RESTORED by the user the same day — PaymentReview always asks (pre-filled with the sign-up number
+  when known), PaymentScreen asks only when knownPayerMobile is null (paymentContactSchema); toApiTapCharge still
+  leaves out an empty mobile. Invoice PDF (utils/invoicePdf.js): commercial A4 layout — navy / crimson band, MAZ logo
+  (utils/mazLogo.js data URI), From (CONTACT) / Bill to cards on ivory, Description · Qty · Unit price · Amount table,
+  Subtotal / VAT / navy total bar, Paid / Unpaid stamp, payment terms, footer; the demo honesty note stays.
+- Dashboard polish (user, 2026-10-22 — "looks like plain text"): the greeting is a COMPACT one-row ivory GreetingCard (navy HeroPanel, then a tall ivory card, both rejected —
+  now ~76pt: initials avatar, time icon + "Good evening" over the greeting, new users a round navy arrow → BrowsePlans;
+  earlier tall version: white → ivory
+  gradient card, hairline border, navy text / initials / "Explore workspaces" primary pill; was HeroPanel:
+  time-of-day icon chip, large greeting, supporting line, initials avatar, new users get an "Explore workspaces"
+  inverse pill) under the logo (no date — removed by the user, 2026-10-22); every section uses SectionHeader (crimson square, 20pt title, optional
+  subtitle, optional "See all" / "View all" / "Explore" pill) — both local to HomeDashboardScreen.js.
 
 ## Forms & API calls — the standard for EVERY screen (existing and future)
 Every screen follows this pattern; don't hand-roll validation, loading flags or try/catch in screens.
@@ -778,7 +923,8 @@ or showing an error/result. Nothing may do nothing when tapped.
 - Services: Office Suites, CR Registration, Startup Incubator, Meeting Rooms
 - Testimonials: do NOT add stock or copied client quotes. No testimonials section at all (placeholder removed by the client,
   2026-10-14) unless MAZ asks for one and grants permission
-- BrowsePlans should reuse components/TrustStats.js and match HomeDashboard's card styling
+- "Why MAZ" / trust-stat sections appear ONLY on the dashboard (user, 2026-10-22): PlanDetail's Why MAZ and Browse
+  Plans' "Trusted in Bahrain" were removed. BrowsePlans matches HomeDashboard's card styling
 
 ## Recruiter decisions (2026-10-05) — implemented
 - No real payment gateway for now. Bill payment status is shown as just Paid / Unpaid (success / danger badges).
@@ -859,7 +1005,8 @@ or showing an error/result. Nothing may do nothing when tapped.
   all mock, in memory (lost on reload). Paying does NOT create a contract in the app — contracts come from the
   real API, which the app can't write to — so the request shows the contract as Reviewing until the backend adds
   it to GET /contracts
-- Existing User payments (phase 4, 2026-10-08) are DEMO: PaymentReview → mockPayments → "Paid (demo)" for the session;
+- Existing User payments: LIVE via Tap since 2026-10-20 (see TAP PAYMENTS); the demo path below is now only the
+  EXPO_PUBLIC_TAP_PAYMENTS=false fallback. Earlier (phase 4, 2026-10-08) they were DEMO: PaymentReview → mockPayments → "Paid (demo)" for the session;
   nothing is sent to MAZ. Needed from MAZ to go live: payment endpoint + gateway, confirmation (webhook / status), the
   paid field, balances.
 - Payment recording — PENDING: no gateway is being built (decided), and PaymentScreen stays a MOCK (BenefitPay /
@@ -930,9 +1077,11 @@ or showing an error/result. Nothing may do nothing when tapped.
     customer logs in (an auth endpoint linking a login to the customer id); (5) a way to create + delete test records
     (or a sandbox); (6) lock down GET /customers + turn off debug mode. Until then sign-up stays local
     (mockApi.quickSignUp, labelled demo on screen); the transport's only write method is post(), used only by
-    mazAuth (POST /login, /logout), otpService (POST /sendotp, /verifyotp), enquiryService (POST /enquiries) and customerCreationService (POST /customers) (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
+    mazAuth (POST /login, /logout), tapPayments (POST /tap/create-charge), otpService (POST /sendotp, /verifyotp), passwordResetService (POST /resetpassword), enquiryService (POST /enquiries) and customerCreationService (POST /customers) (no PUT / PATCH / DELETE — tests/write-safety.test.mjs enforces it)
   • Auth — LIVE (2026-10-14): POST /login + POST /logout (services/mazAuth.js); the login's user.customer_id links it to
-    a customer. Still missing: GET /me (re-check a restored token), password reset, token refresh, (sign-ups now get a MAZ
+    a customer. Still missing: GET /me (re-check a restored token), a CONFIRMED password-reset endpoint (the app calls an
+    assumed POST /resetpassword — confirm the route, body fields, success body, and that /sendotp emails a code to an
+    EXISTING account), token refresh, (sign-ups now get a MAZ
     login via POST /register). Per-tenant filtering — PENDING: no server-side filtering (?customer_id= is ignored, so every tenant's
     contracts are downloaded) — needs a per-user endpoint
   • No unit location field; no receipt period dates (only the description text); no payment / renewal endpoints

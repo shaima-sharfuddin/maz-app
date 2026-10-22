@@ -9,13 +9,14 @@ export const BRAND = {
 
 // ---- THE PALETTE — permanent rule (premium redesign, 2026-10-10; replaces the 2026-10-09 crimson-primary rule) ----
 // MAZ's visual identity is these five colours and nothing else:
-//   offWhite — soft off-white #f6f7f9: the main page background (light mode)
+//   ivory    — warm ivory #f2eee7: THE PAGE BACKGROUND in light mode since 2026-10-22 (user decision — "rich and
+//              professional"; replaces off-white #f6f7f9), under a soft navy glow (components/PageBackground.js)
+//   offWhite — soft off-white #f6f7f9: no longer the page; kept for quiet fills
 //   white    — pure white: cards and content surfaces
 //   navy     — deep navy BRAND.navy #1a3966: THE PRIMARY colour — primary buttons, important headings, selected
 //              states (segments, chips, the selected tab), focus borders, icon tiles, HeroPanel / PhotoHero "navy".
 //              navyDeep #101828 is body text in light mode and the page background in dark mode.
-//   ivory    — warm ivory #f2eee7: a subtle premium accent (colors.ivory fill / ivoryText; the "inverse" button
-//              on navy panels) — never a large fill
+//              Also the accent fill (colors.ivory / ivoryText; the "inverse" button on navy panels)
 //   crimson  — BRAND.crimson #a31c37: used SPARINGLY, only for meaningful highlights and alerts (colors.highlight:
 //              unread markers, the brand square on SectionHeading). Never a primary button, never dominant.
 // Dark mode: navy can't be the primary on a navy page, so dark mode's primary is a lighter, accessible navy
@@ -41,6 +42,8 @@ export const PALETTE = {
 
 const dark = {
   background: PALETTE.navyDeep, // deep navy page background (a flagged palette exception — see PALETTE)
+  canvas: "transparent", // screens' root background: PageBackground shows through
+  pageGlow: "#9db4d9", // a lighter navy glow on the dark page
   surface: "rgba(255,255,255,0.045)", // cards
   surfaceBorder: "rgba(255,255,255,0.085)",
   surfaceMuted: "rgba(255,255,255,0.03)", // quiet inset areas inside a card (icon tiles, footers)
@@ -105,14 +108,16 @@ const dark = {
   disabledText: "#64748b",
 };
 
-// Light mode is a counterpart, not an inversion: off-white page, white cards, the dark navy
+// Light mode is a counterpart, not an inversion: ivory page (+ navy glow), white cards, the dark navy
 // background becomes the text color, and brand navy is the primary colour.
 const light = {
-  background: PALETTE.offWhite, // soft off-white
+  background: PALETTE.ivory, // warm ivory page (2026-10-22) — PageBackground adds the navy glow
+  canvas: "transparent", // screens' root background: PageBackground (ivory + glow) shows through
+  pageGlow: BRAND.navy, // the glow's colour (PageBackground)
   surface: PALETTE.white,
   surfaceBorder: "#e6e9ef",
   surfaceMuted: "#f8f9fb",
-  divider: "#eef0f4",
+  divider: "#e5dfd5", // warm hairline — reads on the ivory page and inside white cards
   sheet: "#ffffff",
   backdrop: "rgba(16,24,40,0.4)",
 
@@ -184,6 +189,7 @@ export const SPACING = {
   lg: 20,
   xl: 24,
   section: 32, // between sections (mb-8)
+  gutter: 24, // screen side padding (Airbnb-style screens, px-6)
 };
 
 export const RADIUS = {
@@ -193,6 +199,7 @@ export const RADIUS = {
   hero: 20, // hero panels and banners
   sheet: 28, // the rounded bottom of full-width photo heroes
   pill: 999, // buttons, chips
+  photo: 20, // listing photos (PlanCard, PhotoCarousel)
 };
 
 // Type scale. Spread into a Text style: style={[TYPE.cardTitle, { color: colors.text }]}.
@@ -200,7 +207,9 @@ export const RADIUS = {
 const FIGURES = { fontVariant: ["tabular-nums"] };
 export const TYPE = {
   display: { fontSize: 34, lineHeight: 40, fontWeight: "700", letterSpacing: -0.9 }, // Welcome headline only
-  screenTitle: { fontSize: 28, lineHeight: 34, fontWeight: "700", letterSpacing: -0.4 },
+  largeTitle: { fontSize: 32, lineHeight: 38, fontWeight: "800", letterSpacing: -0.8 }, // home greetings, detail titles
+  screenTitle: { fontSize: 28, lineHeight: 34, fontWeight: "700", letterSpacing: -0.6 },
+  listingTitle: { fontSize: 17, lineHeight: 22, fontWeight: "600", letterSpacing: -0.2 }, // PlanCard title
   sectionTitle: { fontSize: 18, lineHeight: 24, fontWeight: "700", letterSpacing: -0.2 },
   overline: { fontSize: 11, lineHeight: 14, fontWeight: "600", letterSpacing: 1.4, textTransform: "uppercase" },
   cardTitle: { fontSize: 16, lineHeight: 22, fontWeight: "600" },
@@ -243,4 +252,11 @@ export const MOTION = {
   enterOffset: 10, // pt a section rises while it fades in
   stagger: 60, // ms between consecutive sections
   maxStaggerSteps: 6, // later sections don't wait any longer
+  // Reanimated presets (Visual system v2): presses use a stiff, critically damped spring (no wobble); everything else
+  // eases out.
+  pressSpring: { damping: 20, stiffness: 400, mass: 0.6 },
+  pressScale: 0.97,
+  cardPressScale: 0.98,
+  headerFade: 180, // ms — the collapsing header's solid bar
+  sheetDuration: 280, // ms — BottomSheet slide
 };

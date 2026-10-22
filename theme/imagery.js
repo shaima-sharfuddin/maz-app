@@ -12,3 +12,24 @@ export const WORKSPACE_PHOTOS = {
   contract: require("../assets/images/workspace/contract-facade.jpg"), // stock — Contract Details cover
   renewal: require("../assets/images/workspace/renewal-reception.jpg"), // stock — renewal screens
 };
+
+// Listing photos per service (PlanCard carousels, PlanDetail header) — ALL licensed stock, generic offices, NOT MAZ's:
+// real MAZ photos stay off service cards (CLAUDE.md), and these are never captioned as MAZ's. Key = SERVICES id.
+const STOCK = {
+  officeSuite: require("../assets/images/workspace/plans-office-suite.jpg"),
+  corridor: require("../assets/images/workspace/dashboard-corridor.jpg"),
+  lobby: require("../assets/images/workspace/welcome-lobby.jpg"),
+  facade: require("../assets/images/workspace/contract-facade.jpg"),
+  reception: require("../assets/images/workspace/renewal-reception.jpg"),
+  crSigning: require("../assets/images/workspace/cr-signing.jpg"),
+  crConsultation: require("../assets/images/workspace/cr-consultation.jpg"),
+};
+export const PLAN_PHOTOS = {
+  "office-suites": [STOCK.officeSuite, STOCK.corridor, STOCK.lobby],
+  // Its own photos (user, 2026-10-22): paperwork + an adviser, none shared with Office Suites.
+  "cr-registration": [STOCK.crSigning, STOCK.crConsultation, STOCK.facade],
+  "startup-incubator": [STOCK.lobby, STOCK.corridor],
+  "meeting-rooms": [STOCK.reception, STOCK.officeSuite],
+};
+
+export const planPhotos = (plan) => PLAN_PHOTOS[plan?.id] ?? [STOCK.officeSuite];

@@ -77,7 +77,7 @@ export const fullName = z
   .max(80, "Keep it under 80 characters")
   .regex(NAME_RE, "Use letters, spaces, apostrophes or hyphens only");
 
-// For creating a password (future sign-up / reset flows).
+// For creating a password (sign-up, forgot password).
 export const password = z
   .string()
   .min(8, "Use at least 8 characters")
@@ -108,6 +108,13 @@ export const todayOrFutureDate = z
 
 export const otpCode = z.string().regex(/^\d{6}$/, "Enter the 6-digit code");
 
+// Password + Confirm Password forms (sign-up, reset): flags a confirmation that doesn't match.
+const checkPasswordsMatch = (values, ctx) => {
+  if (values.confirmPassword && values.confirmPassword !== values.password) {
+    ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Passwords don't match" });
+  }
+};
+
 export const requiredText = (label) => z.string().trim().min(1, `${label} is required`);
 export const requiredSelect = (label) => z.string().min(1, `Select ${label.toLowerCase()}`);
 export const optionalText = z.string().trim();
@@ -133,6 +140,24 @@ export const loginSchema = z.object({
   email,
   password: loginPassword,
 });
+
+// Live Tap payments: Tap needs the payer's mobile (the MAZ login carries none). Field restored by the user (2026-10-22).
+export const paymentContactSchema = z.object({
+  mobile: phone,
+});
+
+// Forgot password: the account email (ForgotPassword), then the emailed code + a new password (ResetPassword).
+export const forgotPasswordSchema = z.object({
+  email,
+});
+
+export const resetPasswordSchema = z
+  .object({
+    code: otpCode,
+    password,
+    confirmPassword: z.string().min(1, "Confirm your password"),
+  })
+  .superRefine(checkPasswordsMatch);
 
 // Mirrors MAZ's admin "Create Customer" form: only Customer Name, Owner Name and Gender are
 // required; everything else is optional but must be valid when filled.
@@ -204,9 +229,7 @@ export const newUserSignUpSchema = z
     remarks: z.string().trim().max(500, "Keep remarks under 500 characters").optional(),
   })
   .superRefine((values, ctx) => {
-    if (values.confirmPassword && values.confirmPassword !== values.password) {
-      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: "Passwords don't match" });
-    }
+    checkPasswordsMatch(values, ctx);
     const phoneIssue = values.phoneCountry ? mobileNumberIssue(values.phoneCountry, values.phoneNumber) : null;
     if (phoneIssue) ctx.addIssue({ code: "custom", path: ["phoneNumber"], message: phoneIssue });
     if (values.idType === "cpr") {

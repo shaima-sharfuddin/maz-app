@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { View, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useWatch } from "react-hook-form";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AnimatedButton from "../components/AnimatedButton";
+import StickyFooter from "../components/StickyFooter";
 import BackButton from "../components/BackButton";
 import ChoiceCardGroup from "../components/ChoiceCard";
 import FormField from "../components/FormField";
@@ -30,7 +30,7 @@ const OPTIONS = [
   },
 ];
 
-// Office Suites (BrowsePlans / dashboard → utils/openPlan.js) → here → SelectTerm { plan, cr } → ReviewRequest.
+// Office Suites (PlanDetail "Get started") → here → SelectTerm { plan, cr } → ReviewRequest.
 // "I have a CR" asks for the CR number; "I need a new CR" adds the (sample) CR registration fee to the first invoice
 // (data/pricing.js). Mock like the rest of the request: kept in the app, never sent to MAZ.
 export default function CommercialRegistrationScreen({ navigation, route }) {
@@ -58,7 +58,7 @@ export default function CommercialRegistrationScreen({ navigation, route }) {
   });
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 pt-8 pb-10">
@@ -92,11 +92,9 @@ export default function CommercialRegistrationScreen({ navigation, route }) {
               </InfoNote>
             ) : null}
 
-            <View className="mt-4">
-              <AnimatedButton label="Continue" onPress={onContinue} disabled={!isValid} />
-            </View>
           </View>
         </ScrollView>
+        <StickyFooter label="Continue" onPress={onContinue} disabled={!isValid} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

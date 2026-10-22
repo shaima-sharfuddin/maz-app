@@ -132,15 +132,16 @@ export function EmailField({ control, readOnly = false }) {
   );
 }
 
-// Password + Confirm password for the new MAZ login (sign-up only; rules: newUserSignUpSchema). Never shown on Review.
-export function PasswordFields({ control }) {
+// Password + Confirm password for a MAZ login: sign-up (rules: newUserSignUpSchema — never shown on Review) and
+// ResetPassword (label "New Password"; resetPasswordSchema).
+export function PasswordFields({ control, label = "Password" }) {
   return (
     <>
       <FormField
         control={control}
         name="password"
         component={StyledInput}
-        label="Password"
+        label={label}
         placeholder="At least 8 characters, a letter and a number"
         secureTextEntry
         autoCapitalize="none"
@@ -150,7 +151,7 @@ export function PasswordFields({ control }) {
         control={control}
         name="confirmPassword"
         component={StyledInput}
-        label="Confirm Password"
+        label={`Confirm ${label}`}
         placeholder="Enter your password again"
         secureTextEntry
         autoCapitalize="none"

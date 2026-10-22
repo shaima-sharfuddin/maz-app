@@ -10,8 +10,11 @@ import { RADIUS } from "../theme/theme";
 //                 primary would disappear
 //   "secondary" — outlined surface
 //   "ghost"     — text-only tertiary action (e.g. Cancel)
+//   "heroOutline" — transparent with a white outline + white label: the second action ON a photo / navy scrim
+//                 (Welcome's "Log in" beside the ivory "Get Started")
 // disabled → greyed out, no press feedback (use for invalid forms: disabled={!isValid}).
 // loading  → spinner beside the label, taps ignored (use with useSubmit's `loading`).
+// fullWidth={false} → a compact pill sized to its label (StickyFooter's action).
 // Height never changes between states, so nothing shifts.
 export default function AnimatedButton({
   label,
@@ -19,11 +22,12 @@ export default function AnimatedButton({
   variant = "primary",
   disabled = false,
   loading = false,
+  fullWidth = true,
 }) {
   const { colors } = useTheme();
   const inactive = disabled || loading;
   const filled = variant === "primary" || variant === "brand" || variant === "inverse";
-  const strong = filled; // larger, bolder label
+  const strong = filled || variant === "heroOutline"; // larger, bolder label
 
   // [background, label, border colour, border width] per variant.
   const looks = {
@@ -32,6 +36,7 @@ export default function AnimatedButton({
     inverse: [colors.heroAction, colors.onHeroAction, null, 0],
     secondary: [colors.surface, colors.text, colors.inputBorder, 1],
     ghost: ["transparent", colors.textSecondary, null, 0],
+    heroOutline: ["transparent", colors.onHero, colors.onHeroMuted, 1.5],
   };
   const [background, labelColor, borderColor, borderWidth] = looks[variant] ?? looks.primary;
   const backgroundColor = disabled && filled ? colors.disabledBackground : background;
@@ -43,7 +48,7 @@ export default function AnimatedButton({
       disabled={inactive}
       accessibilityRole="button"
       accessibilityState={{ disabled: inactive, busy: loading }}
-      containerStyle={{ width: "100%" }}
+      containerStyle={fullWidth ? { width: "100%" } : null}
       style={{
         backgroundColor,
         borderWidth,
@@ -51,6 +56,7 @@ export default function AnimatedButton({
         paddingVertical: 16 - borderWidth, // the border makes up the difference — same height in every variant
         borderRadius: RADIUS.pill,
         alignItems: "center",
+        paddingHorizontal: fullWidth ? 0 : 28,
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", minHeight: 20 }}>

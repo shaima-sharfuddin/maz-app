@@ -11,7 +11,6 @@ import useZodForm from "../hooks/useZodForm";
 import useSubmit from "../hooks/useSubmit";
 import { loginSchema } from "../validation/schemas";
 import { logIn } from "../services/api";
-import { CONTACT } from "../data/brand";
 import { useTheme } from "../theme/ThemeContext";
 import { useAuth } from "../auth/AuthContext";
 
@@ -19,9 +18,12 @@ export default function LoginScreen({ navigation, route }) {
   const { colors } = useTheme();
   const { signIn, sessionExpired } = useAuth();
   const justVerified = route.params?.justVerified;
+  // From ResetPassword once MAZ accepted the new password.
+  const passwordReset = route.params?.passwordReset;
   const {
     control,
     handleSubmit,
+    getValues,
     formState: { isValid },
   } = useZodForm(loginSchema, { email: route.params?.email ?? "", password: "" });
 
@@ -37,7 +39,7 @@ export default function LoginScreen({ navigation, route }) {
   });
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 pt-8 pb-10">
@@ -54,6 +56,12 @@ export default function LoginScreen({ navigation, route }) {
             {justVerified ? (
               <Text className="text-sm mb-6" style={{ color: colors.success, marginTop: -16 }}>
                 {"✓"} Email verified and your account is created. Log in with your email and password.
+              </Text>
+            ) : null}
+
+            {passwordReset ? (
+              <Text className="text-sm mb-6" style={{ color: colors.success, marginTop: -16 }}>
+                {"✓"} Password updated. Log in with your new password.
               </Text>
             ) : null}
 
@@ -77,10 +85,16 @@ export default function LoginScreen({ navigation, route }) {
               autoComplete="password"
             />
 
-            {/* No MAZ password-reset endpoint yet: point to MAZ instead of a link that can't work. */}
-            <Text className="text-sm" style={{ color: colors.textMuted, marginTop: -8, marginBottom: 4 }}>
-              Forgot your password? Contact MAZ at {CONTACT.email} or {CONTACT.phone}.
-            </Text>
+            {/* Carries the typed email over so it needn't be entered twice. */}
+            <TextLink
+              align="right"
+              onPress={() => navigation.navigate("ForgotPassword", { email: getValues("email")?.trim() ?? "" })}
+              style={{ marginTop: -12 }}
+            >
+              <Text className="text-sm font-medium" style={{ color: colors.text }}>
+                Forgot password?
+              </Text>
+            </TextLink>
 
             <View className="mt-4">
               <AnimatedButton

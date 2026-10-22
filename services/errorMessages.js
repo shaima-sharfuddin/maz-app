@@ -22,6 +22,12 @@ export const ERROR_MESSAGES = {
   ACCOUNT_EXISTS: "An account with this email already exists. Log in instead.",
   SIGN_UP_EXPIRED: "Your sign-up details are no longer available. Please sign up again.",
   REGISTRATION_FAILED: "MAZ couldn't create your account with these details. Check them and try again, or contact MAZ.",
+  // Forgot password (services/passwordResetService.js — POST /resetpassword, ASSUMED route).
+  RESET_FAILED: "We couldn't update your password. Please try again, or contact MAZ.",
+  RESET_UNAVAILABLE: "Password reset isn't available from MAZ yet. Please contact MAZ to reset your password.",
+  // Tap payments (services/tapPayments.js — POST /tap/create-charge).
+  PAYMENT_REJECTED: "MAZ couldn't start this payment with these details. Check your mobile number and try again.",
+  PAYMENT_NOT_STARTED: "We couldn't open the payment page. No money was charged. Please try again.",
   // A 401 when the app sent no token (signed out): not a session problem, so no sign-out.
   NOT_AUTHORIZED: "MAZ didn't allow access to this information. Please try again later.",
 };

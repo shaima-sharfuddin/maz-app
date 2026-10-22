@@ -1,22 +1,27 @@
 import * as mockPayments from "./mock/mockPayments";
+import * as tapPayments from "./tapPayments";
+import { recordRequestPayment, mockSignUpMobile } from "./mockApi";
+import { toISODate } from "../utils/formatDate";
 import { ApiError } from "./apiError";
 import { fetchContracts, fetchContract } from "./contractService";
 import { billsOf, summarizePayments, payNowTarget, contractsForAccountPayments } from "./paymentSummary";
-import { SERVICE_SOURCES } from "./serviceConfig";
+import { tapPaymentsEnabled } from "./serviceConfig";
 import { recordNotificationEvent } from "./notificationService";
 import { formatBHD } from "../data/pricing";
 
 // Existing User payments — the ONLY payment entry point for screens (via services/api.js).
 // What to pay is worked out from REAL MAZ bills (contractService); the payment itself goes to the provider.
 
-// ⚠️ PAYMENT PROVIDER: MOCK (services/mock/mockPayments.js) — MAZ has no payment API / gateway yet.
-// Going live: create services/mazPayments.js with the same functions (see mockPayments.js), import it here instead,
-// set SERVICE_SOURCES.payments to "real", and remove the demo overlay (mock/demoPaymentLedger.js + billService).
-const provider = mockPayments;
+// PAYMENT PROVIDER: the REAL Tap gateway (services/tapPayments.js — POST /tap/create-charge) by default; DEMO
+// (services/mock/mockPayments.js) when the bundler is started with EXPO_PUBLIC_TAP_PAYMENTS=false (serviceConfig).
+// Once MAZ confirms the paid rule and offers a charge-status endpoint: make Tap the only provider, set
+// SERVICE_SOURCES.payments to "real", and remove the demo overlay (mock/demoPaymentLedger.js + billService).
+const paymentsAreDemo = () => !tapPaymentsEnabled();
 
-export const PAYMENTS_ARE_DEMO = SERVICE_SOURCES.payments !== "real";
+// Read once by screens (the switch is fixed at build time).
+export const PAYMENTS_ARE_DEMO = paymentsAreDemo();
 
-export const getPaymentMethods = () => provider.getPaymentMethods();
+export const getPaymentMethods = () => (paymentsAreDemo() ? mockPayments : tapPayments).getPaymentMethods();
 
 // What a Pay button will pay. scope:
 //   { type: "account" }                          — dashboard Pay now (ACTIVE contracts only): due first, else balance
@@ -65,15 +70,68 @@ export async function preparePayment(scope) {
 }
 
 // Pays a prepared payment. onProgress("starting" | "processing") lets the screen show each step.
-// testOutcome ("succeed" | "decline") only matters for the DEMO provider.
-// → { status: "succeeded", receipt } | { status: "failed", message }. Network / validation problems reject.
-export async function submitPayment(plan, methodId, { testOutcome = "succeed", onProgress } = {}) {
+// DEMO → { status: "succeeded", receipt } | { status: "failed", message }; testOutcome ("succeed" | "decline") picks.
+// TAP → { status: "checkout", checkoutUrl, orderId, chargeId, amount }: the screen opens checkoutUrl, where the
+//   customer pays. customer { name, email, mobile } is required. Nothing is marked paid in the app — MAZ records it.
+// Network / validation problems reject.
+export async function submitPayment(plan, methodId, { testOutcome = "succeed", onProgress, customer } = {}) {
   onProgress?.("starting");
-  const { paymentId } = await provider.createPayment({ bills: plan.bills, amount: plan.amount, methodId, testOutcome });
+  if (!paymentsAreDemo()) return tapPayments.createCharge({ bills: plan.bills, amount: plan.amount, customer });
+  const { paymentId } = await mockPayments.createPayment({ bills: plan.bills, amount: plan.amount, methodId, testOutcome });
   onProgress?.("processing");
-  const result = await provider.getPaymentResult(paymentId);
+  const result = await mockPayments.getPaymentResult(paymentId);
   notifyPaymentResult(plan, result);
   return result;
+}
+
+// The payer's mobile for Tap's customer_mobile (required by MAZ), when the app already knows it: the number given at
+// sign-up this app run (national digits, e.g. "36123456"). null → the payment screen asks for it (client, 2026-10-22:
+// no mobile field unless the app has no number). The MAZ login carries no mobile.
+export function knownPayerMobile(email) {
+  return mockSignUpMobile(email)?.phoneNumber ?? null;
+}
+
+// New User office request invoice (PaymentScreen { requestId }) → a LIVE Tap charge. invoice: fetchRequestInvoice's
+// answer ({ invoiceNumber, outstanding }). → { status: "checkout", checkoutUrl, orderId, chargeId, amount }.
+// ⚠️ The request and its invoice are still MOCK (sample pricing, never sent to MAZ) — the order id (invoice number +
+// timestamp) is the only link MAZ gets, and the request stays "unpaid" in the app.
+export async function submitInvoicePayment(invoice, { customer } = {}) {
+  return tapPayments.createCharge({
+    bills: [{ number: invoice.invoiceNumber, contractId: null }],
+    amount: invoice.outstanding,
+    customer,
+  });
+}
+
+// The checkout WebView read MAZ's callback (tapPayments.parseTapCallback → result, or null when unreadable).
+// purpose: { type: "invoice", requestId } (office request) | { type: "bills", contractIds } (contract bills).
+// A CAPTURED invoice payment is recorded on the app-only request (it shows Paid, contract Reviewing); contract bills
+// are MAZ's records, so nothing is changed in the app. Adds the in-app notification. → the result, unchanged
+// (null → { outcome: "pending" } so the screen can say it's still being confirmed).
+export async function completeTapPayment(purpose, result, { chargeId = null, amount = null } = {}) {
+  const outcome = result ?? { outcome: "pending", chargeId, amount, currency: "BHD", card: null };
+  if (outcome.outcome === "succeeded" && purpose?.type === "invoice") {
+    await recordRequestPayment(purpose.requestId, {
+      receipt: outcome.reference ?? outcome.chargeId ?? chargeId,
+      paidDate: outcome.paidAt ? outcome.paidAt.slice(0, 10) : toISODate(new Date()),
+      method: outcome.card ? `${outcome.card.brand} •••• ${outcome.card.lastFour}` : "Tap",
+    }).catch(() => null); // the money is taken either way — the result screen must still show
+  }
+  const target =
+    purpose?.type === "invoice"
+      ? { screen: "RequestInvoice", params: { requestId: purpose.requestId } }
+      : purpose?.contractIds?.length === 1
+        ? { screen: "ContractDetail", params: { contractId: purpose.contractIds[0] } }
+        : null;
+  const shown = formatBHD(outcome.amount ?? amount ?? 0);
+  if (outcome.outcome !== "pending") {
+    recordNotificationEvent(
+      outcome.outcome === "succeeded"
+        ? { type: "payment", title: "Payment successful", body: `${shown} paid · reference ${outcome.reference ?? outcome.chargeId}.`, target }
+        : { type: "payment", title: "Payment not completed", body: `${shown} — ${outcome.message ?? "the payment was declined"}. No money was taken.`, target }
+    );
+  }
+  return outcome;
 }
 
 // In-app notification for the result (DEMO, notificationService) — opens the bill, or the contract.
@@ -85,13 +143,13 @@ function notifyPaymentResult(plan, result) {
       : singleContract
         ? { screen: "ContractDetail", params: { contractId: singleContract } }
         : null;
-  const demo = PAYMENTS_ARE_DEMO ? " (demo)" : "";
+  const demo = " (demo)"; // only demo payments report a result
   recordNotificationEvent(
     result.status === "succeeded"
       ? {
           type: "payment",
           title: `Payment successful${demo}`,
-          body: `${formatBHD(plan.amount)} for ${plan.bills.length} ${plan.bills.length === 1 ? "bill" : "bills"} · receipt ${result.receipt.receipt}.${PAYMENTS_ARE_DEMO ? " No money was charged." : ""}`,
+          body: `${formatBHD(plan.amount)} for ${plan.bills.length} ${plan.bills.length === 1 ? "bill" : "bills"} · receipt ${result.receipt.receipt}. No money was charged.`,
           target,
         }
       : { type: "payment", title: `Payment failed${demo}`, body: `${formatBHD(plan.amount)} — ${result.message}`, target }

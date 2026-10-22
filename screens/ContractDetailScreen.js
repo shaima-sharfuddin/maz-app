@@ -471,7 +471,7 @@ export default function ContractDetailScreen({ navigation, route }) {
   );
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         {showCover ? renderCover() : null}
         <View className="flex-1 px-6 pb-10" style={{ paddingTop: showCover ? 24 : 32 }}>

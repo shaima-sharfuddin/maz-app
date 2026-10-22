@@ -44,10 +44,12 @@ test("Renewal request: the contract read fails → no renewal created, no 'submi
 });
 
 // The only writes: the MAZ login / logout (services/mazAuth.js), the New User's MAZ login (POST /register —
-// registerService.js), the email code (otpService.js), the New User enquiry (POST /enquiries, off unless
+// registerService.js), the email code (otpService.js), the forgot-password save (POST /resetpassword — ASSUMED route,
+// passwordResetService.js), the Tap charge (POST /tap/create-charge, on unless EXPO_PUBLIC_TAP_PAYMENTS=false —
+// tapPayments.js, tap-payments.test.mjs), the New User enquiry (POST /enquiries, off unless
 // EXPO_PUBLIC_SEND_ENQUIRIES=true — enquiries.test.mjs) and the New User customer record (POST /customers, off unless
 // EXPO_PUBLIC_SEND_CUSTOMERS=true — customers.test.mjs).
-test("writes: no PUT / PATCH / DELETE; only mazAuth, otpService, registerService, enquiryService and customerCreationService call post()", () => {
+test("writes: no PUT / PATCH / DELETE; only mazAuth, otpService, registerService, passwordResetService, tapPayments, enquiryService and customerCreationService call post()", () => {
   const transport = readFileSync(new URL("../services/http/apiClient.js", import.meta.url), "utf8");
   assert.doesNotMatch(transport, /method:\s*["'](PUT|PATCH|DELETE)/i);
   for (const file of ["httpApi.js", "contractService.js", "billService.js", "paymentService.js", "renewalService.js", "notificationService.js", "violationService.js", "activityService.js", "registrationService.js", "mockApi.js", "authService.js"]) {
@@ -60,4 +62,6 @@ test("writes: no PUT / PATCH / DELETE; only mazAuth, otpService, registerService
   assert.deepEqual(posts("mazAuth.js"), ['post("/login"', 'post("/logout"']);
   assert.deepEqual(posts("otpService.js"), ['post("/sendotp"', 'post("/verifyotp"']);
   assert.deepEqual(posts("registerService.js"), ['post("/register"']);
+  assert.deepEqual(posts("passwordResetService.js"), ['post("/resetpassword"']);
+  assert.deepEqual(posts("tapPayments.js"), ['post("/tap/create-charge"']);
 });

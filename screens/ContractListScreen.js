@@ -9,7 +9,7 @@ import ScreenTitle from "../components/ScreenTitle";
 import SegmentedControl from "../components/SegmentedControl";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
-import { fetchContracts, errorMessage } from "../services/api";
+import { fetchContractsOrNone, errorMessage } from "../services/api";
 import { useTheme } from "../theme/ThemeContext";
 import FadeIn from "../components/FadeIn";
 import { isTabRoot } from "../utils/navigation";
@@ -21,7 +21,7 @@ const FILTERS = [
 ];
 
 const EMPTY_MESSAGES = {
-  all: { title: "No contracts yet", message: "Your contracts with MAZ will appear here." },
+  all: { title: "No contracts yet", message: "Once MAZ confirms your office, your contract appears here." },
   active: { title: "No active contracts", message: "Contracts that are currently active will appear here." },
   expired: { title: "No expired contracts", message: "Contracts that have ended will appear here." },
 };
@@ -32,7 +32,8 @@ const EMPTY_MESSAGES = {
 export default function ContractListScreen({ navigation, route }) {
   const { colors } = useTheme();
   const [filter, setFilter] = useState(route.params?.filter ?? "all");
-  const { loading, data: contracts, error, reload } = useAsync(fetchContracts);
+  // Every account has this tab: no MAZ customer → no contracts (an empty list, not an error).
+  const { loading, data: contracts, error, reload } = useAsync(fetchContractsOrNone);
 
   const renderList = () => {
     if (loading) {
@@ -61,7 +62,13 @@ export default function ContractListScreen({ navigation, route }) {
     const shown = filter === "all" ? contracts : contracts.filter((contract) => contract.status === filter);
     if (shown.length === 0) {
       const { title, message } = EMPTY_MESSAGES[filter];
-      return <EmptyState icon="document-text-outline" title={title} message={message} />;
+      return (
+        <EmptyState icon="document-text-outline" title={title} message={message}>
+          {filter === "all" ? (
+            <AnimatedButton label="Find an office" variant="secondary" onPress={() => navigation.navigate("BrowsePlans")} />
+          ) : null}
+        </EmptyState>
+      );
     }
     return shown.map((contract, index) => (
       <FadeIn key={contract.id} index={index}>
@@ -74,7 +81,7 @@ export default function ContractListScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
           {isTabRoot(navigation) ? null : <BackButton onPress={() => navigation.goBack()} />}

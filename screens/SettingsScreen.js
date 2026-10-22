@@ -7,6 +7,8 @@ import SegmentedControl from "../components/SegmentedControl";
 import AnimatedButton from "../components/AnimatedButton";
 import HeroPanel from "../components/HeroPanel";
 import SectionHeading from "../components/SectionHeading";
+import PressableScale from "../components/PressableScale";
+import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeContext";
 import { useCardStyle } from "../theme/surfaces";
 import { TYPE } from "../theme/theme";
@@ -37,7 +39,7 @@ export default function SettingsScreen({ navigation }) {
   const { simulateErrors, setSimulateErrors, startAtWelcome, setStartAtWelcome } = useDemo();
   const userState = useAccountState();
   // No "Edit profile" (removed by the client, 2026-10-14): the account card only shows who is signed in + Log out.
-  const { user, signOut } = useAuth();
+  const { user, signOut, profileComplete } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
 
   // Logging out switches the navigator back to Welcome (App.js), so no navigate() is needed.
@@ -59,7 +61,7 @@ export default function SettingsScreen({ navigation }) {
   const cardStyle = { ...card, padding: 16, paddingBottom: 0 };
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
           {isTabRoot(navigation) ? null : <BackButton onPress={() => navigation.goBack()} />}
@@ -106,6 +108,43 @@ export default function SettingsScreen({ navigation }) {
                   onPress={confirmLogOut}
                 />
               </View>
+            </FadeIn>
+          ) : null}
+
+          {/* Billing — the Invoices list (user, 2026-10-22). Only in the full signed-in app (the !profileComplete group
+              doesn't register Invoices). */}
+          {user && profileComplete ? (
+            <FadeIn index={1}>
+              <SectionHeading>Billing</SectionHeading>
+              <PressableScale
+                onPress={() => navigation.navigate("Invoices")}
+                scaleTo={0.98}
+                accessibilityRole="button"
+                accessibilityLabel="Invoices. Every invoice for your office and contracts"
+                containerStyle={{ marginBottom: 32 }}
+                style={[card, { flexDirection: "row", alignItems: "center", padding: 16, minHeight: 64 }]}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: colors.primarySoft,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: 12,
+                  }}
+                >
+                  <Ionicons name="receipt-outline" size={20} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[TYPE.cardTitle, { color: colors.text }]}>Invoices</Text>
+                  <Text style={[TYPE.caption, { color: colors.textMuted, marginTop: 2 }]}>
+                    Every invoice for your office and contracts
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </PressableScale>
             </FadeIn>
           ) : null}
 

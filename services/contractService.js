@@ -25,6 +25,17 @@ export async function fetchContracts({ withUnits = true } = {}) {
   return (await fetchCustomerContracts({ withUnits })).map(withBillStatuses);
 }
 
+// The same for screens every account can open (Contracts tab, Invoices): an account with no MAZ customer simply has no
+// contracts — [] without any request, instead of a NO_CUSTOMER error.
+export async function fetchContractsOrNone(options) {
+  try {
+    return await fetchContracts(options);
+  } catch (error) {
+    if (error?.code === "NO_CUSTOMER") return [];
+    throw error;
+  }
+}
+
 // One contract by its number, e.g. "CN-2026-00001" (Contract Details, Payment).
 export async function fetchContract(contractId) {
   requireCurrentCustomerId();

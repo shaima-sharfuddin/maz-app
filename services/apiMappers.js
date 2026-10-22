@@ -203,6 +203,14 @@ export function toApiEnquiry(signUp, { date }) {
 export const toApiSendOtp = (email) => ({ email: String(email ?? "").trim() });
 export const toApiVerifyOtp = (email, code) => ({ email: String(email ?? "").trim(), otp: String(code ?? "").trim() });
 
+// Forgot password → POST /resetpassword (services/passwordResetService.js). ⚠️ ASSUMED field names — MAZ hasn't
+// provided a reset endpoint yet: email + otp as in /verifyotp, password + password_confirmation as Laravel expects.
+export const toApiResetPassword = (email, code, password) => ({
+  ...toApiVerifyOtp(email, code),
+  password: String(password ?? ""),
+  password_confirmation: String(password ?? ""),
+});
+
 // New User sign-up → MAZ's login (POST /register, services/registerService.js). Field names from MAZ's example request
 // (2026-10-14). The sign-in email is both the username and the contact email. Only the ID the user chose is sent — the
 // other is null (MAZ accepts either). phone and mobile: both the sign-up's Mobile Number, "00" + dial digits + number,
@@ -269,5 +277,71 @@ export function toApiCustomer(signUp) {
         type: "o",
       },
     ],
+  };
+}
+
+// Tap payment → POST /tap/create-charge (services/tapPayments.js). Field names from MAZ's example request (2026-10-20);
+// all five are required (an empty body → 422 naming each). amount: BHD, 3 decimals. customer_mobile: digits only, the
+// local number without the country code, like MAZ's example ("500000000") — "+973 3612 3456" → "36123456".
+// An unknown mobile is LEFT OUT rather than sent empty (the payment screens normally collect one — field restored by
+// the user, 2026-10-22).
+export function toApiTapCharge({ amount, orderId, customer }) {
+  const mobile = String(customer?.mobile ?? "").replace(/\D/g, "").replace(/^(00)?973(?=\d{8}$)/, "");
+  return {
+    amount: Math.round(Number(amount) * 1000) / 1000,
+    order_id: String(orderId),
+    customer_name: String(customer?.name ?? "").trim(),
+    customer_email: String(customer?.email ?? "").trim(),
+    ...(mobile ? { customer_mobile: mobile } : {}),
+  };
+}
+
+// MAZ's answer → { chargeId, checkoutUrl }. CONFIRMED (Postman, 2026-10-20):
+//   { "payment_url": "https://checkout.tap.company/?mode=page&…&token=…", "charge_id": "chg_TS02…" }
+// Tap's raw charge ({ id, transaction: { url } }) and a `data` wrapper are still accepted, in case MAZ changes its
+// answer. Only Tap's own checkout page is opened — any other link (or http) → null → INVALID_RESPONSE.
+const TAP_CHECKOUT_RE = /^https:\/\/checkout\.tap\.company\//i;
+
+export function toUiTapCharge(body) {
+  const charge = body?.data && typeof body.data === "object" ? body.data : body;
+  if (!charge || typeof charge !== "object") return null;
+  const url = charge.payment_url ?? charge.transaction?.url ?? null;
+  if (typeof url !== "string" || !TAP_CHECKOUT_RE.test(url)) return null;
+  return { chargeId: charge.charge_id ?? charge.id ?? null, checkoutUrl: url };
+}
+
+// MAZ's Tap CALLBACK page (GET /tap/callback?tap_id=… — where Tap sends the customer after paying; the checkout WebView
+// reads its JSON). Shape seen 2026-10-20: { message, status: "CAPTURED", charge: { id, amount, currency,
+// metadata.order_id, reference.payment, transaction.date.completed (ms), response.message, card { brand, last_four },
+// receipt { email } … } } → { outcome: "succeeded" | "failed" | "pending", chargeId, amount, currency, orderId,
+// reference, paidAt (local "YYYY-MM-DDTHH:MM"), message, card: { brand, lastFour } | null, receiptEmailed }, or null when it isn't one.
+// Only CAPTURED is a success; INITIATED / IN_PROGRESS are still pending; every other Tap status (DECLINED, FAILED,
+// CANCELLED, ABANDONED, TIMEDOUT, RESTRICTED, VOID …) is a failure.
+const TAP_PENDING = new Set(["INITIATED", "IN_PROGRESS", "PENDING"]);
+
+// Local "YYYY-MM-DDTHH:MM" — the format utils/formatDate.formatDateTime reads.
+const pad2 = (n) => String(n).padStart(2, "0");
+const localDateTime = (date) =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+
+export function toUiTapResult(body) {
+  if (!body || typeof body !== "object") return null;
+  const charge = body.charge && typeof body.charge === "object" ? body.charge : null;
+  const status = String(charge?.status ?? body.status ?? "").toUpperCase();
+  if (!status) return null;
+  const completed = toNumber(charge?.transaction?.date?.completed);
+  const card = charge?.card;
+  return {
+    outcome: status === "CAPTURED" ? "succeeded" : TAP_PENDING.has(status) ? "pending" : "failed",
+    status,
+    chargeId: charge?.id ?? null,
+    amount: toNumber(charge?.amount),
+    currency: charge?.currency ?? "BHD",
+    orderId: charge?.metadata?.order_id ?? charge?.reference?.order ?? null,
+    reference: charge?.reference?.payment ?? null,
+    paidAt: completed ? localDateTime(new Date(completed)) : null,
+    message: charge?.response?.message ?? body.message ?? null,
+    card: card?.last_four ? { brand: card.brand ?? card.scheme ?? "Card", lastFour: String(card.last_four) } : null,
+    receiptEmailed: charge?.receipt?.email === true,
   };
 }

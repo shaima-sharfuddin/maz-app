@@ -22,6 +22,9 @@ export const DEMO_NOTES = {
   // Office requests (ReviewRequestScreen, RequestStatusScreen, MyRequestsScreen, HomeDashboardScreen)
   reviewRequest: "Demo request — submitting saves it in this app only. It isn't sent to MAZ yet.",
   requests: "Demo requests — kept in this app only and not sent to MAZ yet.",
+  // Invoices (InvoicesScreen): request invoices are mock; contract bills are real but their paid status is provisional.
+  invoices:
+    "Office request invoices use sample pricing and are kept in this app. Paid / Unpaid on contract bills is provisional — MAZ confirms payments.",
   requestStatus:
     "Demo request — the stages, unit and invoice below are simulated in this app. Nothing has been sent to MAZ and no emails are sent.",
   sampleUnitTitle: "Your office (sample)",

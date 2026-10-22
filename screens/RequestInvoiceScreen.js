@@ -7,6 +7,7 @@ import EmptyState from "../components/EmptyState";
 import ErrorBanner from "../components/ErrorBanner";
 import ScreenTitle from "../components/ScreenTitle";
 import StatusBadge from "../components/StatusBadge";
+import StickyFooter from "../components/StickyFooter";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import useSubmit from "../hooks/useSubmit";
@@ -63,8 +64,8 @@ function Block({ title, children, first = false }) {
   );
 }
 
-// The first invoice of an office request (RequestStatus → "View full invoice", PaymentReceipt → "View
-// invoice"), laid out as a document: issuer, number and dates, Bill To (the signed-in customer), what it's
+// The first invoice of an office request (ReviewRequest after submitting, the dashboard request card, My Requests,
+// PaymentResult → "View invoice"), laid out as a document: issuer, number and dates, Bill To (the signed-in customer), what it's
 // for, the line items and the total. Everything comes from the request (mock — see CLAUDE.md); VAT is shown
 // only if the invoice carries it, and sample amounts are labelled as such. "Download invoice" renders the same
 // content to a PDF and opens the share sheet (DEMO — utils/invoicePdf.js).
@@ -72,7 +73,9 @@ export default function RequestInvoiceScreen({ navigation, route }) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const requestId = route.params?.requestId;
-  const loadStatus = useCallback(() => fetchRequestStatus(requestId), [requestId]);
+  const refreshKey = route.params?.refreshKey; // set by PaymentResult so the invoice shows Paid at once
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey only forces a reload
+  const loadStatus = useCallback(() => fetchRequestStatus(requestId), [requestId, refreshKey]);
   const { loading, data, error, reload } = useAsync(loadStatus);
   const download = useSubmit(downloadInvoicePdf);
 
@@ -193,18 +196,11 @@ export default function RequestInvoiceScreen({ navigation, route }) {
           </Block>
         </View>
 
-        {payment ? null : (
-          <View className="mt-4">
-            <AnimatedButton
-              label={`Pay ${formatBHD(invoice.amount)}`}
-              onPress={() => navigation.navigate("Payment", { requestId })}
-            />
-          </View>
-        )}
-        <View style={{ marginTop: payment ? 16 : 8 }}>
+        {/* Unpaid: "Pay" lives in the sticky footer (Visual system v2). */}
+        <View style={{ marginTop: 16 }}>
           <AnimatedButton
             label={download.loading ? "Preparing PDF…" : "Download invoice (PDF)"}
-            variant={payment ? "primary" : "ghost"}
+            variant={payment ? "primary" : "secondary"}
             onPress={onDownload}
             loading={download.loading}
           />
@@ -217,8 +213,10 @@ export default function RequestInvoiceScreen({ navigation, route }) {
     );
   };
 
+  const unpaid = data?.invoice && !data.payment ? data.invoice : null;
+
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
           <BackButton onPress={() => navigation.goBack()} />
@@ -226,6 +224,14 @@ export default function RequestInvoiceScreen({ navigation, route }) {
           {renderInvoice()}
         </View>
       </ScrollView>
+      {unpaid && !loading ? (
+        <StickyFooter
+          amount={formatBHD(unpaid.amount)}
+          caption={`Due ${formatDate(unpaid.dueDate)}`}
+          label="Pay now"
+          onPress={() => navigation.navigate("Payment", { requestId })}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

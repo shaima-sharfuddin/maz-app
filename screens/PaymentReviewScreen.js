@@ -14,10 +14,14 @@ import SegmentedControl from "../components/SegmentedControl";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import useAsync from "../hooks/useAsync";
 import useSubmit from "../hooks/useSubmit";
+import useZodForm from "../hooks/useZodForm";
+import { paymentContactSchema } from "../validation/schemas";
+import { useAuth } from "../auth/AuthContext";
 import {
   preparePayment,
   submitPayment,
   getPaymentMethods,
+  knownPayerMobile,
   PAYMENTS_ARE_DEMO,
   PAYMENT_SUMMARY_NOTE,
   errorMessage,
@@ -32,6 +36,9 @@ import FadeIn from "../components/FadeIn";
 import HeroPanel from "../components/HeroPanel";
 import AmountHero from "../components/AmountHero";
 import InfoNote from "../components/InfoNote";
+import FormField from "../components/FormField";
+import StyledInput from "../components/StyledInput";
+import TapWarmup from "../components/TapWarmup";
 import { homeRoute } from "../utils/navigation";
 
 const TITLES = { due: "Pay due amount", balance: "Pay outstanding balance", bill: "Pay this bill" };
@@ -55,7 +62,10 @@ function ReviewSkeleton() {
 // Existing User: Pay (dashboard / Contract Details / Bill Details) → here → Confirm → Payment Successful
 // (PaymentReceipt) or Payment Failed. What's being paid comes from the REAL MAZ bills (paymentService.preparePayment);
 // the payment itself is DEMO / TEST while PAYMENTS_ARE_DEMO (services/mock/mockPayments.js) — nothing is charged
-// and nothing is sent to MAZ. route.params.scope: { type: "account" | "contract" | "bill", contractId?, billNumber? }
+// and nothing is sent to MAZ. Live (the default; EXPO_PUBLIC_TAP_PAYMENTS=false → demo): the payer's mobile is asked for (pre-filled from sign-up when known), MAZ creates a Tap
+// charge and Tap's payment page opens in an in-app browser; afterwards this screen says the payment is waiting for
+// MAZ to record it (no status endpoint yet — never "paid").
+// route.params.scope: { type: "account" | "contract" | "bill", contractId?, billNumber? }
 export default function PaymentReviewScreen({ navigation, route }) {
   const { colors } = useTheme();
   const card = useCardStyle();
@@ -68,11 +78,24 @@ export default function PaymentReviewScreen({ navigation, route }) {
   const [testOutcome, setTestOutcome] = useState("succeed");
   const [progress, setProgress] = useState(null);
   const pay = useSubmit(submitPayment);
+  const { user } = useAuth();
+  // Tap needs the payer's mobile: pre-filled with the sign-up number when this app run knows it.
+  const contact = useZodForm(paymentContactSchema, { mobile: knownPayerMobile(user?.email) ?? "" });
 
   const onConfirm = async () => {
-    const result = await pay.submit(plan, methodId, { testOutcome, onProgress: setProgress });
+    const customer = PAYMENTS_ARE_DEMO
+      ? undefined
+      : { name: user?.name || user?.companyName || user?.email, email: user?.email, mobile: contact.getValues("mobile") };
+    const result = await pay.submit(plan, methodId, { testOutcome, onProgress: setProgress, customer });
     setProgress(null);
     if (!result) return; // network / validation problem — shown by the ErrorBanner
+    if (result.status === "checkout") {
+      navigation.navigate("TapCheckout", {
+        checkout: result,
+        purpose: { type: "bills", contractIds: plan.contractIds },
+      });
+      return;
+    }
     if (result.status === "failed") {
       navigation.navigate("PaymentFailed", { amount: plan.amount, message: result.message });
       return;
@@ -198,6 +221,23 @@ export default function PaymentReviewScreen({ navigation, route }) {
           />
         ))}
 
+        {PAYMENTS_ARE_DEMO ? null : (
+          <View style={{ marginTop: 16 }}>
+            <FormField
+              control={contact.control}
+              name="mobile"
+              component={StyledInput}
+              label="Mobile number"
+              placeholder="e.g. 3612 3456"
+              keyboardType="phone-pad"
+              autoComplete="tel"
+            />
+            <InfoNote style={{ marginTop: -8, marginBottom: 24, paddingHorizontal: 4 }}>
+              Tap&apos;s secure page opens next. Choose your card or BenefitPay there.
+            </InfoNote>
+          </View>
+        )}
+
         {PAYMENTS_ARE_DEMO ? (
           <View style={{ marginTop: 16 }}>
             {/* DEMO ONLY — lets testers show both outcomes. Removed with the mock provider. */}
@@ -217,10 +257,10 @@ export default function PaymentReviewScreen({ navigation, route }) {
           label={
             pay.loading
               ? (PROGRESS_LABELS[progress] ?? "Processing payment…")
-              : `${PAYMENTS_ARE_DEMO ? "Confirm demo payment" : "Confirm payment"} · ${formatBHD(plan.amount)}`
+              : `${PAYMENTS_ARE_DEMO ? "Confirm demo payment" : "Continue to payment"} · ${formatBHD(plan.amount)}`
           }
           onPress={onConfirm}
-          disabled={!methodId}
+          disabled={!methodId || (!PAYMENTS_ARE_DEMO && !contact.formState.isValid)}
           loading={pay.loading}
         />
         <ErrorBanner message={pay.error} onRetry={onConfirm} />
@@ -232,7 +272,7 @@ export default function PaymentReviewScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+    <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 px-6 pt-8 pb-10">
           <BackButton onPress={() => navigation.goBack()} />
@@ -244,6 +284,7 @@ export default function PaymentReviewScreen({ navigation, route }) {
           {renderContent()}
         </View>
       </ScrollView>
+      <TapWarmup enabled={!PAYMENTS_ARE_DEMO} />
     </SafeAreaView>
   );
 }
